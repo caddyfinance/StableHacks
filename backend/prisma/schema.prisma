@@ -1,0 +1,150 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Credential {
+  id                 String   @id @default(uuid())
+  credentialId       String   @unique
+  clientReference    String
+  jurisdiction       String
+  riskTier           String
+  productEligibility String
+  walletAddress      String
+  status             String   @default("active")
+  revoked            Boolean  @default(false)
+  attestationPda     String?
+  attestationTxSig   String?
+  issuedAt           DateTime @default(now())
+  expiryAt           DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  vaults             Vault[]
+}
+
+model Vault {
+  id                    String   @id @default(uuid())
+  vaultId               String   @unique
+  credentialId          String
+  credential            Credential @relation(fields: [credentialId], references: [credentialId])
+  clientReference       String
+  ownerWallet           String
+  baseAsset             String   @default("USDC")
+  status                String   @default("active")
+  paused                Boolean  @default(false)
+  idleBalance           Float    @default(0)
+  totalDeposited        Float    @default(0)
+  totalNAV              Float    @default(0)
+  vaultAttestationPda   String?
+  vaultAttestationTxSig String?
+  onChainAddress        String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  mandate               Mandate?
+  allocations           Allocation[]
+  events                ComplianceEvent[]
+  consentRequests       ConsentRequest[]
+  deposits              Deposit[]
+}
+
+model Mandate {
+  id                    String   @id @default(uuid())
+  vaultId               String   @unique
+  vault                 Vault    @relation(fields: [vaultId], references: [vaultId])
+  allowedStrategies     String[]
+  blockedStrategies     String[]
+  maxAllocationBps      Json
+  liquidityBufferBps    Int      @default(1000)
+  consentThreshold      Float    @default(250000)
+  leverageAllowed       Boolean  @default(false)
+  approvedDestinations  String[]
+  status                String   @default("active")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Strategy {
+  id            String   @id @default(uuid())
+  strategyId    String   @unique
+  name          String
+  description   String
+  riskLevel     String
+  active        Boolean  @default(true)
+  disabled      Boolean  @default(false)
+  currentYield  Float    @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  allocations   Allocation[]
+}
+
+model Allocation {
+  id          String   @id @default(uuid())
+  vaultId     String
+  vault       Vault    @relation(fields: [vaultId], references: [vaultId])
+  strategyId  String
+  strategy    Strategy @relation(fields: [strategyId], references: [strategyId])
+  amount      Float
+  yieldAccrued Float   @default(0)
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Deposit {
+  id              String   @id @default(uuid())
+  vaultId         String
+  vault           Vault    @relation(fields: [vaultId], references: [vaultId])
+  amount          Float
+  sourceWallet    String
+  sourceReference String
+  sourceType      String   @default("Approved Custody-Linked Wallet")
+  screeningStatus String   @default("Clear")
+  jurisdictionTag String   @default("CH")
+  createdAt       DateTime @default(now())
+}
+
+model ConsentRequest {
+  id          String   @id @default(uuid())
+  requestId   String   @unique
+  vaultId     String
+  vault       Vault    @relation(fields: [vaultId], references: [vaultId])
+  actionType  String
+  amount      Float
+  details     Json?
+  initiator   String
+  status      String   @default("pending")
+  consentedBy String?
+  consentedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ComplianceEvent {
+  id          String   @id @default(uuid())
+  eventId     String   @unique
+  vaultId     String?
+  vault       Vault?   @relation(fields: [vaultId], references: [vaultId])
+  actionType  String
+  actor       String
+  role        String
+  asset       String?
+  amount      Float?
+  strategy    String?
+  result      String
+  reason      String?
+  timestamp   DateTime @default(now())
+}
+
+model AdminUser {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}

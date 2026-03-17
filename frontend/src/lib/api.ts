@@ -1,0 +1,83 @@
+import { useStore } from '../store/useStore';
+
+const API_BASE = '/api';
+
+function getCurrentRole(): string {
+  return useStore.getState().currentRole;
+}
+
+function getCurrentWallet(): string | undefined {
+  return useStore.getState().clientInfo?.walletAddress;
+}
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const role = getCurrentRole();
+  const wallet = getCurrentWallet();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-role': role,
+  };
+  if (wallet) headers['x-wallet'] = wallet;
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: { ...headers, ...(options?.headers as Record<string, string>) },
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw { status: res.status, ...data };
+  }
+  return data;
+}
+
+export const api = {
+  // Admin Auth (Legacy)
+  adminLogin: (email: string, password: string) => request<any>('/admin-auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  getAdminUsers: () => request<any[]>('/admin-auth/users'),
+
+  // Admin Auth (Entra ID)
+  getEntraUsers: () => request<any[]>('/admin-auth/entra/users'),
+  initiateEntraLogin: (email: string) => request<any>('/admin-auth/entra/login', { method: 'POST', body: JSON.stringify({ email }) }),
+  validateEntraCallback: (code: string) => request<any>('/admin-auth/entra/callback', { method: 'POST', body: JSON.stringify({ code }) }),
+
+  // On-Chain Verification
+  verifyOnChain: (walletAddress: string) => request<any>(`/credentials/verify-onchain/${walletAddress}`),
+
+  // Credentials
+  getCredentials: () => request<any[]>('/credentials'),
+  issueCredential: (data: any) => request<any>('/credentials', { method: 'POST', body: JSON.stringify(data) }),
+  revokeCredential: (id: string) => request<any>(`/credentials/${id}/revoke`, { method: 'PUT' }),
+  lookupWallet: (address: string) => request<any>(`/credentials/wallet/${address}`),
+  lookupByReference: (ref: string) => request<any>(`/credentials/lookup/${ref}`),
+  bindWallet: (credentialId: string, walletAddress: string) => request<any>('/credentials/bind-wallet', { method: 'PUT', body: JSON.stringify({ credentialId, walletAddress }) }),
+
+  // Vaults
+  getVaults: () => request<any[]>('/vaults'),
+  getVaultsByWallet: (wallet: string) => request<any[]>(`/vaults/by-wallet/${wallet}`),
+  createVault: (data: any) => request<any>('/vaults', { method: 'POST', body: JSON.stringify(data) }),
+  getSnapshot: (id: string) => request<any>(`/vaults/${id}/snapshot`),
+  attachMandate: (id: string, data: any) => request<any>(`/vaults/${id}/mandate`, { method: 'POST', body: JSON.stringify(data) }),
+  getMandate: (id: string) => request<any>(`/vaults/${id}/mandate`),
+  deposit: (id: string, data: any) => request<any>(`/vaults/${id}/deposit`, { method: 'POST', body: JSON.stringify(data) }),
+  allocate: (id: string, data: any) => request<any>(`/vaults/${id}/allocate`, { method: 'POST', body: JSON.stringify(data) }),
+  redeem: (id: string, data: any) => request<any>(`/vaults/${id}/redeem`, { method: 'POST', body: JSON.stringify(data) }),
+  unwind: (id: string, data: any) => request<any>(`/vaults/${id}/unwind`, { method: 'POST', body: JSON.stringify(data) }),
+  togglePause: (id: string) => request<any>(`/vaults/${id}/pause`, { method: 'POST' }),
+  accrueYield: (id: string) => request<any>(`/vaults/${id}/accrue-yield`, { method: 'POST' }),
+
+  // Strategies
+  getStrategies: () => request<any[]>('/strategies'),
+  toggleStrategy: (id: string, disabled: boolean) => request<any>(`/strategies/${id}/disable`, { method: 'PUT', body: JSON.stringify({ disabled }) }),
+
+  // Consent
+  getConsentRequests: () => request<any[]>('/consent'),
+  approveConsent: (id: string) => request<any>(`/consent/${id}/approve`, { method: 'PUT' }),
+
+  // Events
+  getEvents: (vaultId?: string, actionType?: string) => {
+    const params = new URLSearchParams();
+    if (vaultId) params.set('vaultId', vaultId);
+    if (actionType) params.set('actionType', actionType);
+    return request<any[]>(`/events?${params.toString()}`);
+  },
+};

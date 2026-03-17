@@ -1,0 +1,40 @@
+{
+  "name": "amina-vault-backend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "nest build",
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "start:prod": "node dist/main",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio",
+    "sas:setup": "tsx scripts/sas-setup.ts",
+    "sas:revoke": "tsx scripts/sas-revoke.ts"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.3.0",
+    "@nestjs/core": "^10.3.0",
+    "@nestjs/platform-express": "^10.3.0",
+    "@prisma/client": "5.22.0",
+    "@solana/kit": "^6.3.1",
+    "@solana/web3.js": "^1.98.4",
+    "bs58": "^6.0.0",
+    "dotenv": "^17.3.1",
+    "reflect-metadata": "^0.2.0",
+    "rxjs": "^7.8.0",
+    "sas-lib": "^1.0.10",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^10.3.0",
+    "@nestjs/schematics": "^10.1.0",
+    "@types/node": "^20.0.0",
+    "@types/uuid": "^9.0.0",
+    "prisma": "5.22.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0"
+  }
+}

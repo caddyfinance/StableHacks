@@ -1,0 +1,18 @@
+
+# BlamePrompt staging (auto-generated)
+.blameprompt/
+
+# Dependencies
+node_modules/
+
+# Build
+.next/
+dist/
+
+# Environment
+.env
+.env.local
+
+# Anchor
+target/
+test-ledger/

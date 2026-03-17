@@ -1,0 +1,170 @@
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useStore, Role } from './store/useStore';
+
+// Public pages
+import LandingPage from './pages/LandingPage';
+import LoginPage from './pages/LoginPage';
+
+// Layouts
+import AdminLayout from './components/AdminLayout';
+import ClientLayout from './components/ClientLayout';
+
+// Admin pages
+import AdminDashboardPage from './pages/admin/DashboardPage';
+import CredentialsPage from './pages/CredentialsPage';
+import VaultFactoryPage from './pages/VaultFactoryPage';
+import MandatePage from './pages/MandatePage';
+import FundingPage from './pages/FundingPage';
+import ExecutionPage from './pages/ExecutionPage';
+import CompliancePage from './pages/CompliancePage';
+import EmergencyPage from './pages/EmergencyPage';
+
+// Client pages
+import VaultOverviewPage from './pages/client/VaultOverviewPage';
+import ConsentPage from './pages/client/ConsentPage';
+import RedemptionPage from './pages/client/RedemptionPage';
+import ActivityPage from './pages/client/ActivityPage';
+import RequestCredentialPage from './pages/client/RequestCredentialPage';
+
+// Role → allowed routes
+const roleAccess: Record<Role, string[]> = {
+  admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance'],
+  portfolio_manager: ['/amina', '/amina/execution', '/amina/compliance'],
+  compliance_officer: ['/amina', '/amina/compliance'],
+  emergency_admin: ['/amina', '/amina/emergency', '/amina/compliance'],
+  client_representative: [],
+};
+
+function RequireAuth({ children, portal }: { children: React.ReactNode; portal: 'amina' | 'client' }) {
+  const { isAuthenticated, portal: currentPortal } = useStore();
+  if (!isAuthenticated || currentPortal !== portal) {
+    return <Navigate to={`/login/${portal}`} replace />;
+  }
+  return <>{children}</>;
+}
+
+function RequireRole({ children, route }: { children: React.ReactNode; route: string }) {
+  const { currentRole } = useStore();
+  const allowed = roleAccess[currentRole] || [];
+  if (!allowed.includes(route)) {
+    return <AccessDenied role={currentRole} route={route} />;
+  }
+  return <>{children}</>;
+}
+
+function AccessDenied({ role, route }: { role: Role; route: string }) {
+  const roleLabels: Record<Role, string> = {
+    admin: 'Bank Admin',
+    portfolio_manager: 'Portfolio Manager',
+    compliance_officer: 'Compliance Officer',
+    client_representative: 'Client Representative',
+    emergency_admin: 'Emergency Admin',
+  };
+
+  const rolePages: Record<Role, { label: string; path: string }[]> = {
+    admin: [
+      { label: 'Credentials', path: '/amina/credentials' },
+      { label: 'Vault Factory', path: '/amina/vault-factory' },
+      { label: 'Mandate Config', path: '/amina/mandate' },
+      { label: 'Vault Funding', path: '/amina/funding' },
+      { label: 'Compliance', path: '/amina/compliance' },
+    ],
+    portfolio_manager: [
+      { label: 'Execution', path: '/amina/execution' },
+      { label: 'Compliance', path: '/amina/compliance' },
+    ],
+    compliance_officer: [
+      { label: 'Compliance', path: '/amina/compliance' },
+    ],
+    emergency_admin: [
+      { label: 'Emergency Controls', path: '/amina/emergency' },
+      { label: 'Compliance', path: '/amina/compliance' },
+    ],
+    client_representative: [],
+  };
+
+  return (
+    <div className="p-6 flex items-center justify-center min-h-[60vh]">
+      <div className="max-w-md text-center space-y-5">
+        <div className="w-14 h-14 rounded-full bg-red-900/20 border border-red-800/40 flex items-center justify-center mx-auto">
+          <svg className="w-7 h-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+          </svg>
+        </div>
+
+        <div>
+          <h2 className="text-lg font-bold text-white">Access Restricted</h2>
+          <p className="text-sm text-gray-400 mt-1">
+            Your current role <span className="text-white font-medium">({roleLabels[role]})</span> does not have permission to access <span className="text-white font-mono text-xs">{route}</span>.
+          </p>
+        </div>
+
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 text-left">
+          <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-2">Pages available to you</p>
+          <div className="space-y-1.5">
+            <a href="/amina" className="flex items-center gap-2 text-xs text-gray-300 hover:text-blue-400 transition-colors">
+              <span className="w-1 h-1 rounded-full bg-blue-400" /> Dashboard
+            </a>
+            {(rolePages[role] || []).map((p) => (
+              <a key={p.path} href={p.path} className="flex items-center gap-2 text-xs text-gray-300 hover:text-blue-400 transition-colors">
+                <span className="w-1 h-1 rounded-full bg-blue-400" /> {p.label}
+              </a>
+            ))}
+          </div>
+        </div>
+
+        <p className="text-[10px] text-gray-600">
+          Switch roles from the sidebar to access other areas, or contact your administrator.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      {/* Public routes */}
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/login/:portal" element={<LoginPage />} />
+
+      {/* AMINA Admin routes */}
+      <Route
+        path="/amina"
+        element={
+          <RequireAuth portal="amina">
+            <AdminLayout />
+          </RequireAuth>
+        }
+      >
+        <Route index element={<AdminDashboardPage />} />
+        <Route path="credentials" element={<RequireRole route="/amina/credentials"><CredentialsPage /></RequireRole>} />
+        <Route path="vault-factory" element={<RequireRole route="/amina/vault-factory"><VaultFactoryPage /></RequireRole>} />
+        <Route path="mandate" element={<RequireRole route="/amina/mandate"><MandatePage /></RequireRole>} />
+        <Route path="funding" element={<RequireRole route="/amina/funding"><FundingPage /></RequireRole>} />
+        <Route path="execution" element={<RequireRole route="/amina/execution"><ExecutionPage /></RequireRole>} />
+        <Route path="compliance" element={<RequireRole route="/amina/compliance"><CompliancePage /></RequireRole>} />
+        <Route path="emergency" element={<RequireRole route="/amina/emergency"><EmergencyPage /></RequireRole>} />
+      </Route>
+
+      {/* Client routes */}
+      <Route
+        path="/client"
+        element={
+          <RequireAuth portal="client">
+            <ClientLayout />
+          </RequireAuth>
+        }
+      >
+        <Route index element={<VaultOverviewPage />} />
+        <Route path="request-credential" element={<RequestCredentialPage />} />
+        <Route path="consent" element={<ConsentPage />} />
+        <Route path="redemption" element={<RedemptionPage />} />
+        <Route path="activity" element={<ActivityPage />} />
+      </Route>
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}

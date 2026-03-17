@@ -1,0 +1,32 @@
+import { Module } from '@nestjs/common';
+import { APP_GUARD, Reflector } from '@nestjs/core';
+import { PrismaModule } from './prisma/prisma.module';
+import { CredentialsModule } from './credentials/credentials.module';
+import { VaultsModule } from './vaults/vaults.module';
+import { StrategiesModule } from './strategies/strategies.module';
+import { ConsentModule } from './consent/consent.module';
+import { EventsModule } from './events/events.module';
+import { AdminAuthModule } from './admin-auth/admin-auth.module';
+import { SasModule } from './sas/sas.module';
+import { RolesGuard } from './auth/roles.guard';
+
+@Module({
+  imports: [
+    PrismaModule,
+    CredentialsModule,
+    VaultsModule,
+    StrategiesModule,
+    ConsentModule,
+    EventsModule,
+    AdminAuthModule,
+    SasModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useFactory: (reflector: Reflector) => new RolesGuard(reflector),
+      inject: [Reflector],
+    },
+  ],
+})
+export class AppModule {}
