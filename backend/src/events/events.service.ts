@@ -19,6 +19,8 @@ export class EventsService {
     strategy?: string;
     result: string;
     reason?: string;
+    txSignature?: string;
+    onChainAddress?: string;
   }) {
     const prefix = params.result === 'success' ? 'EVT' : params.result === 'pending' ? 'PND' : 'FAIL';
     const shortId = uuid().slice(0, 6).toUpperCase();

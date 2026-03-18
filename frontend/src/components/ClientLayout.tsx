@@ -6,14 +6,17 @@ import {
   ClipboardCheck,
   LogOut,
   ShieldCheck,
+  Vault,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
 const navItems = [
   { path: '/client', label: 'Overview', icon: LayoutDashboard, end: true },
+  { path: '/client/ramp', label: 'On/Off Ramp', icon: ArrowLeftRight, end: false },
+  { path: '/client/vaults', label: 'My Vaults', icon: Vault, end: false },
   { path: '/client/request-credential', label: 'Credential Access', icon: ShieldCheck, end: false },
   { path: '/client/consent', label: 'Consent Requests', icon: UserCheck, end: false },
-  { path: '/client/redemption', label: 'Redemption', icon: Wallet, end: false },
   { path: '/client/activity', label: 'Activity Log', icon: ClipboardCheck, end: false },
 ];
 
@@ -94,16 +97,6 @@ export default function ClientLayout() {
             </NavLink>
           ))}
         </nav>
-
-        {/* Active Vault Indicator */}
-        {activeVaultId && (
-          <div className="px-4 py-2 border-t border-gray-800">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-xs text-emerald-400 font-medium">Active: {activeVaultId}</span>
-            </div>
-          </div>
-        )}
 
         {/* Logout */}
         <div className="px-4 py-3 border-t border-gray-800">

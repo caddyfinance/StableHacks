@@ -109,6 +109,8 @@ export class CredentialsService {
       role: 'Client Representative',
       result: 'success',
       reason: `Wallet ${walletAddress.slice(0, 8)}... bound to credential ${credentialId}${attestationPda ? ' (on-chain attested)' : ''}`,
+      txSignature: attestationTxSig,
+      onChainAddress: attestationPda,
     });
 
     return {
@@ -175,6 +177,8 @@ export class CredentialsService {
       role: 'Admin',
       result: 'success',
       reason: `Credential ${credentialId} issued for ${data.clientReference}${attestationPda ? ' — on-chain attestation created' : ''}`,
+      txSignature: attestationTxSig,
+      onChainAddress: attestationPda,
     });
 
     return { ...credential, attestationPda, attestationTxSig };
@@ -199,6 +203,7 @@ export class CredentialsService {
       role: 'Admin',
       result: 'success',
       reason: `Credential ${credentialId} revoked${credential?.attestationPda ? ' — on-chain attestation closed' : ''}`,
+      onChainAddress: credential?.attestationPda || undefined,
     });
 
     return updated;

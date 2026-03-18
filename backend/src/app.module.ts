@@ -8,6 +8,7 @@ import { ConsentModule } from './consent/consent.module';
 import { EventsModule } from './events/events.module';
 import { AdminAuthModule } from './admin-auth/admin-auth.module';
 import { SasModule } from './sas/sas.module';
+import { VaultProgramModule } from './vault-program/vault-program.module';
 import { RolesGuard } from './auth/roles.guard';
 
 @Module({
@@ -20,6 +21,7 @@ import { RolesGuard } from './auth/roles.guard';
     EventsModule,
     AdminAuthModule,
     SasModule,
+    VaultProgramModule,
   ],
   providers: [
     {

@@ -18,6 +18,8 @@ interface AuditEvent {
   amount?: number;
   asset?: string;
   strategy?: string;
+  txSignature?: string;
+  onChainAddress?: string;
 }
 
 const CHAINALYSIS_BASE = 'https://app.chainalysis.com';
@@ -349,7 +351,6 @@ export default function CompliancePage() {
     y = kvPair('Vault Status', snapshot?.paused ? 'PAUSED' : (snapshot?.status || '—').toUpperCase(), y, true);
     y = kvPair('Mandate', (snapshot?.mandateStatus || '—').toUpperCase(), y);
     y = kvPair('Risk Status', 'GREEN — COMPLIANT', y, true);
-    y = kvPair('Total NAV', `${fmt(snapshot?.totalNAV)} USDC`, y);
     y = kvPair('Idle Balance', `${fmt(snapshot?.idleBalance)} USDC`, y, true);
     y = kvPair('Deployed Balance', `${fmt(snapshot?.totalDeployed ?? totalDeployed)} USDC`, y);
     y = kvPair('Approved Destinations', `${approvedDestCount} wallets`, y, true);
@@ -809,12 +810,13 @@ export default function CompliancePage() {
                     <th className="text-left py-2 pr-2 font-semibold">Status</th>
                     <th className="text-left py-2 pr-2 font-semibold">Control</th>
                     <th className="text-left py-2 pr-2 font-semibold">Notes</th>
+                    <th className="text-left py-2 pr-2 font-semibold">On-Chain</th>
                     <th className="text-left py-2 font-semibold">External</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredEvents.length === 0 ? (
-                    <tr><td colSpan={8} className="text-center py-6 text-vault-muted">No events found.</td></tr>
+                    <tr><td colSpan={9} className="text-center py-6 text-vault-muted">No events found.</td></tr>
                   ) : (
                     filteredEvents.map((evt) => {
                       const flow = classifyFlow(evt.actionType);
@@ -847,6 +849,21 @@ export default function CompliancePage() {
                             </span>
                           </td>
                           <td className="py-2 pr-2 text-vault-muted max-w-[180px] truncate" title={evt.reason}>{evt.reason || '—'}</td>
+                          <td className="py-2 pr-2">
+                            {evt.txSignature ? (
+                              <a href={`https://solscan.io/tx/${evt.txSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-0.5 text-[10px] text-vault-accent hover:underline">
+                                Tx <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            ) : evt.onChainAddress ? (
+                              <a href={`https://solscan.io/account/${evt.onChainAddress}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-0.5 text-[10px] text-purple-400 hover:underline">
+                                PDA <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            ) : (
+                              <span className="text-[10px] text-vault-muted">—</span>
+                            )}
+                          </td>
                           <td className="py-2">
                             {isExternal ? (
                               <a href={`${CHAINALYSIS_BASE}/kyt`} target="_blank" rel="noopener noreferrer"

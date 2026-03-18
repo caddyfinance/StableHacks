@@ -18,6 +18,8 @@ import {
   signTransactionMessageWithSigners,
   getBase64EncodedWireTransaction,
 } from '@solana/kit';
+import { PublicKey } from '@solana/web3.js';
+import { createHash } from 'crypto';
 
 @Injectable()
 export class SasService {
@@ -152,6 +154,20 @@ export class SasService {
   }
 
   /**
+   * Derive a deterministic Solana address from a vaultId string.
+   * Hashes the vaultId to produce 32 bytes usable as a Solana public key.
+   */
+  private deriveVaultNonce(vaultId: string): string {
+    const hash = createHash('sha256').update(`amina-vault:${vaultId}`).digest();
+    // Use the hash as a seed to derive a valid public key on the ed25519 curve
+    const key = PublicKey.findProgramAddressSync(
+      [Buffer.from('vault-nonce'), Buffer.from(vaultId)],
+      new PublicKey('11111111111111111111111111111111'),
+    )[0];
+    return key.toBase58();
+  }
+
+  /**
    * Create a vault-specific attestation binding a vault to a wallet.
    * Uses a deterministic nonce derived from vaultId so each vault gets a unique PDA.
    */
@@ -178,29 +194,29 @@ export class SasService {
       const credentialAddress = address(cfg.credentialPda);
       const schemaAddress = address(cfg.schemaPda);
 
-      // Deterministic nonce from vault ID — hash vaultId to get a valid Solana address
-      // We use the owner wallet as nonce so each wallet+schema combo is unique
-      // For multiple vaults per wallet, we append vaultId to the data instead
-      const nonce = address(ownerWallet);
+      // Deterministic nonce from vaultId — each vault gets a unique PDA
+      // This fixes the collision when one wallet has multiple vaults
+      const vaultNonceAddress = this.deriveVaultNonce(vaultData.vaultId);
+      const nonce = address(vaultNonceAddress);
 
-      // Check if attestation already exists for this wallet (from credential issuance)
-      const [existingPda] = await deriveAttestationPda({
+      const [attestationPda] = await deriveAttestationPda({
         credential: credentialAddress,
         schema: schemaAddress,
         nonce,
       });
 
-      const existingAccount = await rpc.getAccountInfo(existingPda, { encoding: 'base64' }).send();
+      // Check if attestation already exists for this specific vault
+      const existingAccount = await rpc.getAccountInfo(attestationPda, { encoding: 'base64' }).send();
       if (existingAccount.value) {
-        this.logger.log(`Vault attestation already exists for wallet ${ownerWallet}: ${existingPda}`);
+        this.logger.log(`Vault attestation already exists for vault ${vaultData.vaultId}: ${attestationPda}`);
         return {
-          pda: String(existingPda),
+          pda: String(attestationPda),
           txSignature: 'existing',
-          onChainAddress: String(existingPda),
+          onChainAddress: String(attestationPda),
         };
       }
 
-      // Serialize vault data as borsh strings
+      // Serialize vault data as borsh strings (includes ownerWallet for binding)
       const fields = [vaultData.vaultId, vaultData.credentialId, vaultData.clientReference, vaultData.baseAsset, ownerWallet];
       const parts: number[] = [];
       for (const field of fields) {
@@ -216,7 +232,7 @@ export class SasService {
         authority: payer,
         credential: credentialAddress,
         schema: schemaAddress,
-        attestation: existingPda,
+        attestation: attestationPda,
         nonce,
         data: attestationData,
         expiry,
@@ -233,12 +249,12 @@ export class SasService {
       const signedTx = await signTransactionMessageWithSigners(txMsg);
       const txSignature = await this.sendAndPollConfirmation(rpc, signedTx);
 
-      this.logger.log(`Vault attestation created: vault=${vaultData.vaultId}, wallet=${ownerWallet}, PDA=${existingPda}, tx=${txSignature}`);
+      this.logger.log(`Vault attestation created: vault=${vaultData.vaultId}, wallet=${ownerWallet}, PDA=${attestationPda}, tx=${txSignature}`);
 
       return {
-        pda: String(existingPda),
+        pda: String(attestationPda),
         txSignature,
-        onChainAddress: String(existingPda),
+        onChainAddress: String(attestationPda),
       };
     } catch (error: any) {
       this.logger.error(`Failed to create vault attestation: ${error.message}`);

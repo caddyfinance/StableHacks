@@ -22,9 +22,11 @@ import EmergencyPage from './pages/EmergencyPage';
 // Client pages
 import VaultOverviewPage from './pages/client/VaultOverviewPage';
 import ConsentPage from './pages/client/ConsentPage';
-import RedemptionPage from './pages/client/RedemptionPage';
+import RampPage from './pages/client/RampPage';
 import ActivityPage from './pages/client/ActivityPage';
 import RequestCredentialPage from './pages/client/RequestCredentialPage';
+import MyVaultsPage from './pages/client/MyVaultsPage';
+import VaultDetailPage from './pages/client/VaultDetailPage';
 
 // Role → allowed routes
 const roleAccess: Record<Role, string[]> = {
@@ -157,9 +159,11 @@ export default function App() {
         }
       >
         <Route index element={<VaultOverviewPage />} />
+        <Route path="vaults" element={<MyVaultsPage />} />
+        <Route path="vaults/:id" element={<VaultDetailPage />} />
         <Route path="request-credential" element={<RequestCredentialPage />} />
         <Route path="consent" element={<ConsentPage />} />
-        <Route path="redemption" element={<RedemptionPage />} />
+        <Route path="ramp" element={<RampPage />} />
         <Route path="activity" element={<ActivityPage />} />
       </Route>
 

@@ -42,6 +42,7 @@ model Vault {
   vaultAttestationPda   String?
   vaultAttestationTxSig String?
   onChainAddress        String?
+  programId             String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   mandate               Mandate?
@@ -124,19 +125,21 @@ model ConsentRequest {
 }
 
 model ComplianceEvent {
-  id          String   @id @default(uuid())
-  eventId     String   @unique
-  vaultId     String?
-  vault       Vault?   @relation(fields: [vaultId], references: [vaultId])
-  actionType  String
-  actor       String
-  role        String
-  asset       String?
-  amount      Float?
-  strategy    String?
-  result      String
-  reason      String?
-  timestamp   DateTime @default(now())
+  id              String   @id @default(uuid())
+  eventId         String   @unique
+  vaultId         String?
+  vault           Vault?   @relation(fields: [vaultId], references: [vaultId])
+  actionType      String
+  actor           String
+  role            String
+  asset           String?
+  amount          Float?
+  strategy        String?
+  result          String
+  reason          String?
+  txSignature     String?
+  onChainAddress  String?
+  timestamp       DateTime @default(now())
 }
 
 model AdminUser {

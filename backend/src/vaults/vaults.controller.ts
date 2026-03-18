@@ -1,12 +1,18 @@
 import { Controller, Get, Post, Param, Body, Inject, Headers } from '@nestjs/common';
 import { VaultsService } from './vaults.service';
+import { VaultProgramService } from '../vault-program/vault-program.service';
 import { Roles } from '../auth/roles.guard';
 
 @Controller('vaults')
 export class VaultsController {
   private service: VaultsService;
-  constructor(@Inject(VaultsService) service: VaultsService) {
+  private vaultProgram: VaultProgramService;
+  constructor(
+    @Inject(VaultsService) service: VaultsService,
+    @Inject(VaultProgramService) vaultProgram: VaultProgramService,
+  ) {
     this.service = service;
+    this.vaultProgram = vaultProgram;
   }
 
   @Get()
@@ -45,8 +51,13 @@ export class VaultsController {
     return this.service.getMandate(id);
   }
 
+  @Get(':id/deposits')
+  getDeposits(@Param('id') id: string) {
+    return this.service.getDeposits(id);
+  }
+
   @Post(':id/deposit')
-  @Roles('admin', 'portfolio_manager')
+  @Roles('admin', 'portfolio_manager', 'client_representative')
   deposit(
     @Param('id') id: string,
     @Body() body: { amount: number; sourceWallet?: string; sourceReference?: string; sourceType?: string; jurisdictionTag?: string },
@@ -65,10 +76,42 @@ export class VaultsController {
   @Roles('client_representative')
   redeem(
     @Param('id') id: string,
-    @Body() body: { amount: number; destinationWallet: string },
+    @Body() body: { amount: number; destinationWallet: string; txSignature?: string },
     @Headers('x-wallet') callerWallet?: string,
   ) {
-    return this.service.redeem(id, body.amount, body.destinationWallet, callerWallet);
+    return this.service.redeem(id, body.amount, body.destinationWallet, callerWallet, body.txSignature);
+  }
+
+  @Post('withdrawals/:requestId/process')
+  @Roles('admin', 'portfolio_manager')
+  processWithdrawal(
+    @Param('requestId') requestId: string,
+    @Body() body: { txSignature?: string },
+  ) {
+    return this.service.processWithdrawal(requestId, body.txSignature);
+  }
+
+  @Get('amina-wallet')
+  getAminaWallet() {
+    return { wallet: this.vaultProgram.getAminaBankWallet() };
+  }
+
+  @Post('onramp')
+  @Roles('admin', 'portfolio_manager', 'client_representative')
+  async onramp(
+    @Body() body: { recipientWallet: string; amount: number },
+    @Headers('x-wallet') callerWallet?: string,
+  ) {
+    return this.service.onramp(body.recipientWallet, body.amount, callerWallet);
+  }
+
+  @Post('offramp')
+  @Roles('admin', 'portfolio_manager', 'client_representative')
+  async offramp(
+    @Body() body: { senderWallet: string; amount: number; txSignature?: string },
+    @Headers('x-wallet') callerWallet?: string,
+  ) {
+    return this.service.offramp(body.senderWallet, body.amount, callerWallet, body.txSignature);
   }
 
   @Post(':id/unwind')

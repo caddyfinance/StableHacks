@@ -118,7 +118,7 @@ export default function RequestCredentialPage() {
               <div className="flex justify-between text-sm items-center">
                 <span className="text-vault-muted">SAS Attestation</span>
                 <a
-                  href={`https://explorer.solana.com/address/${credentialDetail.attestationPda}?cluster=devnet`}
+                  href={`https://solscan.io/account/${credentialDetail.attestationPda}?cluster=devnet`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1 text-vault-accent hover:underline font-mono text-xs"
@@ -133,7 +133,7 @@ export default function RequestCredentialPage() {
               <div className="flex justify-between text-sm items-center">
                 <span className="text-vault-muted">Attestation Tx</span>
                 <a
-                  href={`https://explorer.solana.com/tx/${credentialDetail.attestationTxSig}?cluster=devnet`}
+                  href={`https://solscan.io/tx/${credentialDetail.attestationTxSig}?cluster=devnet`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1 text-green-400 hover:underline font-mono text-xs"
@@ -148,7 +148,7 @@ export default function RequestCredentialPage() {
             <div className="flex justify-between text-sm items-center">
               <span className="text-vault-muted">Wallet on Explorer</span>
               <a
-                href={`https://explorer.solana.com/address/${walletAddress}?cluster=devnet`}
+                href={`https://solscan.io/account/${walletAddress}?cluster=devnet`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 text-vault-muted hover:text-vault-accent font-mono text-xs"
@@ -162,13 +162,13 @@ export default function RequestCredentialPage() {
           {(credentialDetail?.attestationPda || credentialDetail?.attestationTxSig) && (
             <div className="flex gap-3 mt-3">
               {credentialDetail.attestationPda && (
-                <a href={`https://explorer.solana.com/address/${credentialDetail.attestationPda}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                <a href={`https://solscan.io/account/${credentialDetail.attestationPda}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1.5 text-xs text-vault-accent hover:underline bg-vault-accent/10 px-3 py-1.5 rounded">
                   <ExternalLink className="w-3 h-3" /> View Attestation on Solana
                 </a>
               )}
               {credentialDetail.attestationTxSig && (
-                <a href={`https://explorer.solana.com/tx/${credentialDetail.attestationTxSig}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                <a href={`https://solscan.io/tx/${credentialDetail.attestationTxSig}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1.5 text-xs text-green-400 hover:underline bg-green-900/20 px-3 py-1.5 rounded">
                   <ExternalLink className="w-3 h-3" /> View Transaction
                 </a>

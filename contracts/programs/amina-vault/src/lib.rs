@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+declare_id!("5uPg5pi46gXErKcYWyqEAn2uSU68VZSUgvGTPZuVGwyA");
 
 /// SAS (Solana Attestation Service) Program ID
 pub const SAS_PROGRAM_ID: &str = "22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG";
@@ -15,6 +15,32 @@ pub const SAS_PROGRAM_ID: &str = "22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG";
 #[program]
 pub mod amina_vault {
     use super::*;
+
+    // ─── Program Initialization ──────────────────────────────────
+
+    /// Initialize a freshly deployed program instance.
+    /// Called once after binary deployment to record the admin authority
+    /// and the vault owner wallet this program instance is dedicated to.
+    pub fn initialize(
+        ctx: Context<Initialize>,
+        vault_owner_wallet: Pubkey,
+    ) -> Result<()> {
+        let config = &mut ctx.accounts.config;
+        require!(!config.initialized, VaultError::AlreadyInitialized);
+
+        config.admin = ctx.accounts.authority.key();
+        config.vault_owner_wallet = vault_owner_wallet;
+        config.initialized = true;
+        config.deployed_at = Clock::get()?.unix_timestamp;
+
+        emit!(ProgramInitialized {
+            admin: config.admin,
+            vault_owner_wallet,
+            deployed_at: config.deployed_at,
+        });
+
+        Ok(())
+    }
 
     // ─── SAS Attestation Verification ────────────────────────────
 
@@ -114,7 +140,7 @@ pub mod amina_vault {
         client_reference: String,
         jurisdiction: String,
         risk_tier: String,
-        product_eligibility: String,
+        _product_eligibility: String,
     ) -> Result<()> {
         let credential = &mut ctx.accounts.credential;
         credential.authority = ctx.accounts.authority.key();
@@ -343,6 +369,14 @@ pub mod amina_vault {
 // ─── Account Structures ──────────────────────────────────────────
 
 #[account]
+pub struct ProgramConfig {
+    pub admin: Pubkey,
+    pub vault_owner_wallet: Pubkey,
+    pub initialized: bool,
+    pub deployed_at: i64,
+}
+
+#[account]
 pub struct Credential {
     pub authority: Pubkey,
     pub credential_id: String,      // max 32
@@ -408,6 +442,22 @@ pub enum MandateStatus {
 }
 
 // ─── Instruction Contexts ────────────────────────────────────────
+
+/// Initialize a per-user program instance after deployment.
+#[derive(Accounts)]
+pub struct Initialize<'info> {
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + 32 + 32 + 1 + 8,
+        seeds = [b"config"],
+        bump,
+    )]
+    pub config: Account<'info, ProgramConfig>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
 
 /// Register a SAS attestation as a credential in the AMINA system.
 /// Verifies the attestation exists on the SAS program before storing.
@@ -477,6 +527,7 @@ pub struct CreateVault<'info> {
         bump,
     )]
     pub vault: Account<'info, Vault>,
+    #[account(has_one = authority)]
     pub credential: Account<'info, Credential>,
     #[account(mut)]
     pub authority: Signer<'info>,
@@ -501,14 +552,14 @@ pub struct AttachMandate<'info> {
 
 #[derive(Accounts)]
 pub struct DepositFunds<'info> {
-    #[account(mut)]
+    #[account(mut, has_one = authority)]
     pub vault: Account<'info, Vault>,
     pub authority: Signer<'info>,
 }
 
 #[derive(Accounts)]
 pub struct AllocateToStrategy<'info> {
-    #[account(mut)]
+    #[account(mut, has_one = authority)]
     pub vault: Account<'info, Vault>,
     pub mandate: Account<'info, Mandate>,
     pub authority: Signer<'info>,
@@ -516,26 +567,33 @@ pub struct AllocateToStrategy<'info> {
 
 #[derive(Accounts)]
 pub struct Redeem<'info> {
-    #[account(mut)]
+    #[account(mut, has_one = authority)]
     pub vault: Account<'info, Vault>,
     pub authority: Signer<'info>,
 }
 
 #[derive(Accounts)]
 pub struct TogglePause<'info> {
-    #[account(mut)]
+    #[account(mut, has_one = authority)]
     pub vault: Account<'info, Vault>,
     pub authority: Signer<'info>,
 }
 
 #[derive(Accounts)]
 pub struct UnwindStrategy<'info> {
-    #[account(mut)]
+    #[account(mut, has_one = authority)]
     pub vault: Account<'info, Vault>,
     pub authority: Signer<'info>,
 }
 
 // ─── Events ──────────────────────────────────────────────────────
+
+#[event]
+pub struct ProgramInitialized {
+    pub admin: Pubkey,
+    pub vault_owner_wallet: Pubkey,
+    pub deployed_at: i64,
+}
 
 #[event]
 pub struct SasCredentialRegistered {
@@ -648,4 +706,6 @@ pub enum VaultError {
     SasAttestationNotFound,
     #[msg("SAS attestation does not match the credential")]
     SasAttestationMismatch,
+    #[msg("Program instance is already initialized")]
+    AlreadyInitialized,
 }

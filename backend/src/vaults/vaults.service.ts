@@ -2,28 +2,36 @@ import { Injectable, Inject, BadRequestException, ForbiddenException, NotFoundEx
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsService } from '../events/events.service';
 import { SasService } from '../sas/sas.service';
+import { VaultProgramService } from '../vault-program/vault-program.service';
 
 @Injectable()
 export class VaultsService {
   private prisma: PrismaService;
   private events: EventsService;
   private sas: SasService;
+  private vaultProgram: VaultProgramService;
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
     @Inject(EventsService) events: EventsService,
     @Inject(SasService) sas: SasService,
+    @Inject(VaultProgramService) vaultProgram: VaultProgramService,
   ) {
     this.prisma = prisma;
     this.events = events;
     this.sas = sas;
+    this.vaultProgram = vaultProgram;
   }
 
   /**
    * Verify that a wallet is the owner of a vault.
    * Throws ForbiddenException if the wallet doesn't match.
+   * For user-facing operations, callerWallet is required.
    */
-  private async verifyVaultOwnership(vaultId: string, callerWallet?: string) {
-    if (!callerWallet) return; // Skip if no wallet provided (admin operations)
+  private async verifyVaultOwnership(vaultId: string, callerWallet: string | undefined, requireWallet: boolean) {
+    if (!callerWallet && requireWallet) {
+      throw new ForbiddenException('Wallet address is required for this operation. Connect your wallet and retry.');
+    }
+    if (!callerWallet) return; // Skip only for admin-only operations
     const vault = await this.prisma.vault.findUnique({ where: { vaultId } });
     if (!vault) throw new NotFoundException('Vault not found');
     if (vault.ownerWallet && vault.ownerWallet !== callerWallet) {
@@ -57,6 +65,10 @@ export class VaultsService {
       throw new BadRequestException('Invalid or revoked credential. Cannot create vault.');
     }
 
+    if (!credential.walletAddress) {
+      throw new BadRequestException('Credential has no wallet address bound. Bind a wallet first.');
+    }
+
     // Allow multiple vaults per credential (each is segregated)
     const count = await this.prisma.vault.count();
     const vaultId = `VLT-${String(count + 1).padStart(3, '0')}`;
@@ -73,32 +85,151 @@ export class VaultsService {
       },
     });
 
-    // Deploy vault on-chain via SAS attestation (binds vault to owner wallet)
-    const sasResult = await this.sas.createVaultAttestation(credential.walletAddress, {
-      vaultId,
-      credentialId,
-      clientReference: credential.clientReference,
-      baseAsset,
-    });
+    // Track deployment steps for the frontend (5-step segregated deployment)
+    const steps: { step: string; status: string; detail?: string; txSignature?: string; address?: string }[] = [];
 
+    // ─── Step 1: Deploy Segregated Program Instance ─────────────
+    let deployedProgramId: string | undefined;
+    let deployResult: { programId: string; txSignature: string } | null = null;
+    try {
+      const result = await this.vaultProgram.deployNewProgramInstance(credential.walletAddress);
+      deployedProgramId = result.programId;
+      deployResult = { programId: result.programId, txSignature: result.txSignature };
+      steps.push({
+        step: 'Deploy Segregated Program',
+        status: 'success',
+        detail: `Unique Program ID: ${result.programId}`,
+        txSignature: result.txSignature,
+        address: result.programId,
+      });
+    } catch (e: any) {
+      steps.push({ step: 'Deploy Segregated Program', status: 'failed', detail: e.message });
+    }
+
+    // ─── Step 2: Initialize Program Instance ────────────────────
+    let initResult: { configPda: string; txSignature: string } | null = null;
+    if (deployedProgramId) {
+      try {
+        initResult = await this.vaultProgram.initializeProgram(
+          deployedProgramId,
+          credential.walletAddress,
+        );
+        steps.push({
+          step: 'Initialize Program',
+          status: 'success',
+          detail: `Config PDA: ${initResult.configPda}`,
+          txSignature: initResult.txSignature,
+          address: initResult.configPda,
+        });
+      } catch (e: any) {
+        steps.push({ step: 'Initialize Program', status: 'failed', detail: e.message });
+      }
+    }
+
+    // ─── Step 3: Register Credential On-Chain ───────────────────
+    let credentialResult: { credentialPda: string; txSignature: string } | null = null;
+    try {
+      credentialResult = await this.vaultProgram.registerCredential(
+        credentialId,
+        credential.clientReference,
+        credential.jurisdiction,
+        credential.riskTier,
+        credential.productEligibility,
+        credential.walletAddress,
+        deployedProgramId,
+      );
+      steps.push({
+        step: 'Register Credential On-Chain',
+        status: credentialResult ? 'success' : 'skipped',
+        detail: credentialResult ? `Credential PDA: ${credentialResult.credentialPda}` : 'Program not configured',
+        txSignature: credentialResult?.txSignature !== 'existing' ? credentialResult?.txSignature : undefined,
+        address: credentialResult?.credentialPda,
+      });
+    } catch (e: any) {
+      steps.push({ step: 'Register Credential On-Chain', status: 'failed', detail: e.message });
+    }
+
+    // ─── Step 4: Create Vault On-Chain ──────────────────────────
+    let programResult: { vaultPda: string; txSignature: string } | null = null;
+    try {
+      programResult = await this.vaultProgram.deployVault(vaultId, credentialId, baseAsset, deployedProgramId);
+      steps.push({
+        step: 'Create Vault On-Chain',
+        status: programResult ? 'success' : 'skipped',
+        detail: programResult ? `Vault PDA: ${programResult.vaultPda}` : 'Program not configured',
+        txSignature: programResult?.txSignature,
+        address: programResult?.vaultPda,
+      });
+    } catch (e: any) {
+      steps.push({ step: 'Create Vault On-Chain', status: 'failed', detail: e.message });
+    }
+
+    // ─── Step 5: SAS Attestation ────────────────────────────────
+    let sasResult: { pda: string; txSignature: string; onChainAddress: string } | null = null;
+    try {
+      sasResult = await this.sas.createVaultAttestation(credential.walletAddress, {
+        vaultId,
+        credentialId,
+        clientReference: credential.clientReference,
+        baseAsset,
+      });
+      steps.push({
+        step: 'Create SAS Attestation',
+        status: sasResult ? 'success' : 'skipped',
+        detail: sasResult ? `Attestation PDA: ${sasResult.pda}` : 'SAS not configured',
+        txSignature: sasResult?.txSignature !== 'existing' ? sasResult?.txSignature : undefined,
+        address: sasResult?.pda,
+      });
+    } catch (e: any) {
+      steps.push({ step: 'Create SAS Attestation', status: 'failed', detail: e.message });
+    }
+
+    // Update vault record with on-chain addresses and unique program ID
+    const onChainData: Record<string, string> = {};
+    if (deployedProgramId) {
+      onChainData.programId = deployedProgramId;
+    }
+    if (programResult) {
+      onChainData.onChainAddress = programResult.vaultPda;
+    }
     if (sasResult) {
+      onChainData.vaultAttestationPda = sasResult.pda;
+      onChainData.vaultAttestationTxSig = sasResult.txSignature;
+      if (!onChainData.onChainAddress) {
+        onChainData.onChainAddress = sasResult.onChainAddress;
+      }
+    }
+
+    if (Object.keys(onChainData).length > 0) {
       await this.prisma.vault.update({
         where: { vaultId },
-        data: {
-          vaultAttestationPda: sasResult.pda,
-          vaultAttestationTxSig: sasResult.txSignature,
-          onChainAddress: sasResult.onChainAddress,
-        },
+        data: onChainData,
       });
     }
+
+    const deployedOnChain = !!deployedProgramId;
+    const attestedOnChain = !!sasResult;
 
     await this.events.emit({
       vaultId, actionType: 'VAULT_CREATED', actor: 'admin', role: 'Admin',
       result: 'success',
-      reason: `Segregated vault ${vaultId} created for ${credential.clientReference} (wallet: ${credential.walletAddress.slice(0, 8)}...)${sasResult ? ' — deployed on-chain' : ''}`,
+      reason: `Segregated vault ${vaultId} created for ${credential.clientReference} (wallet: ${credential.walletAddress.slice(0, 8)}...)${deployedOnChain ? ` — unique program ${deployedProgramId}` : ''}${attestedOnChain ? ' — SAS attested' : ''}`,
+      txSignature: deployResult?.txSignature || programResult?.txSignature || sasResult?.txSignature,
+      onChainAddress: deployedProgramId || programResult?.vaultPda || sasResult?.onChainAddress,
     });
 
-    return { ...vault, vaultAttestationPda: sasResult?.pda, vaultAttestationTxSig: sasResult?.txSignature, onChainAddress: sasResult?.onChainAddress };
+    return {
+      ...vault,
+      programId: deployedProgramId || this.vaultProgram.getProgramId(),
+      onChainAddress: programResult?.vaultPda || sasResult?.onChainAddress,
+      vaultProgramTxSig: programResult?.txSignature,
+      credentialPda: credentialResult?.credentialPda,
+      credentialTxSig: credentialResult?.txSignature,
+      vaultAttestationPda: sasResult?.pda,
+      vaultAttestationTxSig: sasResult?.txSignature,
+      aminaBankWallet: this.vaultProgram.getAminaBankWallet(),
+      deploymentSteps: steps,
+    };
   }
 
   async getSnapshot(vaultId: string) {
@@ -158,16 +289,56 @@ export class VaultsService {
     return mandate;
   }
 
+  async getDeposits(vaultId: string) {
+    return this.prisma.deposit.findMany({
+      where: { vaultId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async deposit(vaultId: string, amount: number, sourceWallet?: string, sourceReference?: string, sourceType?: string, jurisdictionTag?: string, callerWallet?: string) {
-    await this.verifyVaultOwnership(vaultId, callerWallet);
+    await this.verifyVaultOwnership(vaultId, callerWallet, true);
     const vault = await this.prisma.vault.findUnique({ where: { vaultId } });
     if (!vault) throw new NotFoundException('Vault not found');
     if (vault.paused) throw new BadRequestException('Vault is paused');
 
+    // Auto-attach a default mandate if this is the first deposit and no mandate exists
+    const existingMandate = await this.prisma.mandate.findUnique({ where: { vaultId } });
+    if (!existingMandate) {
+      const strategies = await this.prisma.strategy.findMany({ where: { active: true, disabled: false } });
+      const allowedIds = strategies.filter(s => s.riskLevel === 'low').map(s => s.strategyId);
+      const caps: Record<string, number> = {};
+      allowedIds.forEach(id => { caps[id] = 4000; }); // 40% max per strategy
+
+      await this.prisma.mandate.create({
+        data: {
+          vaultId,
+          allowedStrategies: allowedIds,
+          blockedStrategies: strategies.filter(s => s.riskLevel === 'high').map(s => s.strategyId),
+          maxAllocationBps: caps,
+          liquidityBufferBps: 1000, // 10%
+          consentThreshold: 250000,
+          leverageAllowed: false,
+          approvedDestinations: [vault.ownerWallet],
+        },
+      });
+
+      await this.events.emit({
+        vaultId, actionType: 'MANDATE_ATTACHED', actor: 'system', role: 'Admin',
+        result: 'success',
+        reason: `Default mandate auto-attached on first deposit. Allowed: ${allowedIds.join(', ')}. Liquidity buffer: 10%.`,
+      });
+    }
+
+    const isOnChain = sourceType === 'On-Chain USDC Transfer';
+    // Detect tx signature: if sourceReference looks like a Solana signature (base58, 80+ chars)
+    const looksLikeTxSig = sourceReference && /^[1-9A-HJ-NP-Za-km-z]{80,}$/.test(sourceReference);
+    const txSig = isOnChain || looksLikeTxSig ? sourceReference : undefined;
+
     const deposit = await this.prisma.deposit.create({
       data: {
         vaultId, amount,
-        sourceWallet: sourceWallet || '0xCUST...1188',
+        sourceWallet: sourceWallet || callerWallet || 'unknown',
         sourceReference: sourceReference || `SRC-${Date.now()}`,
         sourceType: sourceType || 'Approved Custody-Linked Wallet',
         jurisdictionTag: jurisdictionTag || 'CH',
@@ -179,10 +350,18 @@ export class VaultsService {
       data: { idleBalance: { increment: amount }, totalDeposited: { increment: amount }, totalNAV: { increment: amount } },
     });
 
+    const actor = isOnChain ? (callerWallet || sourceWallet || 'client') : 'operations';
+    const role = isOnChain ? 'Client Representative' : 'Operations';
+    const reason = isOnChain
+      ? `On-chain deposit of ${amount.toLocaleString()} ${vault.baseAsset} from wallet ${(sourceWallet || callerWallet || '').slice(0, 8)}... to vault ${vaultId}`
+      : `Off-chain deposit of ${amount.toLocaleString()} ${vault.baseAsset} recorded. Source: ${deposit.sourceReference}`;
+
     await this.events.emit({
-      vaultId, actionType: 'DEPOSIT_RECORDED', actor: 'operations', role: 'Operations',
+      vaultId, actionType: 'DEPOSIT_RECORDED', actor, role,
       asset: vault.baseAsset, amount, result: 'success',
-      reason: `Deposit of ${amount.toLocaleString()} ${vault.baseAsset} recorded. Source: ${deposit.sourceReference}`,
+      reason,
+      txSignature: txSig,
+      onChainAddress: isOnChain ? vault.onChainAddress || undefined : undefined,
     });
 
     return { deposit, vault: updated };
@@ -273,28 +452,83 @@ export class VaultsService {
     return { allocation, message: `Successfully allocated ${amount.toLocaleString()} ${vault.baseAsset} to ${strategy.name}` };
   }
 
-  async redeem(vaultId: string, amount: number, destinationWallet: string, callerWallet?: string) {
-    await this.verifyVaultOwnership(vaultId, callerWallet);
+  /**
+   * Client requests a withdrawal. Creates a pending consent request.
+   * The admin/PM must approve and process it via processWithdrawal().
+   */
+  async redeem(vaultId: string, amount: number, destinationWallet: string, callerWallet?: string, txSignature?: string) {
+    await this.verifyVaultOwnership(vaultId, callerWallet, true);
     const vault = await this.prisma.vault.findUnique({ where: { vaultId }, include: { mandate: true } });
     if (!vault) throw new NotFoundException('Vault not found');
-
-    if (vault.mandate?.approvedDestinations?.length && !vault.mandate.approvedDestinations.includes(destinationWallet)) {
-      await this.events.emit({ vaultId, actionType: 'WITHDRAWAL_BLOCKED', actor: 'client_representative', role: 'Client Representative', asset: vault.baseAsset, amount, result: 'failure', reason: `Destination ${destinationWallet} is not in approved destination list` });
-      throw new ForbiddenException(`Destination ${destinationWallet} is not in approved destination list`);
-    }
 
     if (amount > vault.idleBalance) {
       throw new BadRequestException(`Insufficient idle balance. Available: ${vault.idleBalance.toLocaleString()}`);
     }
 
-    const updated = await this.prisma.vault.update({
-      where: { vaultId },
-      data: { idleBalance: { decrement: amount }, totalNAV: { decrement: amount } },
+    // Create a pending withdrawal request
+    const cnt = await this.prisma.consentRequest.count();
+    const requestId = `WDR-${String(cnt + 1).padStart(3, '0')}`;
+
+    await this.prisma.consentRequest.create({
+      data: {
+        requestId,
+        vaultId,
+        actionType: 'WITHDRAWAL',
+        amount,
+        details: { destinationWallet, callerWallet: callerWallet || destinationWallet },
+        initiator: callerWallet || 'client_representative',
+        status: 'pending',
+      },
     });
 
-    await this.events.emit({ vaultId, actionType: 'REDEMPTION_EXECUTED', actor: 'client_representative', role: 'Client Representative', asset: vault.baseAsset, amount, result: 'success', reason: `Redeemed ${amount.toLocaleString()} ${vault.baseAsset} to approved destination ${destinationWallet}` });
+    await this.events.emit({
+      vaultId, actionType: 'WITHDRAWAL_REQUESTED', actor: callerWallet || 'client_representative', role: 'Client Representative',
+      asset: vault.baseAsset, amount, result: 'pending',
+      reason: `Withdrawal request of ${amount.toLocaleString()} ${vault.baseAsset} to ${destinationWallet.slice(0, 8)}... — pending admin approval`,
+      onChainAddress: vault.onChainAddress || undefined,
+    });
 
-    return { message: `Redeemed ${amount.toLocaleString()} ${vault.baseAsset} to ${destinationWallet}`, vault: updated };
+    return { message: `Withdrawal request submitted for ${amount.toLocaleString()} ${vault.baseAsset}. Pending admin approval.`, requestId, status: 'pending' };
+  }
+
+  /**
+   * Admin/PM approves and processes a pending withdrawal request.
+   */
+  async processWithdrawal(requestId: string, txSignature?: string) {
+    const request = await this.prisma.consentRequest.findUnique({ where: { requestId } });
+    if (!request) throw new NotFoundException('Withdrawal request not found');
+    if (request.status !== 'pending') throw new BadRequestException('Request is not pending');
+
+    const vault = await this.prisma.vault.findUnique({ where: { vaultId: request.vaultId } });
+    if (!vault) throw new NotFoundException('Vault not found');
+
+    if (request.amount > vault.idleBalance) {
+      throw new BadRequestException(`Insufficient idle balance. Available: ${vault.idleBalance.toLocaleString()}`);
+    }
+
+    const details = request.details as any;
+    const destinationWallet = details?.destinationWallet || details?.callerWallet || '';
+
+    // Execute the withdrawal
+    const updated = await this.prisma.vault.update({
+      where: { vaultId: request.vaultId },
+      data: { idleBalance: { decrement: request.amount }, totalNAV: { decrement: request.amount } },
+    });
+
+    await this.prisma.consentRequest.update({
+      where: { requestId },
+      data: { status: 'approved', consentedBy: 'admin', consentedAt: new Date() },
+    });
+
+    await this.events.emit({
+      vaultId: request.vaultId, actionType: 'REDEMPTION_EXECUTED', actor: 'admin', role: 'Admin',
+      asset: vault.baseAsset, amount: request.amount, result: 'success',
+      reason: `Withdrawal of ${request.amount.toLocaleString()} ${vault.baseAsset} processed to ${destinationWallet.slice(0, 8)}...`,
+      txSignature,
+      onChainAddress: vault.onChainAddress || undefined,
+    });
+
+    return { message: `Withdrawal of ${request.amount.toLocaleString()} ${vault.baseAsset} processed`, vault: updated };
   }
 
   async unwind(vaultId: string, strategyId: string) {
@@ -365,5 +599,47 @@ export class VaultsService {
     });
 
     return updated;
+  }
+
+  /**
+   * On-ramp: Amina Bank sends USDC to the user's wallet on-chain.
+   * Records the event in the audit trail.
+   */
+  async onramp(recipientWallet: string, amount: number, callerWallet?: string) {
+    const result = await this.vaultProgram.sendUsdc(recipientWallet, amount);
+
+    await this.events.emit({
+      actionType: 'ONRAMP_COMPLETED',
+      actor: callerWallet || recipientWallet,
+      role: 'Client Representative',
+      asset: 'USDC',
+      amount,
+      result: 'success',
+      reason: `On-ramp: ${amount.toLocaleString()} USD → USDC sent from Amina Bank (${result.aminaWallet.slice(0, 8)}...) to wallet ${recipientWallet.slice(0, 8)}...`,
+      txSignature: result.txSignature,
+    });
+
+    return result;
+  }
+
+  /**
+   * Off-ramp: User sends USDC back to Amina, credited to bank account.
+   * Records the event in the audit trail.
+   */
+  async offramp(senderWallet: string, amount: number, callerWallet?: string, txSignature?: string) {
+    const aminaWallet = this.vaultProgram.getAminaBankWallet();
+
+    await this.events.emit({
+      actionType: 'OFFRAMP_COMPLETED',
+      actor: callerWallet || senderWallet,
+      role: 'Client Representative',
+      asset: 'USDC',
+      amount,
+      result: 'success',
+      reason: `Off-ramp: ${amount.toLocaleString()} USDC sent from wallet ${senderWallet.slice(0, 8)}... to Amina Bank (${aminaWallet.slice(0, 8)}...) → credited to bank account`,
+      txSignature,
+    });
+
+    return { message: `Off-ramp of ${amount.toLocaleString()} USDC completed`, status: 'success', aminaWallet, txSignature };
   }
 }

@@ -317,7 +317,7 @@ export default function CredentialsPage() {
                 <div className="flex justify-between text-sm items-center">
                   <span className="text-vault-muted">Attestation PDA</span>
                   <a
-                    href={`https://explorer.solana.com/address/${lastIssued.attestationPda}?cluster=devnet`}
+                    href={`https://solscan.io/account/${lastIssued.attestationPda}?cluster=devnet`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1 text-vault-accent hover:underline font-mono text-xs"
@@ -338,7 +338,7 @@ export default function CredentialsPage() {
                 <div className="flex justify-between text-sm items-center">
                   <span className="text-vault-muted">Transaction</span>
                   <a
-                    href={`https://explorer.solana.com/tx/${lastIssued.attestationTxSig}?cluster=devnet`}
+                    href={`https://solscan.io/tx/${lastIssued.attestationTxSig}?cluster=devnet`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1 text-vault-accent hover:underline font-mono text-xs"
@@ -354,13 +354,13 @@ export default function CredentialsPage() {
             {(lastIssued.attestationPda || lastIssued.attestationTxSig) && (
               <div className="flex gap-3">
                 {lastIssued.attestationPda && (
-                  <a href={`https://explorer.solana.com/address/${lastIssued.attestationPda}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                  <a href={`https://solscan.io/account/${lastIssued.attestationPda}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-1.5 text-xs text-vault-accent hover:underline bg-vault-accent/10 px-3 py-1.5 rounded">
                     <ExternalLink className="w-3 h-3" /> View Attestation Account
                   </a>
                 )}
                 {lastIssued.attestationTxSig && (
-                  <a href={`https://explorer.solana.com/tx/${lastIssued.attestationTxSig}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                  <a href={`https://solscan.io/tx/${lastIssued.attestationTxSig}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-1.5 text-xs text-green-400 hover:underline bg-green-900/20 px-3 py-1.5 rounded">
                     <ExternalLink className="w-3 h-3" /> View Transaction
                   </a>
@@ -405,7 +405,7 @@ export default function CredentialsPage() {
                     <td className="py-2.5 pr-3"><StatusBadge status={c.status} /></td>
                     <td className="py-2.5 pr-3">
                       {c.attestationPda ? (
-                        <a href={`https://explorer.solana.com/address/${c.attestationPda}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                        <a href={`https://solscan.io/account/${c.attestationPda}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
                           className="flex items-center gap-1 text-vault-accent hover:underline font-mono text-xs">
                           {truncate(c.attestationPda, 12)}
                           <ExternalLink className="w-3 h-3 flex-shrink-0" />
@@ -416,7 +416,7 @@ export default function CredentialsPage() {
                     </td>
                     <td className="py-2.5 pr-3">
                       {c.attestationTxSig ? (
-                        <a href={`https://explorer.solana.com/tx/${c.attestationTxSig}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                        <a href={`https://solscan.io/tx/${c.attestationTxSig}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
                           className="flex items-center gap-1 text-green-400 hover:underline font-mono text-xs">
                           {truncate(c.attestationTxSig, 12)}
                           <ExternalLink className="w-3 h-3 flex-shrink-0" />
