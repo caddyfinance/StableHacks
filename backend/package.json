@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "nest build",
+    "build": "prisma generate && prisma db push && nest build",
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
     "start:prod": "node dist/main",
