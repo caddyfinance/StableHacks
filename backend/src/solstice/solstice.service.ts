@@ -22,8 +22,15 @@ const SOLSTICE_PROGRAM_ID = new PublicKey('euxU8CnAgYk5qkRrSdqKoCM8huyexecRRWS67
 
 /** Devnet token mints */
 const USDC_MINT = new PublicKey('8iBux2LRja1PhVZph8Rw4Hi45pgkaufNEiaZma5nTD5g');
+const USDT_MINT = new PublicKey('5dXXpWyZCCPhBHxmp79Du81t7t9oh7HacUW864ARFyft');
 const USX_MINT = new PublicKey('7QC4zjrKA6XygpXPQCKSS9BmAsEFDJR6awiHSdgLcDvS');
 const EUSX_MINT = new PublicKey('Gkt9h4QWpPBDtbaF5HvYKCc87H5WCRTUtMf77HdTGHBt');
+
+/** Collateral mint lookup */
+const COLLATERAL_MINTS: Record<string, PublicKey> = {
+  usdc: USDC_MINT,
+  usdt: USDT_MINT,
+};
 
 /** Solstice PDA addresses (devnet) */
 const CONTROLLER_PDA = new PublicKey('6qaXkxV8mKV13MP4VoLcBVstR94xhB8u8ctjCt8RWXgM');
@@ -33,10 +40,17 @@ const VESTING_SCHEDULE_PDA = new PublicKey('AdjTFnZ2VFU3vQv9vZZK7TYdFpTnFBBegFz3
 
 const STRATEGY_ID = 'solstice-eusx-yield';
 
-/** Instruction discriminators from Solstice IDL */
-const LOCK_DISCRIMINATOR = Buffer.from([21, 19, 208, 43, 237, 62, 255, 87]);
-const UNLOCK_DISCRIMINATOR = Buffer.from([101, 155, 40, 21, 158, 189, 56, 203]);
-const WITHDRAW_DISCRIMINATOR = Buffer.from([183, 18, 70, 156, 148, 109, 161, 34]);
+/** USX Instructions API */
+const USX_API_URL = process.env.USX_API_URL || 'https://instructions.solstice.finance';
+const USX_API_KEY = process.env.USX_API_KEY || '';
+
+/** Supported USX instruction types */
+type UsxInstructionType =
+  | 'RequestMint' | 'ConfirmMint' | 'CancelMint'
+  | 'RequestRedeem' | 'ConfirmRedeem' | 'CancelRedeem'
+  | 'Lock' | 'Unlock' | 'Withdraw';
+
+type CollateralType = 'usdc' | 'usdt';
 
 @Injectable()
 export class SolsticeService {
@@ -122,24 +136,86 @@ export class SolsticeService {
     }
   }
 
+  // ─── USX Instructions API Client ─────────────────────────────────
+
+  /**
+   * Call the USX Instructions API to get a serialized Solana instruction.
+   * Returns a TransactionInstruction ready to add to a Transaction.
+   */
+  private async fetchUsxInstruction(
+    type: UsxInstructionType,
+    data: Record<string, any>,
+  ): Promise<TransactionInstruction> {
+    const apiUrl = process.env.USX_API_URL || USX_API_URL;
+    const apiKey = process.env.USX_API_KEY || USX_API_KEY;
+
+    if (!apiKey) {
+      throw new Error('USX_API_KEY not set in .env — cannot call USX Instructions API');
+    }
+
+    const url = `${apiUrl}/v1/instructions`;
+    this.logger.log(`[USX API] POST ${url} type=${type}`);
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+      },
+      body: JSON.stringify({ type, data }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`USX API error (${res.status}): ${body}`);
+    }
+
+    const json = await res.json() as {
+      instruction: {
+        program_id: number[];
+        accounts: { pubkey: number[]; is_signer: boolean; is_writable: boolean }[];
+        data: number[];
+      };
+    };
+
+    const ix = json.instruction;
+    return new TransactionInstruction({
+      programId: new PublicKey(Buffer.from(ix.program_id)),
+      keys: ix.accounts.map((acc) => ({
+        pubkey: new PublicKey(Buffer.from(acc.pubkey)),
+        isSigner: acc.is_signer,
+        isWritable: acc.is_writable,
+      })),
+      data: Buffer.from(ix.data),
+    });
+  }
+
+  /** Get the collateral mint for a given collateral type */
+  private getCollateralMint(collateral: CollateralType): PublicKey {
+    const mint = COLLATERAL_MINTS[collateral];
+    if (!mint) throw new Error(`Unsupported collateral type: ${collateral}. Use 'usdc' or 'usdt'.`);
+    return mint;
+  }
+
   // ─── Devnet Token Minting ─────────────────────────────────────────
 
   /**
-   * Mint devnet USDC to the Amina Bank wallet.
-   * Requires the wallet to be the mint authority for the Solstice devnet USDC.
+   * Mint devnet collateral (USDC or USDT) to the Amina Bank wallet.
+   * Requires the wallet to be the mint authority for the devnet token.
    */
-  async mintDevnetUSDC(amount: number): Promise<{ txSignature: string; ata: string }> {
+  async mintDevnetCollateral(amount: number, collateral: CollateralType = 'usdc'): Promise<{ txSignature: string; ata: string }> {
     const connection = this.getConnection();
     const authority = this.getAminaBankKeypair();
     const user = authority.publicKey;
+    const mint = this.getCollateralMint(collateral);
 
     const { createMintToInstruction } = await import('@solana/spl-token');
-    const userUsdcAta = await getAssociatedTokenAddress(USDC_MINT, user);
+    const userAta = await getAssociatedTokenAddress(mint, user);
     const amountLamports = BigInt(Math.round(amount * 1e6));
 
     const tx = new Transaction();
-    tx.add(createAssociatedTokenAccountIdempotentInstruction(user, userUsdcAta, user, USDC_MINT));
-    tx.add(createMintToInstruction(USDC_MINT, userUsdcAta, user, amountLamports));
+    tx.add(createAssociatedTokenAccountIdempotentInstruction(user, userAta, user, mint));
+    tx.add(createMintToInstruction(mint, userAta, user, amountLamports));
 
     tx.feePayer = user;
     const { blockhash } = await connection.getLatestBlockhash('confirmed');
@@ -147,54 +223,41 @@ export class SolsticeService {
     tx.sign(authority);
 
     const txSignature = await this.sendAndConfirm(connection, tx);
-    this.logger.log(`[MINT] Minted ${amount} devnet USDC, tx=${txSignature}`);
-    return { txSignature, ata: userUsdcAta.toBase58() };
+    this.logger.log(`[MINT] Minted ${amount} devnet ${collateral.toUpperCase()}, tx=${txSignature}`);
+    return { txSignature, ata: userAta.toBase58() };
   }
 
   /**
-   * Deposit USDC to receive USX (1:1).
-   * On devnet, this mints USX directly using the Solstice devnet USDC.
-   * In production, this would go through the Solstice USX minting program.
-   *
-   * For the hackathon: the Amina wallet transfers USDC to the USX program's
-   * collateral vault and receives USX. If the wallet has USX mint authority,
-   * we mint USX directly (devnet shortcut).
+   * @deprecated Use requestMintUSX + confirmMintUSX instead.
+   * Legacy devnet shortcut — mints USX directly via mint authority.
    */
   async depositUSDCForUSX(amount: number): Promise<{ txSignature: string; usxAta: string }> {
+    return this.requestMintUSX(amount, 'usdc');
+  }
+
+  /**
+   * Request minting USX with collateral (USDC or USDT) via the USX Instructions API.
+   * This creates a mint request on-chain. Must be followed by confirmMintUSX().
+   */
+  async requestMintUSX(amount: number, collateral: CollateralType = 'usdc'): Promise<{ txSignature: string; usxAta: string }> {
     const connection = this.getConnection();
     const authority = this.getAminaBankKeypair();
     const user = authority.publicKey;
 
-    const { createMintToInstruction, createTransferInstruction } = await import('@solana/spl-token');
-    const userUsdcAta = await getAssociatedTokenAddress(USDC_MINT, user);
     const userUsxAta = await getAssociatedTokenAddress(USX_MINT, user);
 
-    const amountLamports = BigInt(Math.round(amount * 1e6));
+    this.logger.log(`[MINT] RequestMint: ${amount} USX via ${collateral.toUpperCase()}`);
 
-    // Check USDC balance
-    const usdcBalance = await this.getTokenBalance(connection, userUsdcAta);
-    if (usdcBalance < amount) {
-      throw new Error(`Insufficient USDC: have ${usdcBalance}, need ${amount}. Mint devnet USDC first.`);
-    }
+    const ix = await this.fetchUsxInstruction('RequestMint', {
+      amount: Math.round(amount * 1e6),
+      collateral,
+      user: user.toBase58(),
+    });
 
     const tx = new Transaction();
     // Ensure USX ATA exists
     tx.add(createAssociatedTokenAccountIdempotentInstruction(user, userUsxAta, user, USX_MINT));
-
-    // Transfer USDC to USX collateral vault (the deposit)
-    const USX_COLLATERAL_VAULT = new PublicKey('EWRHSz5ezFsDqzyZEComkjBM9shD3mHFqcS5qM5Rxb3');
-    // Find the collateral vault's USDC token account
-    const collateralUsdcAta = await getAssociatedTokenAddress(USDC_MINT, USX_COLLATERAL_VAULT, true);
-
-    // For devnet: if we have USX mint authority, mint USX directly after USDC transfer
-    // This simulates the full USDC->USX deposit flow
-    try {
-      // Try minting USX directly (devnet — wallet needs mint authority on USX)
-      tx.add(createMintToInstruction(USX_MINT, userUsxAta, user, amountLamports));
-      this.logger.log(`[DEPOSIT] Minting ${amount} USX directly (devnet authority)`);
-    } catch (e) {
-      throw new Error(`Cannot mint USX: wallet may not have mint authority. ${(e as Error).message}`);
-    }
+    tx.add(ix);
 
     tx.feePayer = user;
     const { blockhash } = await connection.getLatestBlockhash('confirmed');
@@ -202,8 +265,143 @@ export class SolsticeService {
     tx.sign(authority);
 
     const txSignature = await this.sendAndConfirm(connection, tx);
-    this.logger.log(`[DEPOSIT] USDC->USX deposit complete: ${amount} USX, tx=${txSignature}`);
+    this.logger.log(`[MINT] RequestMint submitted: tx=${txSignature}`);
     return { txSignature, usxAta: userUsxAta.toBase58() };
+  }
+
+  /**
+   * Confirm a pending USX mint request via the USX Instructions API.
+   */
+  async confirmMintUSX(collateral: CollateralType = 'usdc'): Promise<{ txSignature: string }> {
+    const connection = this.getConnection();
+    const authority = this.getAminaBankKeypair();
+    const user = authority.publicKey;
+
+    this.logger.log(`[MINT] ConfirmMint for ${collateral.toUpperCase()}`);
+
+    const ix = await this.fetchUsxInstruction('ConfirmMint', {
+      collateral,
+      user: user.toBase58(),
+    });
+
+    const tx = new Transaction().add(ix);
+    tx.feePayer = user;
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+    tx.recentBlockhash = blockhash;
+    tx.sign(authority);
+
+    const txSignature = await this.sendAndConfirm(connection, tx);
+    this.logger.log(`[MINT] ConfirmMint complete: tx=${txSignature}`);
+    return { txSignature };
+  }
+
+  /**
+   * Cancel a pending USX mint request via the USX Instructions API.
+   */
+  async cancelMintUSX(collateral: CollateralType = 'usdc'): Promise<{ txSignature: string }> {
+    const connection = this.getConnection();
+    const authority = this.getAminaBankKeypair();
+    const user = authority.publicKey;
+
+    this.logger.log(`[MINT] CancelMint for ${collateral.toUpperCase()}`);
+
+    const ix = await this.fetchUsxInstruction('CancelMint', {
+      collateral,
+      user: user.toBase58(),
+    });
+
+    const tx = new Transaction().add(ix);
+    tx.feePayer = user;
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+    tx.recentBlockhash = blockhash;
+    tx.sign(authority);
+
+    const txSignature = await this.sendAndConfirm(connection, tx);
+    this.logger.log(`[MINT] CancelMint complete: tx=${txSignature}`);
+    return { txSignature };
+  }
+
+  // ─── USX Redemption (collateral recovery) ───────────────────────
+
+  /**
+   * Request redemption of USX back to collateral (USDC or USDT) via the USX Instructions API.
+   * Must be followed by confirmRedeemUSX().
+   */
+  async requestRedeemUSX(amount: number, collateral: CollateralType = 'usdc'): Promise<{ txSignature: string }> {
+    const connection = this.getConnection();
+    const authority = this.getAminaBankKeypair();
+    const user = authority.publicKey;
+
+    this.logger.log(`[REDEEM] RequestRedeem: ${amount} USX -> ${collateral.toUpperCase()}`);
+
+    const ix = await this.fetchUsxInstruction('RequestRedeem', {
+      amount: Math.round(amount * 1e6),
+      collateral,
+      user: user.toBase58(),
+    });
+
+    const tx = new Transaction().add(ix);
+    tx.feePayer = user;
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+    tx.recentBlockhash = blockhash;
+    tx.sign(authority);
+
+    const txSignature = await this.sendAndConfirm(connection, tx);
+    this.logger.log(`[REDEEM] RequestRedeem submitted: tx=${txSignature}`);
+    return { txSignature };
+  }
+
+  /**
+   * Confirm a pending USX redemption via the USX Instructions API.
+   * Returns collateral (USDC or USDT) to the vault wallet.
+   */
+  async confirmRedeemUSX(collateral: CollateralType = 'usdc'): Promise<{ txSignature: string }> {
+    const connection = this.getConnection();
+    const authority = this.getAminaBankKeypair();
+    const user = authority.publicKey;
+
+    this.logger.log(`[REDEEM] ConfirmRedeem for ${collateral.toUpperCase()}`);
+
+    const ix = await this.fetchUsxInstruction('ConfirmRedeem', {
+      collateral,
+      user: user.toBase58(),
+    });
+
+    const tx = new Transaction().add(ix);
+    tx.feePayer = user;
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+    tx.recentBlockhash = blockhash;
+    tx.sign(authority);
+
+    const txSignature = await this.sendAndConfirm(connection, tx);
+    this.logger.log(`[REDEEM] ConfirmRedeem complete: tx=${txSignature}`);
+    return { txSignature };
+  }
+
+  /**
+   * Cancel a pending USX redemption via the USX Instructions API.
+   */
+  async cancelRedeemUSX(collateral: CollateralType = 'usdc'): Promise<{ txSignature: string }> {
+    const connection = this.getConnection();
+    const authority = this.getAminaBankKeypair();
+    const user = authority.publicKey;
+
+    this.logger.log(`[REDEEM] CancelRedeem for ${collateral.toUpperCase()}`);
+
+    const ix = await this.fetchUsxInstruction('CancelRedeem', {
+      collateral,
+      user: user.toBase58(),
+    });
+
+    const tx = new Transaction().add(ix);
+    tx.feePayer = user;
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+    tx.recentBlockhash = blockhash;
+    tx.sign(authority);
+
+    const txSignature = await this.sendAndConfirm(connection, tx);
+    this.logger.log(`[REDEEM] CancelRedeem complete: tx=${txSignature}`);
+    return { txSignature };
   }
 
   // ─── Core On-Chain Operations ────────────────────────────────────
@@ -211,14 +409,15 @@ export class SolsticeService {
   /**
    * Deploy capital into Solstice yield vault.
    * Full automated on-chain flow:
-   *   Step 1: Mint devnet USDC (if needed)
-   *   Step 2: Deposit USDC -> receive USX (1:1 collateral deposit)
-   *   Step 3: Lock USX -> eUSX via Solstice yield vault
+   *   Step 1: Mint devnet collateral (if needed)
+   *   Step 2: RequestMint collateral -> USX via USX Instructions API
+   *   Step 3: ConfirmMint to finalize USX minting
+   *   Step 4: Lock USX -> eUSX via USX Instructions API
    *
    * Every step is a real on-chain transaction, verified with pre/post balance snapshots.
    * Creates Allocation records and compliance events for the full segregated fund flow.
    */
-  async lockUSX(vaultId: string, amount: number): Promise<{
+  async lockUSX(vaultId: string, amount: number, collateral: CollateralType = 'usdc'): Promise<{
     txSignature: string;
     preBalanceUSX: number;
     postBalanceUSX: number;
@@ -233,96 +432,100 @@ export class SolsticeService {
     const user = authority.publicKey;
     const amountLamports = BigInt(Math.round(amount * 1e6));
 
-    this.logger.log(`[LOCK] vault=${vaultId} amount=${amount} USX`);
+    const collateralLabel = collateral.toUpperCase();
+    this.logger.log(`[LOCK] vault=${vaultId} amount=${amount} USX (collateral=${collateralLabel})`);
 
     // Derive ATAs
+    const collateralMint = this.getCollateralMint(collateral);
+    const userCollateralAta = await getAssociatedTokenAddress(collateralMint, user);
     const userUsxAta = await getAssociatedTokenAddress(USX_MINT, user);
     const userEusxAta = await getAssociatedTokenAddress(EUSX_MINT, user);
 
     // ─── Pre-balance snapshot (on-chain read) ────────────────
     const preBalanceUSX = await this.getTokenBalance(connection, userUsxAta);
     const preBalanceEUSX = await this.getTokenBalance(connection, userEusxAta);
+    const preBalanceCollateral = await this.getTokenBalance(connection, userCollateralAta);
 
-    this.logger.log(`[LOCK] Pre-balance: ${preBalanceUSX} USX, ${preBalanceEUSX} eUSX`);
+    this.logger.log(`[LOCK] Pre-balance: ${preBalanceCollateral} ${collateralLabel}, ${preBalanceUSX} USX, ${preBalanceEUSX} eUSX`);
 
-    const userUsdcAta = await getAssociatedTokenAddress(USDC_MINT, user);
-    const preBalanceUSDC = await this.getTokenBalance(connection, userUsdcAta);
-
-    // ─── Step 1: Mint devnet USDC if needed ──────────────────
-    if (preBalanceUSDC < amount) {
-      this.logger.log(`[LOCK] Minting ${amount} devnet USDC (current: ${preBalanceUSDC})`);
-      const mintResult = await this.mintDevnetUSDC(amount);
+    // ─── Step 1: Mint devnet collateral if needed ────────────
+    if (preBalanceCollateral < amount) {
+      this.logger.log(`[LOCK] Minting ${amount} devnet ${collateralLabel} (current: ${preBalanceCollateral})`);
+      const mintResult = await this.mintDevnetCollateral(amount, collateral);
       await this.events.emit({
-        vaultId, actionType: 'SOLSTICE_MINT_USDC',
+        vaultId, actionType: `SOLSTICE_MINT_${collateralLabel}`,
         actor: 'portfolio_manager', role: 'Portfolio Manager',
-        asset: 'USDC', amount, strategy: STRATEGY_ID,
+        asset: collateralLabel, amount, strategy: STRATEGY_ID,
         result: 'success',
-        reason: `Devnet: Minted ${amount} USDC to vault wallet ATA (${userUsdcAta.toBase58()}).`,
+        reason: `Devnet: Minted ${amount} ${collateralLabel} to vault wallet ATA (${userCollateralAta.toBase58()}).`,
         txSignature: mintResult.txSignature,
-        onChainAddress: userUsdcAta.toBase58(),
+        onChainAddress: userCollateralAta.toBase58(),
       });
     }
 
-    // ─── Step 2: Deposit USDC to receive USX (on-chain) ──────
+    // ─── Step 2: RequestMint + ConfirmMint USX via API ───────
     if (preBalanceUSX < amount) {
-      this.logger.log(`[LOCK] Depositing ${amount} USDC for USX`);
-      const depositResult = await this.depositUSDCForUSX(amount);
+      this.logger.log(`[LOCK] RequestMint: ${amount} ${collateralLabel} -> USX`);
+      const requestResult = await this.requestMintUSX(amount, collateral);
       await this.events.emit({
-        vaultId, actionType: 'SOLSTICE_DEPOSIT_USDC',
+        vaultId, actionType: 'SOLSTICE_REQUEST_MINT',
         actor: 'portfolio_manager', role: 'Portfolio Manager',
-        asset: 'USDC', amount, strategy: STRATEGY_ID,
+        asset: collateralLabel, amount, strategy: STRATEGY_ID,
         result: 'success',
         reason: [
-          `Step 1/3: Deposited ${amount} USDC from vault to receive USX.`,
-          `USDC from vault wallet ATA (${userUsdcAta.toBase58()}) deposited as collateral.`,
-          `${amount} USX received into vault USX ATA (${userUsxAta.toBase58()}).`,
-          `Segregated: USDC sourced from vault PDA custody — non-commingled.`,
+          `Step 1/4: Requested mint of ${amount} USX with ${collateralLabel} collateral.`,
+          `${collateralLabel} from vault wallet ATA (${userCollateralAta.toBase58()}) submitted as collateral.`,
+          `Segregated: ${collateralLabel} sourced from vault PDA custody — non-commingled.`,
         ].join(' '),
-        txSignature: depositResult.txSignature,
-        onChainAddress: userUsdcAta.toBase58(),
+        txSignature: requestResult.txSignature,
+        onChainAddress: userCollateralAta.toBase58(),
       });
 
-      // Re-read USX balance after deposit
+      this.logger.log(`[LOCK] ConfirmMint: finalizing USX mint`);
+      const confirmResult = await this.confirmMintUSX(collateral);
+      await this.events.emit({
+        vaultId, actionType: 'SOLSTICE_CONFIRM_MINT',
+        actor: 'portfolio_manager', role: 'Portfolio Manager',
+        asset: 'USX', amount, strategy: STRATEGY_ID,
+        result: 'success',
+        reason: [
+          `Step 2/4: Confirmed mint of ${amount} USX.`,
+          `${amount} USX received into vault USX ATA (${userUsxAta.toBase58()}).`,
+        ].join(' '),
+        txSignature: confirmResult.txSignature,
+        onChainAddress: userUsxAta.toBase58(),
+      });
+
+      // Re-read USX balance after mint
       await new Promise(r => setTimeout(r, 1000));
       const newUsxBalance = await this.getTokenBalance(connection, userUsxAta);
-      this.logger.log(`[LOCK] Post-deposit USX balance: ${newUsxBalance}`);
+      this.logger.log(`[LOCK] Post-mint USX balance: ${newUsxBalance}`);
     }
 
-    // ─── Step 3: Lock USX -> eUSX via Solstice (on-chain) ────
+    // ─── Step 3: Lock USX -> eUSX via USX Instructions API ───
     await this.events.emit({
       vaultId, actionType: 'SOLSTICE_LOCK_INITIATED',
       actor: 'portfolio_manager', role: 'Portfolio Manager',
       asset: 'USX', amount, strategy: STRATEGY_ID,
       result: 'pending',
-      reason: `Step 2/3: Locking ${amount} USX into Solstice eUSX yield vault. Pre-balance: ${preBalanceUSX} USX, ${preBalanceEUSX} eUSX. Source wallet: ${user.toBase58()}`,
+      reason: `Step 3/4: Locking ${amount} USX into Solstice eUSX yield vault. Pre-balance: ${preBalanceUSX} USX, ${preBalanceEUSX} eUSX. Source wallet: ${user.toBase58()}`,
       onChainAddress: userUsxAta.toBase58(),
     });
 
-    // ─── Build and send transaction ──────────────────────────
+    // Fetch Lock instruction from USX API
+    const lockIx = await this.fetchUsxInstruction('Lock', {
+      amount: Math.round(amount * 1e6),
+      user: user.toBase58(),
+    });
+
     const tx = new Transaction();
 
     // Ensure both USX and eUSX ATAs exist
     tx.add(createAssociatedTokenAccountIdempotentInstruction(user, userUsxAta, user, USX_MINT));
     tx.add(createAssociatedTokenAccountIdempotentInstruction(user, userEusxAta, user, EUSX_MINT));
 
-    // Lock instruction
-    tx.add(new TransactionInstruction({
-      programId: SOLSTICE_PROGRAM_ID,
-      keys: [
-        { pubkey: user, isSigner: true, isWritable: true },
-        { pubkey: user, isSigner: true, isWritable: true },
-        { pubkey: CONTROLLER_PDA, isSigner: false, isWritable: false },
-        { pubkey: VESTING_SCHEDULE_PDA, isSigner: false, isWritable: false },
-        { pubkey: EUSX_MINT, isSigner: false, isWritable: true },
-        { pubkey: userEusxAta, isSigner: false, isWritable: true },
-        { pubkey: USX_MINT, isSigner: false, isWritable: false },
-        { pubkey: ASSET_VAULT_PDA, isSigner: false, isWritable: true },
-        { pubkey: YIELD_POOL_PDA, isSigner: false, isWritable: true },
-        { pubkey: userUsxAta, isSigner: false, isWritable: true },
-        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-      ],
-      data: Buffer.concat([LOCK_DISCRIMINATOR, this.serializeU64(amountLamports)]),
-    }));
+    // Lock instruction from API
+    tx.add(lockIx);
 
     tx.feePayer = user;
     const { blockhash } = await connection.getLatestBlockhash('confirmed');
@@ -419,25 +622,13 @@ export class SolsticeService {
       onChainAddress: cooldownEscrow.toBase58(),
     });
 
-    const tx = new Transaction().add(new TransactionInstruction({
-      programId: SOLSTICE_PROGRAM_ID,
-      keys: [
-        { pubkey: user, isSigner: true, isWritable: false },
-        { pubkey: user, isSigner: true, isWritable: true },
-        { pubkey: CONTROLLER_PDA, isSigner: false, isWritable: false },
-        { pubkey: VESTING_SCHEDULE_PDA, isSigner: false, isWritable: false },
-        { pubkey: EUSX_MINT, isSigner: false, isWritable: true },
-        { pubkey: userEusxAta, isSigner: false, isWritable: true },
-        { pubkey: USX_MINT, isSigner: false, isWritable: false },
-        { pubkey: ASSET_VAULT_PDA, isSigner: false, isWritable: true },
-        { pubkey: YIELD_POOL_PDA, isSigner: false, isWritable: true },
-        { pubkey: cooldownEscrow, isSigner: false, isWritable: true },
-        { pubkey: cooldownEscrowVault, isSigner: false, isWritable: true },
-        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      ],
-      data: Buffer.concat([UNLOCK_DISCRIMINATOR, this.serializeU64(shareAmountLamports)]),
-    }));
+    // Fetch Unlock instruction from USX API
+    const unlockIx = await this.fetchUsxInstruction('Unlock', {
+      amount: Math.round(amount * 1e6),
+      user: user.toBase58(),
+    });
+
+    const tx = new Transaction().add(unlockIx);
 
     tx.feePayer = user;
     const { blockhash } = await connection.getLatestBlockhash('confirmed');
@@ -515,20 +706,12 @@ export class SolsticeService {
       onChainAddress: cooldownEscrow.toBase58(),
     });
 
-    const tx = new Transaction().add(new TransactionInstruction({
-      programId: SOLSTICE_PROGRAM_ID,
-      keys: [
-        { pubkey: user, isSigner: true, isWritable: false },
-        { pubkey: user, isSigner: true, isWritable: true },
-        { pubkey: CONTROLLER_PDA, isSigner: false, isWritable: false },
-        { pubkey: USX_MINT, isSigner: false, isWritable: false },
-        { pubkey: userUsxAta, isSigner: false, isWritable: true },
-        { pubkey: cooldownEscrow, isSigner: false, isWritable: true },
-        { pubkey: cooldownEscrowVault, isSigner: false, isWritable: true },
-        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-      ],
-      data: WITHDRAW_DISCRIMINATOR,
-    }));
+    // Fetch Withdraw instruction from USX API
+    const withdrawIx = await this.fetchUsxInstruction('Withdraw', {
+      user: user.toBase58(),
+    });
+
+    const tx = new Transaction().add(withdrawIx);
 
     tx.feePayer = user;
     const { blockhash } = await connection.getLatestBlockhash('confirmed');
@@ -581,20 +764,40 @@ export class SolsticeService {
       onChainAddress: userUsxAta.toBase58(),
     });
 
-    // Step 2: Redeem USX back to USDC (return collateral to vault)
-    await this.events.emit({
-      vaultId, actionType: 'SOLSTICE_REDEEM_USDC',
-      actor: 'portfolio_manager', role: 'Portfolio Manager',
-      asset: 'USDC', amount: usxReceived > 0 ? usxReceived : undefined,
-      strategy: STRATEGY_ID, result: 'success',
-      reason: [
-        `Step 2/2: Redeemed ${usxReceived > 0 ? usxReceived : '?'} USX back to USDC.`,
-        `USX returned to Solstice collateral pool, USDC received into vault wallet ATA.`,
-        `Funds returned to vault idle balance. Segregated: non-commingled throughout.`,
-        `Compliant: all fund movements within vault PDA custody chain.`,
-      ].join(' '),
-      onChainAddress: userUsxAta.toBase58(),
-    });
+    // Step 2: Redeem USX back to collateral via USX Instructions API
+    if (usxReceived > 0) {
+      try {
+        const redeemAmount = usxReceived;
+        this.logger.log(`[WITHDRAW] Redeeming ${redeemAmount} USX back to collateral`);
+        const requestRedeemResult = await this.requestRedeemUSX(redeemAmount);
+        const confirmRedeemResult = await this.confirmRedeemUSX();
+
+        await this.events.emit({
+          vaultId, actionType: 'SOLSTICE_REDEEM_COLLATERAL',
+          actor: 'portfolio_manager', role: 'Portfolio Manager',
+          asset: 'USDC', amount: redeemAmount,
+          strategy: STRATEGY_ID, result: 'success',
+          reason: [
+            `Step 2/2: Redeemed ${redeemAmount} USX back to collateral.`,
+            `RequestRedeem tx: ${requestRedeemResult.txSignature}. ConfirmRedeem tx: ${confirmRedeemResult.txSignature}.`,
+            `Collateral received into vault wallet ATA. Segregated: non-commingled throughout.`,
+            `Compliant: all fund movements within vault PDA custody chain.`,
+          ].join(' '),
+          txSignature: confirmRedeemResult.txSignature,
+          onChainAddress: userUsxAta.toBase58(),
+        });
+      } catch (e: any) {
+        this.logger.warn(`[WITHDRAW] USX redemption failed (USX remains in wallet): ${e.message}`);
+        await this.events.emit({
+          vaultId, actionType: 'SOLSTICE_REDEEM_COLLATERAL',
+          actor: 'portfolio_manager', role: 'Portfolio Manager',
+          asset: 'USX', amount: usxReceived,
+          strategy: STRATEGY_ID, result: 'failed',
+          reason: `Step 2/2: USX redemption to collateral failed: ${e.message}. USX remains in vault wallet for manual redemption.`,
+          onChainAddress: userUsxAta.toBase58(),
+        });
+      }
+    }
 
     return { txSignature, preBalanceUSX, postBalanceUSX, usxReceived, onChainVerified };
   }
@@ -688,9 +891,12 @@ export class SolsticeService {
         vaultId,
         actionType: {
           in: [
-            'SOLSTICE_DEPOSIT_USDC', 'SOLSTICE_LOCK_INITIATED', 'SOLSTICE_LOCK',
+            'SOLSTICE_MINT_USDC', 'SOLSTICE_MINT_USDT',
+            'SOLSTICE_REQUEST_MINT', 'SOLSTICE_CONFIRM_MINT',
+            'SOLSTICE_LOCK_INITIATED', 'SOLSTICE_LOCK',
             'SOLSTICE_UNLOCK_INITIATED', 'SOLSTICE_UNLOCK',
-            'SOLSTICE_WITHDRAW_INITIATED', 'SOLSTICE_WITHDRAW', 'SOLSTICE_REDEEM_USDC',
+            'SOLSTICE_WITHDRAW_INITIATED', 'SOLSTICE_WITHDRAW',
+            'SOLSTICE_REDEEM_COLLATERAL',
           ],
         },
       },

@@ -78,12 +78,20 @@ export const api = {
   approveConsent: (id: string) => request<any>(`/consent/${id}/approve`, { method: 'PUT' }),
 
   // Solstice Yield Protocol
-  solsticeLock: (vaultId: string, amount: number) => request<any>('/solstice/lock', { method: 'POST', body: JSON.stringify({ vaultId, amount }) }),
+  solsticeLock: (vaultId: string, amount: number, collateral: 'usdc' | 'usdt' = 'usdc') => request<any>('/solstice/lock', { method: 'POST', body: JSON.stringify({ vaultId, amount, collateral }) }),
   solsticeUnlock: (vaultId: string, amount: number) => request<any>('/solstice/unlock', { method: 'POST', body: JSON.stringify({ vaultId, amount }) }),
   solsticeWithdraw: (vaultId: string) => request<any>('/solstice/withdraw', { method: 'POST', body: JSON.stringify({ vaultId }) }),
   solsticePoolState: () => request<any>('/solstice/pool-state'),
   solsticePosition: (vaultId: string) => request<any>(`/solstice/position/${vaultId}`),
   solsticeFundFlow: (vaultId: string) => request<any[]>(`/solstice/fund-flow/${vaultId}`),
+
+  // USX Minting & Redemption
+  solsticeRequestMint: (amount: number, collateral: 'usdc' | 'usdt' = 'usdc') => request<any>('/solstice/request-mint', { method: 'POST', body: JSON.stringify({ amount, collateral }) }),
+  solsticeConfirmMint: (collateral: 'usdc' | 'usdt' = 'usdc') => request<any>('/solstice/confirm-mint', { method: 'POST', body: JSON.stringify({ collateral }) }),
+  solsticeCancelMint: (collateral: 'usdc' | 'usdt' = 'usdc') => request<any>('/solstice/cancel-mint', { method: 'POST', body: JSON.stringify({ collateral }) }),
+  solsticeRequestRedeem: (amount: number, collateral: 'usdc' | 'usdt' = 'usdc') => request<any>('/solstice/request-redeem', { method: 'POST', body: JSON.stringify({ amount, collateral }) }),
+  solsticeConfirmRedeem: (collateral: 'usdc' | 'usdt' = 'usdc') => request<any>('/solstice/confirm-redeem', { method: 'POST', body: JSON.stringify({ collateral }) }),
+  solsticeCancelRedeem: (collateral: 'usdc' | 'usdt' = 'usdc') => request<any>('/solstice/cancel-redeem', { method: 'POST', body: JSON.stringify({ collateral }) }),
 
   // Events
   getEvents: (vaultId?: string, actionType?: string) => {

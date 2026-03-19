@@ -12,8 +12,8 @@ export class SolsticeController {
 
   @Post('lock')
   @Roles('portfolio_manager')
-  lock(@Body() body: { vaultId: string; amount: number }) {
-    return this.solstice.lockUSX(body.vaultId, body.amount);
+  lock(@Body() body: { vaultId: string; amount: number; collateral?: 'usdc' | 'usdt' }) {
+    return this.solstice.lockUSX(body.vaultId, body.amount, body.collateral || 'usdc');
   }
 
   @Post('unlock')
@@ -27,6 +27,48 @@ export class SolsticeController {
   withdraw(@Body() body: { vaultId: string }) {
     return this.solstice.withdrawUSX(body.vaultId);
   }
+
+  // ─── USX Minting ────────────────────────────────────────────
+
+  @Post('request-mint')
+  @Roles('portfolio_manager')
+  requestMint(@Body() body: { amount: number; collateral?: 'usdc' | 'usdt' }) {
+    return this.solstice.requestMintUSX(body.amount, body.collateral || 'usdc');
+  }
+
+  @Post('confirm-mint')
+  @Roles('portfolio_manager')
+  confirmMint(@Body() body: { collateral?: 'usdc' | 'usdt' }) {
+    return this.solstice.confirmMintUSX(body.collateral || 'usdc');
+  }
+
+  @Post('cancel-mint')
+  @Roles('portfolio_manager')
+  cancelMint(@Body() body: { collateral?: 'usdc' | 'usdt' }) {
+    return this.solstice.cancelMintUSX(body.collateral || 'usdc');
+  }
+
+  // ─── USX Redemption ─────────────────────────────────────────
+
+  @Post('request-redeem')
+  @Roles('portfolio_manager')
+  requestRedeem(@Body() body: { amount: number; collateral?: 'usdc' | 'usdt' }) {
+    return this.solstice.requestRedeemUSX(body.amount, body.collateral || 'usdc');
+  }
+
+  @Post('confirm-redeem')
+  @Roles('portfolio_manager')
+  confirmRedeem(@Body() body: { collateral?: 'usdc' | 'usdt' }) {
+    return this.solstice.confirmRedeemUSX(body.collateral || 'usdc');
+  }
+
+  @Post('cancel-redeem')
+  @Roles('portfolio_manager')
+  cancelRedeem(@Body() body: { collateral?: 'usdc' | 'usdt' }) {
+    return this.solstice.cancelRedeemUSX(body.collateral || 'usdc');
+  }
+
+  // ─── Read-Only ──────────────────────────────────────────────
 
   @Get('pool-state')
   getPoolState() {
@@ -43,15 +85,9 @@ export class SolsticeController {
     return this.solstice.getFundFlowHistory(vaultId);
   }
 
-  @Post('mint-usdc')
+  @Post('mint-collateral')
   @Roles('portfolio_manager')
-  mintUSDC(@Body() body: { amount: number }) {
-    return this.solstice.mintDevnetUSDC(body.amount);
-  }
-
-  @Post('deposit-usdc-for-usx')
-  @Roles('portfolio_manager')
-  depositUSDCForUSX(@Body() body: { amount: number }) {
-    return this.solstice.depositUSDCForUSX(body.amount);
+  mintCollateral(@Body() body: { amount: number; collateral?: 'usdc' | 'usdt' }) {
+    return this.solstice.mintDevnetCollateral(body.amount, body.collateral || 'usdc');
   }
 }
