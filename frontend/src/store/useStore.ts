@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export type Role = 'admin' | 'portfolio_manager' | 'compliance_officer' | 'client_representative' | 'emergency_admin';
 export type Portal = 'client' | 'amina';
@@ -49,49 +50,72 @@ interface AppState {
   clearNotification: () => void;
 }
 
-export const useStore = create<AppState>((set) => ({
-  isAuthenticated: false,
-  currentRole: 'admin',
-  portal: null,
-  activeVaultId: null,
-  adminUser: null,
-  clientInfo: null,
-  notification: null,
+export const useStore = create<AppState>()(
+  persist(
+    (set) => ({
+      isAuthenticated: false,
+      currentRole: 'admin',
+      portal: null,
+      activeVaultId: null,
+      adminUser: null,
+      clientInfo: null,
+      notification: null,
 
-  loginAdmin: (user) => set({
-    isAuthenticated: true,
-    portal: 'amina',
-    currentRole: user.role as Role,
-    adminUser: user,
-  }),
-  login: (portal, role) => set({ isAuthenticated: true, portal, currentRole: role }),
-  setClientInfo: (info) => set({ clientInfo: info }),
-  loginClient: (info, vaultId) => set({
-    isAuthenticated: true,
-    portal: 'client',
-    currentRole: 'client_representative',
-    clientInfo: info,
-    activeVaultId: vaultId,
-  }),
-  logout: () => set({
-    isAuthenticated: false, portal: null, currentRole: 'admin',
-    activeVaultId: null, clientInfo: null, adminUser: null,
-  }),
-  setRole: (role) => {
-    const rolePersonas: Record<Role, { id: string; email: string; name: string }> = {
-      admin: { id: 'admin-1', email: 'admin@amina.bank', name: 'Sarah Chen' },
-      portfolio_manager: { id: 'pm-1', email: 'pm@amina.bank', name: 'Marcus Weber' },
-      compliance_officer: { id: 'co-1', email: 'compliance@amina.bank', name: 'Elena Rossi' },
-      emergency_admin: { id: 'ea-1', email: 'emergency@amina.bank', name: 'James Park' },
-      client_representative: { id: 'cr-1', email: 'client@amina.bank', name: 'Client User' },
-    };
-    const persona = rolePersonas[role];
-    set({ currentRole: role, adminUser: { ...persona, role } });
-  },
-  setActiveVaultId: (id) => set({ activeVaultId: id }),
-  notify: (type, message) => {
-    set({ notification: { type, message } });
-    setTimeout(() => set({ notification: null }), 4000);
-  },
-  clearNotification: () => set({ notification: null }),
-}));
+      loginAdmin: (user) => set({
+        isAuthenticated: true,
+        portal: 'amina',
+        currentRole: user.role as Role,
+        adminUser: user,
+      }),
+      login: (portal, role) => set({ isAuthenticated: true, portal, currentRole: role }),
+      setClientInfo: (info) => set({ clientInfo: info }),
+      loginClient: (info, vaultId) => set({
+        isAuthenticated: true,
+        portal: 'client',
+        currentRole: 'client_representative',
+        clientInfo: info,
+        activeVaultId: vaultId,
+      }),
+      logout: () => set({
+        isAuthenticated: false, portal: null, currentRole: 'admin',
+        activeVaultId: null, clientInfo: null, adminUser: null,
+      }),
+      setRole: (role) => {
+        const rolePersonas: Record<Role, { id: string; email: string; name: string }> = {
+          admin: { id: 'admin-1', email: 'admin@amina.bank', name: 'Sarah Chen' },
+          portfolio_manager: { id: 'pm-1', email: 'pm@amina.bank', name: 'Marcus Weber' },
+          compliance_officer: { id: 'co-1', email: 'compliance@amina.bank', name: 'Elena Rossi' },
+          emergency_admin: { id: 'ea-1', email: 'emergency@amina.bank', name: 'James Park' },
+          client_representative: { id: 'cr-1', email: 'client@amina.bank', name: 'Client User' },
+        };
+        const persona = rolePersonas[role];
+        set({ currentRole: role, adminUser: { ...persona, role } });
+      },
+      setActiveVaultId: (id) => set({ activeVaultId: id }),
+      notify: (type, message) => {
+        set({ notification: { type, message } });
+        setTimeout(() => set({ notification: null }), 4000);
+      },
+      clearNotification: () => set({ notification: null }),
+    }),
+    {
+      name: 'amina-session',
+      storage: {
+        getItem: (name) => {
+          const str = sessionStorage.getItem(name);
+          return str ? JSON.parse(str) : null;
+        },
+        setItem: (name, value) => sessionStorage.setItem(name, JSON.stringify(value)),
+        removeItem: (name) => sessionStorage.removeItem(name),
+      },
+      partialize: (state) => ({
+        isAuthenticated: state.isAuthenticated,
+        currentRole: state.currentRole,
+        portal: state.portal,
+        activeVaultId: state.activeVaultId,
+        adminUser: state.adminUser,
+        clientInfo: state.clientInfo,
+      }),
+    },
+  ),
+);
