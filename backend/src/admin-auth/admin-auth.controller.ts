@@ -1,5 +1,5 @@
 import { Controller, Post, Get, Body, Inject } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBody, ApiOkResponse, ApiCreatedResponse, ApiForbiddenResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiOkResponse, ApiCreatedResponse, ApiForbiddenResponse } from '@nestjs/swagger';
 import { AdminAuthService } from './admin-auth.service';
 
 @ApiTags('Admin Auth')
@@ -14,7 +14,6 @@ export class AdminAuthController {
   // Legacy password login (fallback)
   @Post('login')
   @ApiOperation({ summary: 'Admin password login', description: 'Authenticate an admin user using email and password credentials. This is a legacy fallback method for environments where Entra ID is not available.' })
-  @ApiBody({ schema: { type: 'object', properties: { email: { type: 'string' }, password: { type: 'string' } }, required: ['email', 'password'] } })
   @ApiCreatedResponse({ description: 'Login successful, returns session token.' })
   @ApiForbiddenResponse({ description: 'Invalid credentials.' })
   login(@Body() body: { email: string; password: string }) {
@@ -32,7 +31,6 @@ export class AdminAuthController {
   // Entra ID: initiate login (generates auth code)
   @Post('entra/login')
   @ApiOperation({ summary: 'Initiate Entra ID login', description: 'Begin the Microsoft Entra ID authentication flow by generating an authorization code for the specified admin email.' })
-  @ApiBody({ schema: { type: 'object', properties: { email: { type: 'string' } }, required: ['email'] } })
   @ApiCreatedResponse({ description: 'Returns authorization code for Entra ID callback.' })
   @ApiForbiddenResponse({ description: 'Email not found in Entra ID directory.' })
   initiateEntraLogin(@Body() body: { email: string }) {
@@ -42,7 +40,6 @@ export class AdminAuthController {
   // Entra ID: validate callback (exchanges code for session)
   @Post('entra/callback')
   @ApiOperation({ summary: 'Validate Entra ID callback', description: 'Exchange an Entra ID authorization code for an authenticated session. Completes the Entra ID login flow.' })
-  @ApiBody({ schema: { type: 'object', properties: { code: { type: 'string' } }, required: ['code'] } })
   @ApiCreatedResponse({ description: 'Returns authenticated session with admin token.' })
   @ApiForbiddenResponse({ description: 'Invalid or expired authorization code.' })
   validateEntraCallback(@Body() body: { code: string }) {

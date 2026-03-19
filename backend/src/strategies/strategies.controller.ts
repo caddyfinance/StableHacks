@@ -1,5 +1,5 @@
 import { Controller, Get, Put, Param, Body, Inject } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiParam, ApiBody, ApiOkResponse, ApiForbiddenResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiParam, ApiOkResponse, ApiForbiddenResponse } from '@nestjs/swagger';
 import { StrategiesService } from './strategies.service';
 import { Roles } from '../auth/roles.guard';
 
@@ -22,7 +22,6 @@ export class StrategiesController {
   @Roles('emergency_admin')
   @ApiOperation({ summary: 'Toggle strategy disabled state', description: 'Enable or disable a yield strategy. Requires emergency_admin role. Disabled strategies cannot receive new allocations and may trigger unwind procedures.' })
   @ApiParam({ name: 'id', description: 'Strategy identifier' })
-  @ApiBody({ schema: { type: 'object', properties: { disabled: { type: 'boolean' } }, required: ['disabled'] } })
   @ApiOkResponse({ description: 'Strategy disabled state updated.' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions. Emergency admin role required.' })
   toggleDisable(@Param('id') id: string, @Body() body: { disabled: boolean }) {

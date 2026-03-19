@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Put, Param, Body, Inject } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiParam, ApiBody, ApiOkResponse, ApiCreatedResponse, ApiForbiddenResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiParam, ApiOkResponse, ApiCreatedResponse, ApiForbiddenResponse } from '@nestjs/swagger';
 import { CredentialsService } from './credentials.service';
 import { Roles } from '../auth/roles.guard';
 
@@ -37,7 +37,6 @@ export class CredentialsController {
 
   @Put('bind-wallet')
   @ApiOperation({ summary: 'Bind wallet to credential', description: 'Associate a Solana wallet address with an existing verifiable credential. This links on-chain identity to the off-chain KYC/AML credential.' })
-  @ApiBody({ schema: { type: 'object', properties: { credentialId: { type: 'string' }, walletAddress: { type: 'string' } }, required: ['credentialId', 'walletAddress'] } })
   @ApiOkResponse({ description: 'Wallet successfully bound to the credential.' })
   bindWallet(@Body() body: { credentialId: string; walletAddress: string }) {
     return this.service.bindWallet(body.credentialId, body.walletAddress);
@@ -62,7 +61,6 @@ export class CredentialsController {
   @Post()
   @Roles('admin')
   @ApiOperation({ summary: 'Issue a new credential', description: 'Issue a new verifiable credential for a client. Requires admin role. Captures KYC/AML data including jurisdiction, risk tier, and product eligibility for institutional compliance.' })
-  @ApiBody({ schema: { type: 'object', properties: { clientReference: { type: 'string' }, jurisdiction: { type: 'string' }, riskTier: { type: 'string' }, productEligibility: { type: 'string' }, walletAddress: { type: 'string' } }, required: ['clientReference', 'jurisdiction', 'riskTier', 'productEligibility', 'walletAddress'] } })
   @ApiCreatedResponse({ description: 'Credential successfully issued.' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions. Admin role required.' })
   issue(
