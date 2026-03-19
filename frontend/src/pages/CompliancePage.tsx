@@ -45,7 +45,7 @@ function eventRowBorder(result: string): string {
   if (r === 'success') return 'border-l-green-500';
   if (r === 'failure' || r === 'blocked') return 'border-l-red-500';
   if (r === 'pending') return 'border-l-yellow-500';
-  return 'border-l-gray-600';
+  return 'border-l-slate-400';
 }
 
 const ACTION_TYPES = ['ALL', 'CREDENTIAL_ISSUED', 'VAULT_CREATED', 'MANDATE_ATTACHED', 'DEPOSIT_RECORDED', 'ALLOCATION_EXECUTED', 'ALLOCATION_BLOCKED', 'CONSENT_REQUESTED', 'CONSENT_GRANTED', 'REDEMPTION_EXECUTED', 'WITHDRAWAL_BLOCKED', 'VAULT_PAUSED', 'UNWIND_EXECUTED'];
@@ -501,38 +501,38 @@ export default function CompliancePage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-vault-accent" />
+          <h1 className="text-xl font-bold text-ink-900 flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-teal-700" />
             Compliance Control Centre
           </h1>
-          <p className="text-xs text-vault-muted mt-1">Select a vault to run compliance checks and view audit data.</p>
+          <p className="text-xs text-slate-700 mt-1">Select a vault to run compliance checks and view audit data.</p>
         </div>
         <Card title="Select Vault" subtitle="Choose a vault to inspect">
           {loadingVaults ? (
-            <p className="text-xs text-vault-muted animate-pulse">Loading vaults...</p>
+            <p className="text-xs text-slate-700 animate-pulse">Loading vaults...</p>
           ) : vaults.length === 0 ? (
-            <p className="text-xs text-vault-muted">No vaults found. Create a vault from the Vault Factory page first.</p>
+            <p className="text-xs text-slate-700">No vaults found. Create a vault from the Vault Factory page first.</p>
           ) : (
             <div className="space-y-2">
               {vaults.map((v: any) => (
                 <button
                   key={v.vaultId}
                   onClick={() => handleSelectVault(v.vaultId)}
-                  className="w-full flex items-center justify-between bg-vault-bg border border-vault-border rounded-lg px-4 py-3 hover:border-vault-accent transition-colors text-left group"
+                  className="w-full flex items-center justify-between bg-teal-50 border border-slate-200 rounded-[12px] px-4 py-3 hover:border-teal-700 transition-colors text-left group"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-vault-accent/10 flex items-center justify-center">
-                      <ShieldCheck className="w-4 h-4 text-vault-accent" />
+                    <div className="w-8 h-8 rounded-[12px] bg-teal-700/10 flex items-center justify-center">
+                      <ShieldCheck className="w-4 h-4 text-teal-700" />
                     </div>
                     <div>
-                      <p className="text-sm font-mono font-semibold text-white">{v.vaultId}</p>
-                      <p className="text-xs text-vault-muted">{v.clientReference || '—'} — {v.baseAsset || 'USDC'}</p>
+                      <p className="text-sm font-mono font-semibold text-ink-900">{v.vaultId}</p>
+                      <p className="text-xs text-slate-700">{v.clientReference || '—'} — {v.baseAsset || 'USDC'}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <StatusBadge status={v.status || 'active'} />
-                    <span className="text-xs text-vault-muted font-mono">{fmt(v.totalNAV)} USDC</span>
-                    <span className="text-vault-muted group-hover:text-vault-accent transition-colors">→</span>
+                    <span className="text-xs text-slate-700 font-mono">{fmt(v.totalNAV)} USDC</span>
+                    <span className="text-slate-700 group-hover:text-teal-700 transition-colors">→</span>
                   </div>
                 </button>
               ))}
@@ -572,11 +572,11 @@ export default function CompliancePage() {
       {/* HEADER */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-vault-accent" />
+          <h1 className="text-xl font-bold text-ink-900 flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-teal-700" />
             Compliance Control Centre
           </h1>
-          <p className="text-xs text-vault-muted mt-1 max-w-xl">
+          <p className="text-xs text-slate-700 mt-1 max-w-xl">
             Real-time compliance state for this segregated institutional vault, including mandate controls, transfer controls, provider settlement checks, and audit history.
           </p>
         </div>
@@ -585,27 +585,27 @@ export default function CompliancePage() {
           <div className="relative">
             <button
               onClick={() => setVaultSearchOpen(!vaultSearchOpen)}
-              className="flex items-center gap-2 bg-vault-bg border border-vault-border hover:border-vault-accent rounded px-3 py-1.5 transition-colors min-w-[220px]"
+              className="flex items-center gap-2 bg-teal-50 border border-slate-200 hover:border-teal-700 rounded-[12px] px-3 py-1.5 transition-colors min-w-[220px]"
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-vault-accent flex-shrink-0" />
-              <span className="text-xs text-white font-mono flex-1 text-left">
+              <ShieldCheck className="w-3.5 h-3.5 text-teal-700 flex-shrink-0" />
+              <span className="text-xs text-ink-900 font-mono flex-1 text-left">
                 {activeVaultId ? `${activeVaultId} — ${vaults.find((v: any) => v.vaultId === activeVaultId)?.clientReference || ''}` : 'Select vault...'}
               </span>
-              <svg className={`w-3 h-3 text-vault-muted transition-transform ${vaultSearchOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              <svg className={`w-3 h-3 text-slate-700 transition-transform ${vaultSearchOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
             </button>
 
             {vaultSearchOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setVaultSearchOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 z-50 w-[320px] bg-vault-card border border-vault-border rounded-lg shadow-xl overflow-hidden">
+                <div className="absolute right-0 top-full mt-1 z-50 w-[320px] bg-white border border-slate-200 rounded-[18px] shadow-2 overflow-hidden">
                   {/* Search input */}
-                  <div className="p-2 border-b border-vault-border">
+                  <div className="p-2 border-b border-slate-200">
                     <input
                       type="text"
                       value={vaultSearch}
                       onChange={(e) => setVaultSearch(e.target.value)}
                       placeholder="Search by vault ID or client..."
-                      className="w-full bg-vault-bg border border-vault-border rounded px-3 py-1.5 text-xs text-white placeholder-vault-muted focus:outline-none focus:border-vault-accent"
+                      className="w-full bg-white border border-slate-200 rounded-[12px] px-3 py-1.5 text-xs text-ink-900 placeholder-slate-500 focus:outline-none focus:ring-teal-600/20 focus:border-teal-600"
                       autoFocus
                     />
                   </div>
@@ -621,11 +621,11 @@ export default function CompliancePage() {
                         <button
                           key={v.vaultId}
                           onClick={() => { handleSelectVault(v.vaultId); setVaultSearchOpen(false); setVaultSearch(''); }}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-vault-bg transition-colors ${activeVaultId === v.vaultId ? 'bg-vault-accent/10 border-l-2 border-vault-accent' : ''}`}
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-teal-50 transition-colors ${activeVaultId === v.vaultId ? 'bg-teal-700/10 border-l-2 border-teal-700' : ''}`}
                         >
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-mono font-semibold text-white">{v.vaultId}</p>
-                            <p className="text-[10px] text-vault-muted truncate">{v.clientReference || '—'} — {v.baseAsset || 'USDC'} — NAV: {fmt(v.totalNAV)}</p>
+                            <p className="text-xs font-mono font-semibold text-ink-900">{v.vaultId}</p>
+                            <p className="text-[10px] text-slate-700 truncate">{v.clientReference || '—'} — {v.baseAsset || 'USDC'} — NAV: {fmt(v.totalNAV)}</p>
                           </div>
                           <StatusBadge status={v.status || 'active'} />
                         </button>
@@ -635,18 +635,18 @@ export default function CompliancePage() {
                       const q = vaultSearch.toLowerCase();
                       return (v.vaultId?.toLowerCase().includes(q)) || (v.clientReference?.toLowerCase().includes(q));
                     }).length === 0 && (
-                      <p className="text-xs text-vault-muted text-center py-4">No vaults match your search</p>
+                      <p className="text-xs text-slate-700 text-center py-4">No vaults match your search</p>
                     )}
                   </div>
                 </div>
               </>
             )}
           </div>
-          <button onClick={handleRunComplianceCheck} disabled={checkRunning} className="flex items-center gap-1.5 bg-vault-accent hover:bg-blue-600 text-white text-xs font-semibold rounded px-4 py-2 transition-colors disabled:opacity-50">
+          <button onClick={handleRunComplianceCheck} disabled={checkRunning} className="flex items-center gap-1.5 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-[12px] px-4 py-2 transition-colors disabled:opacity-50">
             <ShieldCheck className="w-3.5 h-3.5" />
             {checkRunning ? 'Running...' : 'Run Compliance Check'}
           </button>
-          <button onClick={handleExportReport} disabled={exporting} className="flex items-center gap-1.5 bg-vault-card border border-vault-border hover:border-vault-accent text-vault-muted hover:text-white text-xs font-medium rounded px-3 py-2 transition-colors disabled:opacity-50">
+          <button onClick={handleExportReport} disabled={exporting} className="flex items-center gap-1.5 bg-white border border-slate-200 hover:border-teal-700 text-slate-700 hover:text-ink-900 text-xs font-medium rounded-[12px] px-3 py-2 transition-colors disabled:opacity-50">
             <FileText className="w-3.5 h-3.5" />
             {exporting ? 'Generating...' : 'Export Report'}
           </button>
@@ -654,7 +654,7 @@ export default function CompliancePage() {
       </div>
 
       {loading ? (
-        <p className="text-xs text-vault-muted animate-pulse">Loading compliance data...</p>
+        <p className="text-xs text-slate-700 animate-pulse">Loading compliance data...</p>
       ) : (
         <>
           {/* ROW 1: Vault Compliance Snapshot + External Monitoring */}
@@ -672,25 +672,25 @@ export default function CompliancePage() {
                     ['Approved Providers', `${providerCount} active`],
                     ['Approved Destinations', `${approvedDestCount} wallets`],
                   ].map(([label, value]) => (
-                    <div key={label} className="flex justify-between bg-vault-bg rounded px-2.5 py-1.5">
-                      <span className="text-vault-muted">{label}</span>
-                      <span className="text-white font-medium">{value}</span>
+                    <div key={label} className="flex justify-between bg-teal-50 rounded-[12px] px-2.5 py-1.5">
+                      <span className="text-slate-700">{label}</span>
+                      <span className="text-ink-900 font-medium">{value}</span>
                     </div>
                   ))}
                 </div>
 
                 {/* Perimeter Classification */}
-                <div className="border-t border-vault-border pt-3">
-                  <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-2">Perimeter Classification</p>
+                <div className="border-t border-slate-200 pt-3">
+                  <p className="text-[10px] uppercase tracking-wider text-slate-700 mb-2">Perimeter Classification</p>
                   <div className="grid grid-cols-2 gap-1.5 text-[11px]">
                     {[
-                      ['Treasury → Vault', 'Internal', 'text-blue-400'],
-                      ['Vault → Provider', 'External Controlled', 'text-amber-400'],
-                      ['Provider → Vault', 'Inbound Monitored', 'text-green-400'],
-                      ['Treasury Sweep', 'Internal Settlement', 'text-blue-400'],
+                      ['Treasury → Vault', 'Internal', 'text-teal-700'],
+                      ['Vault → Provider', 'External Controlled', 'text-warning-700'],
+                      ['Provider → Vault', 'Inbound Monitored', 'text-success-700'],
+                      ['Treasury Sweep', 'Internal Settlement', 'text-teal-700'],
                     ].map(([flow, classification, color]) => (
-                      <div key={flow} className="flex justify-between bg-vault-bg rounded px-2.5 py-1.5">
-                        <span className="text-vault-muted">{flow}</span>
+                      <div key={flow} className="flex justify-between bg-teal-50 rounded-[12px] px-2.5 py-1.5">
+                        <span className="text-slate-700">{flow}</span>
                         <span className={`font-medium ${color}`}>{classification}</span>
                       </div>
                     ))}
@@ -710,16 +710,16 @@ export default function CompliancePage() {
                   { label: 'Wallet Exposure Check', desc: 'Address risk and counterparty exposure', action: 'Open Address Intelligence', path: '/reactor' },
                   { label: 'Counterparty Risk Review', desc: 'Provider and destination risk', action: 'View Counterparty Analysis', path: '/kyt/counterparties' },
                 ].map(({ label, desc, action, path }) => (
-                  <div key={label} className="flex items-center justify-between bg-vault-bg rounded px-3 py-2.5">
+                  <div key={label} className="flex items-center justify-between bg-teal-50 rounded-[12px] px-3 py-2.5">
                     <div className="flex-1">
-                      <p className="text-xs text-white font-medium">{label}</p>
-                      <p className="text-[10px] text-vault-muted">{desc}</p>
+                      <p className="text-xs text-ink-900 font-medium">{label}</p>
+                      <p className="text-[10px] text-slate-700">{desc}</p>
                     </div>
                     <a
                       href={`${CHAINALYSIS_BASE}${path}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-[10px] text-vault-accent hover:underline bg-vault-accent/10 px-2 py-1 rounded whitespace-nowrap"
+                      className="flex items-center gap-1 text-[10px] text-teal-700 hover:underline bg-teal-700/10 px-2 py-1 rounded-[12px] whitespace-nowrap"
                     >
                       {action} <ExternalLink className="w-2.5 h-2.5" />
                     </a>
@@ -734,20 +734,20 @@ export default function CompliancePage() {
             {/* Left: Pending Reviews */}
             <Card title="Pending Reviews" subtitle={`${pendingEvents.length} item${pendingEvents.length !== 1 ? 's' : ''} requiring attention`}>
               {pendingEvents.length === 0 ? (
-                <div className="flex items-center gap-2 text-xs text-green-400 py-2">
+                <div className="flex items-center gap-2 text-xs text-success-700 py-2">
                   <ShieldCheck className="w-4 h-4" />
                   No pending reviews. All controls passed.
                 </div>
               ) : (
                 <div className="space-y-2">
                   {pendingEvents.slice(0, 5).map((evt) => (
-                    <div key={evt.eventId} className={`border-l-2 ${eventRowBorder(evt.result)} bg-vault-bg rounded-r px-3 py-2`}>
+                    <div key={evt.eventId} className={`border-l-2 ${eventRowBorder(evt.result)} bg-teal-50 rounded-r-[12px] px-3 py-2`}>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-white font-medium">{evt.actionType?.replace(/_/g, ' ')}</span>
+                        <span className="text-xs text-ink-900 font-medium">{evt.actionType?.replace(/_/g, ' ')}</span>
                         <StatusBadge status={evt.result === 'failure' ? 'blocked' : evt.result} />
                       </div>
-                      <p className="text-[10px] text-vault-muted mt-0.5">{evt.reason || '—'}</p>
-                      <p className="text-[10px] text-vault-muted">{fmtTime(evt.timestamp)}</p>
+                      <p className="text-[10px] text-slate-700 mt-0.5">{evt.reason || '—'}</p>
+                      <p className="text-[10px] text-slate-700">{fmtTime(evt.timestamp)}</p>
                     </div>
                   ))}
                 </div>
@@ -769,13 +769,13 @@ export default function CompliancePage() {
                 ].map(({ label, active }) => (
                   <div
                     key={label}
-                    className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded border ${
+                    className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded-[12px] border ${
                       active
-                        ? 'bg-green-900/20 border-green-800/40 text-green-400'
-                        : 'bg-vault-bg border-vault-border text-vault-muted'
+                        ? 'bg-success-100 border-success-700/20 text-success-700'
+                        : 'bg-teal-50 border-slate-200 text-slate-700'
                     }`}
                   >
-                    <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-green-400' : 'bg-gray-600'}`} />
+                    <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-success-700' : 'bg-slate-400'}`} />
                     {label}
                   </div>
                 ))}
@@ -787,11 +787,11 @@ export default function CompliancePage() {
           <Card title="Compliance Event Timeline" subtitle={`${filteredEvents.length} events recorded`}>
             {/* Filter */}
             <div className="flex items-center gap-3 mb-4">
-              <label className="text-[10px] uppercase tracking-wider text-vault-muted">Filter</label>
+              <label className="text-[10px] uppercase tracking-wider text-slate-700">Filter</label>
               <select
                 value={filterAction}
                 onChange={(e) => setFilterAction(e.target.value)}
-                className="bg-vault-bg border border-vault-border rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500"
+                className="bg-white border border-slate-200 rounded-[12px] px-2 py-1 text-xs text-ink-900 focus:outline-none focus:ring-teal-600/20 focus:border-teal-600"
               >
                 {ACTION_TYPES.map((t) => (
                   <option key={t} value={t}>{t === 'ALL' ? 'All Events' : t.replace(/_/g, ' ')}</option>
@@ -802,7 +802,7 @@ export default function CompliancePage() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-vault-border text-vault-muted text-[10px] uppercase tracking-wider">
+                  <tr className="border-b border-slate-200 text-slate-500 text-[10px] uppercase tracking-wider">
                     <th className="text-left py-2 pr-2 font-semibold">Time</th>
                     <th className="text-left py-2 pr-2 font-semibold">Event</th>
                     <th className="text-left py-2 pr-2 font-semibold">Flow</th>
@@ -816,62 +816,62 @@ export default function CompliancePage() {
                 </thead>
                 <tbody>
                   {filteredEvents.length === 0 ? (
-                    <tr><td colSpan={9} className="text-center py-6 text-vault-muted">No events found.</td></tr>
+                    <tr><td colSpan={9} className="text-center py-6 text-slate-700">No events found.</td></tr>
                   ) : (
                     filteredEvents.map((evt) => {
                       const flow = classifyFlow(evt.actionType);
                       const isExternal = flow.type !== 'internal';
                       return (
-                        <tr key={evt.eventId} className={`border-b border-vault-border/30 border-l-2 ${eventRowBorder(evt.result)} hover:bg-vault-bg/50 transition-colors`}>
-                          <td className="py-2 pr-2 text-vault-muted whitespace-nowrap">{fmtTime(evt.timestamp)}</td>
+                        <tr key={evt.eventId} className={`border-b border-slate-200/30 border-l-2 ${eventRowBorder(evt.result)} hover:bg-teal-50/50 transition-colors`}>
+                          <td className="py-2 pr-2 text-slate-700 whitespace-nowrap">{fmtTime(evt.timestamp)}</td>
                           <td className="py-2 pr-2">
-                            <span className="bg-vault-bg text-white rounded px-1.5 py-0.5 text-[10px] font-medium">
+                            <span className="bg-teal-50 text-ink-900 rounded-[12px] px-1.5 py-0.5 text-[10px] font-medium">
                               {evt.actionType?.replace(/_/g, ' ')}
                             </span>
                           </td>
                           <td className="py-2 pr-2">
-                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                              flow.type === 'internal' ? 'bg-blue-900/30 text-blue-400' :
-                              flow.type === 'external' ? 'bg-amber-900/30 text-amber-400' :
-                              'bg-green-900/30 text-green-400'
+                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-[12px] ${
+                              flow.type === 'internal' ? 'bg-teal-100 text-teal-700' :
+                              flow.type === 'external' ? 'bg-warning-100 text-warning-700' :
+                              'bg-success-100 text-success-700'
                             }`}>
                               {flow.label}
                             </span>
                           </td>
-                          <td className="py-2 pr-2 text-vault-muted capitalize">{evt.role?.replace(/_/g, ' ') || '—'}</td>
+                          <td className="py-2 pr-2 text-slate-700 capitalize">{evt.role?.replace(/_/g, ' ') || '—'}</td>
                           <td className="py-2 pr-2"><StatusBadge status={evt.result} /></td>
                           <td className="py-2 pr-2">
                             <span className={`text-[10px] font-medium ${
-                              controlResult(evt.result) === 'Passed' ? 'text-green-400' :
-                              controlResult(evt.result) === 'Blocked' ? 'text-red-400' : 'text-yellow-400'
+                              controlResult(evt.result) === 'Passed' ? 'text-success-700' :
+                              controlResult(evt.result) === 'Blocked' ? 'text-error-700' : 'text-warning-700'
                             }`}>
                               {controlResult(evt.result)}
                             </span>
                           </td>
-                          <td className="py-2 pr-2 text-vault-muted max-w-[180px] truncate" title={evt.reason}>{evt.reason || '—'}</td>
+                          <td className="py-2 pr-2 text-slate-700 max-w-[180px] truncate" title={evt.reason}>{evt.reason || '—'}</td>
                           <td className="py-2 pr-2">
                             {evt.txSignature ? (
                               <a href={`https://solscan.io/tx/${evt.txSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                                className="flex items-center gap-0.5 text-[10px] text-vault-accent hover:underline">
+                                className="flex items-center gap-0.5 text-[10px] text-teal-700 hover:underline">
                                 Tx <ExternalLink className="w-2.5 h-2.5" />
                               </a>
                             ) : evt.onChainAddress ? (
                               <a href={`https://solscan.io/account/${evt.onChainAddress}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                                className="flex items-center gap-0.5 text-[10px] text-purple-400 hover:underline">
+                                className="flex items-center gap-0.5 text-[10px] text-review-700 hover:underline">
                                 PDA <ExternalLink className="w-2.5 h-2.5" />
                               </a>
                             ) : (
-                              <span className="text-[10px] text-vault-muted">—</span>
+                              <span className="text-[10px] text-slate-700">—</span>
                             )}
                           </td>
                           <td className="py-2">
                             {isExternal ? (
                               <a href={`${CHAINALYSIS_BASE}/kyt`} target="_blank" rel="noopener noreferrer"
-                                className="flex items-center gap-0.5 text-[10px] text-vault-accent hover:underline">
+                                className="flex items-center gap-0.5 text-[10px] text-teal-700 hover:underline">
                                 Review <ExternalLink className="w-2.5 h-2.5" />
                               </a>
                             ) : (
-                              <span className="text-[10px] text-vault-muted">—</span>
+                              <span className="text-[10px] text-slate-700">—</span>
                             )}
                           </td>
                         </tr>
@@ -888,13 +888,13 @@ export default function CompliancePage() {
       {/* Compliance Check Modal */}
       {showCheckModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => !checkRunning && setShowCheckModal(false)}>
-          <div className="bg-[#111827] border border-vault-border rounded-xl max-w-lg w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="p-5 border-b border-vault-border">
+          <div className="bg-white border border-slate-200 rounded-[18px] max-w-lg w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-slate-200">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-vault-accent" />
-                <h2 className="text-lg font-bold text-white">Compliance Check</h2>
+                <ShieldCheck className="w-5 h-5 text-teal-700" />
+                <h2 className="text-lg font-bold text-ink-900">Compliance Check</h2>
               </div>
-              <p className="text-xs text-vault-muted mt-1">
+              <p className="text-xs text-slate-700 mt-1">
                 {checkRunning ? 'Running automated compliance verification...' : `Completed at ${fmtTime(checkResult?.timestamp || '')}`}
               </p>
             </div>
@@ -907,31 +907,31 @@ export default function CompliancePage() {
                 const result = checkResult?.checks[i];
 
                 return (
-                  <div key={check.name} className={`flex items-center gap-3 px-3 py-2 rounded transition-all ${
-                    isDone ? 'bg-vault-bg' : isActive ? 'bg-vault-accent/5 border border-vault-accent/20' : 'opacity-40'
+                  <div key={check.name} className={`flex items-center gap-3 px-3 py-2 rounded-[12px] transition-all ${
+                    isDone ? 'bg-teal-50' : isActive ? 'bg-teal-700/5 border border-teal-700/20' : 'opacity-40'
                   }`}>
                     <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0 ${
                       result?.status === 'Failed' ? 'bg-red-500 text-white' :
                       result?.status === 'Review Required' ? 'bg-yellow-500 text-black' :
-                      result?.status === 'Not Required' ? 'bg-gray-600 text-white' :
+                      result?.status === 'Not Required' ? 'bg-slate-400 text-white' :
                       isDone ? 'bg-green-500 text-white' :
-                      isActive ? 'bg-vault-accent text-white animate-pulse' :
-                      'bg-vault-border text-vault-muted'
+                      isActive ? 'bg-teal-700 text-white animate-pulse' :
+                      'bg-slate-200 text-slate-700'
                     }`}>
                       {isDone && !checkRunning ? (result?.status === 'Failed' ? '!' : result?.status === 'Review Required' ? '?' : '✓') : isActive ? '...' : i + 1}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-medium ${isDone ? 'text-white' : 'text-vault-muted'}`}>{check.name}</p>
+                      <p className={`text-xs font-medium ${isDone ? 'text-ink-900' : 'text-slate-700'}`}>{check.name}</p>
                       {isDone && !checkRunning && result && (
-                        <p className="text-[10px] text-vault-muted truncate">{result.detail}</p>
+                        <p className="text-[10px] text-slate-700 truncate">{result.detail}</p>
                       )}
                     </div>
                     {isDone && !checkRunning && result && (
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap ${
-                        result.status === 'Passed' ? 'bg-green-900/30 text-green-400' :
-                        result.status === 'Failed' ? 'bg-red-900/30 text-red-400' :
-                        result.status === 'Review Required' ? 'bg-yellow-900/30 text-yellow-400' :
-                        'bg-gray-800 text-gray-400'
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-[12px] whitespace-nowrap ${
+                        result.status === 'Passed' ? 'bg-success-100 text-success-700' :
+                        result.status === 'Failed' ? 'bg-error-100 text-error-700' :
+                        result.status === 'Review Required' ? 'bg-warning-100 text-warning-700' :
+                        'bg-slate-100 text-slate-500'
                       }`}>
                         {result.status}
                       </span>
@@ -943,26 +943,26 @@ export default function CompliancePage() {
 
             {/* Overall result */}
             {checkResult && !checkRunning && (
-              <div className="p-5 border-t border-vault-border">
-                <div className={`flex items-center justify-between p-3 rounded-lg ${
-                  checkResult.overallStatus === 'Compliant' ? 'bg-green-900/20 border border-green-800/40' :
-                  checkResult.overallStatus === 'Review Required' ? 'bg-yellow-900/20 border border-yellow-800/40' :
-                  'bg-red-900/20 border border-red-800/40'
+              <div className="p-5 border-t border-slate-200">
+                <div className={`flex items-center justify-between p-3 rounded-[18px] ${
+                  checkResult.overallStatus === 'Compliant' ? 'bg-success-100 border border-success-700/20' :
+                  checkResult.overallStatus === 'Review Required' ? 'bg-warning-100 border border-warning-700/20' :
+                  'bg-error-100 border border-error-700/20'
                 }`}>
                   <div className="flex items-center gap-2">
                     {checkResult.overallStatus === 'Compliant' ? (
-                      <ShieldCheck className="w-5 h-5 text-green-400" />
+                      <ShieldCheck className="w-5 h-5 text-success-700" />
                     ) : (
-                      <AlertTriangle className="w-5 h-5 text-yellow-400" />
+                      <AlertTriangle className="w-5 h-5 text-warning-700" />
                     )}
                     <div>
-                      <p className="text-sm font-bold text-white">Overall: {checkResult.overallStatus}</p>
-                      <p className="text-[10px] text-vault-muted">
+                      <p className="text-sm font-bold text-ink-900">Overall: {checkResult.overallStatus}</p>
+                      <p className="text-[10px] text-slate-700">
                         {checkResult.checks.filter(c => c.status === 'Passed').length}/{checkResult.checks.length} checks passed
                       </p>
                     </div>
                   </div>
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded ${
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-[12px] ${
                     checkResult.overallStatus === 'Compliant' ? 'bg-green-500 text-white' :
                     'bg-yellow-500 text-black'
                   }`}>
@@ -970,7 +970,7 @@ export default function CompliancePage() {
                   </span>
                 </div>
 
-                <button onClick={() => setShowCheckModal(false)} className="w-full mt-3 bg-vault-card border border-vault-border hover:border-vault-accent text-white text-xs font-medium rounded py-2.5 transition-colors">
+                <button onClick={() => setShowCheckModal(false)} className="w-full mt-3 bg-white border border-slate-200 hover:border-teal-700 text-ink-900 text-xs font-medium rounded-[12px] py-2.5 transition-colors">
                   Close
                 </button>
               </div>

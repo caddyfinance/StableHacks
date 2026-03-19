@@ -79,49 +79,49 @@ export default function MyVaultsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            <Vault className="w-5 h-5 text-vault-accent" />
+          <h1 className="text-xl font-bold font-display text-ink-900 flex items-center gap-2">
+            <Vault className="w-5 h-5 text-teal-700" />
             My Vaults
           </h1>
-          <p className="text-xs text-vault-muted mt-1">Your segregated vaults deployed by Amina Bank</p>
+          <p className="text-xs text-slate-500 mt-1">Your segregated vaults deployed by Amina Bank</p>
         </div>
-        <button onClick={loadVaults} className="flex items-center gap-1.5 text-xs text-vault-muted hover:text-vault-accent transition-colors">
+        <button onClick={loadVaults} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-teal-700 transition-colors">
           <RefreshCw className="w-3.5 h-3.5" /> Refresh
         </button>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-vault-card border border-vault-border rounded-lg p-4">
-          <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-1">In Vaults</p>
-          <p className="text-xl font-bold font-mono text-vault-accent">{fmt(totalNAV)}</p>
-          <p className="text-[10px] text-vault-muted mt-0.5">USDC across all vaults</p>
+        <div className="bg-white border border-slate-200 rounded-[18px] p-6 shadow-1">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">In Vaults</p>
+          <p className="text-xl font-bold font-mono font-display text-teal-700">{fmt(totalNAV)}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">USDC across all vaults</p>
         </div>
-        <div className="bg-vault-card border border-vault-border rounded-lg p-4">
-          <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-1">Deployed</p>
-          <p className="text-xl font-bold font-mono text-white">{fmt(totalNAV)}</p>
-          <p className="text-[10px] text-vault-muted mt-0.5">{vaults.length} vault{vaults.length !== 1 ? 's' : ''}, {activeCount} active</p>
+        <div className="bg-white border border-slate-200 rounded-[18px] p-6 shadow-1">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Deployed</p>
+          <p className="text-xl font-bold font-mono font-display text-ink-900">{fmt(totalNAV)}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">{vaults.length} vault{vaults.length !== 1 ? 's' : ''}, {activeCount} active</p>
         </div>
-        <div className="bg-vault-card border border-vault-border rounded-lg p-4">
-          <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-1">Yield Earned</p>
-          <p className="text-xl font-bold font-mono text-green-400">+{fmt(totalYield)}</p>
-          <p className="text-[10px] text-vault-muted mt-0.5">Accrued returns</p>
+        <div className="bg-white border border-slate-200 rounded-[18px] p-6 shadow-1">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Yield Earned</p>
+          <p className="text-xl font-bold font-mono font-display text-success-700">+{fmt(totalYield)}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Accrued returns</p>
         </div>
-        <div className="bg-vault-card border border-vault-border rounded-lg p-4">
-          <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-1">Active Vaults</p>
-          <p className="text-xl font-bold font-mono text-white">{activeCount} <span className="text-vault-muted text-sm font-normal">/ {vaults.length}</span></p>
-          <p className="text-[10px] text-vault-muted mt-0.5">Segregated vaults</p>
+        <div className="bg-white border border-slate-200 rounded-[18px] p-6 shadow-1">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Active Vaults</p>
+          <p className="text-xl font-bold font-mono font-display text-ink-900">{activeCount} <span className="text-slate-500 text-sm font-normal">/ {vaults.length}</span></p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Segregated vaults</p>
         </div>
       </div>
 
       {/* Vault List Header + Sort */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-white">Your Segregated Vaults</h3>
-          <p className="text-[10px] text-vault-muted">{loading ? 'Loading...' : `${vaults.length} vault(s)`}</p>
+          <h3 className="text-sm font-semibold text-ink-900">Your Segregated Vaults</h3>
+          <p className="text-[10px] text-slate-500">{loading ? 'Loading...' : `${vaults.length} vault(s)`}</p>
         </div>
         <select value={sortBy} onChange={e => setSortBy(e.target.value as any)}
-          className="px-3 py-1.5 rounded bg-vault-bg border border-vault-border text-white text-xs focus:outline-none focus:border-vault-accent transition-colors">
+          className="px-3 py-1.5 rounded-[12px] bg-white border border-slate-200 text-ink-900 text-xs focus:outline-none focus:ring-teal-600/20 focus:border-teal-600 transition-colors">
           <option value="nav-desc">Highest Capital</option>
           <option value="nav-asc">Lowest Capital</option>
           <option value="yield-desc">Best Yield</option>
@@ -133,9 +133,9 @@ export default function MyVaultsPage() {
 
       {/* Vault Cards */}
       {loading ? (
-        <p className="text-sm text-vault-muted animate-pulse py-4">Loading vaults...</p>
+        <p className="text-sm text-slate-500 animate-pulse py-4">Loading vaults...</p>
       ) : vaults.length === 0 ? (
-        <p className="text-sm text-vault-muted text-center py-8">No vaults found for your wallet.</p>
+        <p className="text-sm text-slate-500 text-center py-8">No vaults found for your wallet.</p>
       ) : (
         <div className="space-y-3">
           {sortedVaults.map(v => {
@@ -149,36 +149,36 @@ export default function MyVaultsPage() {
                   setActiveVaultId(v.vaultId);
                   navigate(`/client/vaults/${v.vaultId}`);
                 }}
-                className="bg-vault-bg border border-vault-border rounded-lg p-4 hover:border-vault-accent/40 transition-colors cursor-pointer group"
+                className="bg-white border border-slate-200 rounded-[18px] p-6 hover:border-teal-300/40 transition-colors cursor-pointer group shadow-1"
               >
                 <div className="flex items-center justify-between">
                   {/* Left: vault info */}
                   <div className="flex items-center gap-4 flex-1 min-w-0">
                     <div className="min-w-[70px]">
-                      <span className="text-sm font-mono font-bold text-white">{v.vaultId}</span>
+                      <span className="text-sm font-mono font-bold text-ink-900">{v.vaultId}</span>
                       <div className="flex items-center gap-1.5 mt-1">
                         <StatusBadge status={v.status} />
-                        {v.paused && <span className="text-[9px] px-1 py-0.5 bg-red-900/30 text-red-400 rounded font-semibold">PAUSED</span>}
+                        {v.paused && <span className="text-[9px] px-1 py-0.5 bg-error-100 text-error-700 rounded font-semibold">PAUSED</span>}
                       </div>
                     </div>
 
                     <div className="flex items-center gap-6 text-xs">
                       <div>
-                        <p className="text-[9px] uppercase tracking-wider text-vault-muted">NAV</p>
-                        <p className="font-mono font-semibold text-white">{fmt(v.totalNAV || 0)}</p>
+                        <p className="text-[9px] uppercase tracking-wider text-slate-500">NAV</p>
+                        <p className="font-mono font-semibold text-ink-900">{fmt(v.totalNAV || 0)}</p>
                       </div>
                       <div>
-                        <p className="text-[9px] uppercase tracking-wider text-vault-muted">Deployed</p>
-                        <p className="font-mono text-vault-muted">{fmt(deployed > 0 ? deployed : 0)}</p>
+                        <p className="text-[9px] uppercase tracking-wider text-slate-500">Deployed</p>
+                        <p className="font-mono text-slate-500">{fmt(deployed > 0 ? deployed : 0)}</p>
                       </div>
                       <div>
-                        <p className="text-[9px] uppercase tracking-wider text-vault-muted">Yield</p>
-                        <p className="font-mono text-green-400">{yieldTotal > 0 ? `+${fmt(yieldTotal)}` : '—'}</p>
+                        <p className="text-[9px] uppercase tracking-wider text-slate-500">Yield</p>
+                        <p className="font-mono text-success-700">{yieldTotal > 0 ? `+${fmt(yieldTotal)}` : '—'}</p>
                       </div>
                       {activeAllocs.length > 0 && (
                         <div>
-                          <p className="text-[9px] uppercase tracking-wider text-vault-muted">Strategies</p>
-                          <p className="text-vault-muted">{activeAllocs.map(a => a.strategy?.name).join(', ')}</p>
+                          <p className="text-[9px] uppercase tracking-wider text-slate-500">Strategies</p>
+                          <p className="text-slate-500">{activeAllocs.map(a => a.strategy?.name).join(', ')}</p>
                         </div>
                       )}
                     </div>
@@ -189,11 +189,11 @@ export default function MyVaultsPage() {
                     {v.onChainAddress && (
                       <a href={`https://solscan.io/account/${v.onChainAddress}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
                         onClick={e => e.stopPropagation()}
-                        className="text-vault-muted hover:text-vault-accent transition-colors" title="View on Solana Explorer">
+                        className="text-slate-500 hover:text-teal-700 transition-colors" title="View on Solana Explorer">
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                     )}
-                    <span className="text-xs text-vault-accent font-medium group-hover:text-white transition-colors flex items-center gap-1">
+                    <span className="text-xs text-teal-700 font-medium group-hover:text-ink-900 transition-colors flex items-center gap-1">
                       View Vault <ChevronRight className="w-3.5 h-3.5" />
                     </span>
                   </div>

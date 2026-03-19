@@ -30,44 +30,44 @@ export default function ClientLayout() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-950 text-gray-100">
+    <div className="flex h-screen bg-amina-client-bg text-ink-900">
       {/* Sidebar */}
-      <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col">
+      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col shadow-1">
         {/* Header */}
-        <div className="p-5 border-b border-gray-800">
-          <h1 className="text-xl font-bold tracking-wide text-white">AMINA</h1>
-          <p className="text-xs text-gray-400 mt-0.5">Client Portal</p>
+        <div className="p-5 border-b border-slate-200">
+          <h1 className="text-xl font-display font-bold tracking-wide text-teal-800">AMINA</h1>
+          <p className="text-xs text-slate-500 mt-0.5">Client Portal</p>
           <div className="mt-3">
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-medium">
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-gold-100 text-gold-500 border border-gold-500/30 font-medium">
               Institutional Client
             </span>
           </div>
         </div>
 
         {/* Client Info Card */}
-        <div className="px-4 py-3 border-b border-gray-800">
-          <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-2">Client Profile</p>
+        <div className="px-4 py-3 border-b border-slate-200">
+          <p className="text-[10px] uppercase tracking-wider text-slate-400 mb-2">Client Profile</p>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-gray-500">Client ID</span>
-              <span className="text-xs text-gray-200 font-mono font-medium">{clientInfo?.clientReference || 'INST-2048'}</span>
+              <span className="text-[11px] text-slate-500">Client ID</span>
+              <span className="text-xs text-ink-900 font-mono font-medium">{clientInfo?.clientReference || 'INST-2048'}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-gray-500">Credential</span>
-              <span className="text-xs text-gray-200 font-mono font-medium">{clientInfo?.credentialId || '—'}</span>
+              <span className="text-[11px] text-slate-500">Credential</span>
+              <span className="text-xs text-ink-900 font-mono font-medium">{clientInfo?.credentialId || '—'}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-gray-500">Jurisdiction</span>
-              <span className="text-xs text-gray-200 font-medium">{clientInfo?.jurisdiction || 'Switzerland'}</span>
+              <span className="text-[11px] text-slate-500">Jurisdiction</span>
+              <span className="text-xs text-ink-900 font-medium">{clientInfo?.jurisdiction || 'Switzerland'}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-gray-500">Risk Profile</span>
-              <span className="text-xs text-amber-400 font-medium">{clientInfo?.riskTier || 'Conservative'}</span>
+              <span className="text-[11px] text-slate-500">Risk Profile</span>
+              <span className="text-xs text-warning-700 font-medium">{clientInfo?.riskTier || 'Conservative'}</span>
             </div>
             {clientInfo?.walletAddress && (
               <div className="flex items-center justify-between">
-                <span className="text-[11px] text-gray-500">Wallet</span>
-                <span className="text-xs text-gray-200 font-mono font-medium">
+                <span className="text-[11px] text-slate-500">Wallet</span>
+                <span className="text-xs text-ink-900 font-mono font-medium">
                   {clientInfo.walletAddress.length > 16
                     ? `${clientInfo.walletAddress.slice(0, 6)}...${clientInfo.walletAddress.slice(-6)}`
                     : clientInfo.walletAddress}
@@ -85,10 +85,10 @@ export default function ClientLayout() {
               to={item.path}
               end={item.end}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                `flex items-center gap-3 px-3 py-2.5 rounded-[12px] text-sm font-medium transition-all ease-amina duration-150 ${
                   isActive
-                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/20'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/60 border border-transparent'
+                    ? 'bg-teal-100 text-teal-800'
+                    : 'text-slate-600 hover:text-ink-900 hover:bg-slate-100'
                 }`
               }
             >
@@ -99,10 +99,10 @@ export default function ClientLayout() {
         </nav>
 
         {/* Logout */}
-        <div className="px-4 py-3 border-t border-gray-800">
+        <div className="px-4 py-3 border-t border-slate-200">
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            className="flex items-center gap-2 w-full px-3 py-2 rounded-[12px] text-sm text-slate-500 hover:text-error-700 hover:bg-error-100 transition-all ease-amina duration-150"
           >
             <LogOut className="w-4 h-4" />
             Logout
@@ -110,31 +110,31 @@ export default function ClientLayout() {
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t border-gray-800">
-          <p className="text-[10px] text-gray-600 text-center">Solana Devnet | Client View</p>
+        <div className="px-4 py-3 border-t border-slate-200">
+          <p className="text-[10px] text-slate-400 text-center">Solana Devnet | Client View</p>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto bg-gray-950">
+      <main className="flex-1 overflow-y-auto bg-amina-client-bg">
         <Outlet />
       </main>
 
       {/* Notification Toast */}
       {notification && (
         <div
-          className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-lg shadow-lg border text-sm font-medium transition-all ${
+          className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-[12px] shadow-2 border text-sm font-medium transition-all ease-amina duration-240 ${
             notification.type === 'success'
-              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+              ? 'bg-success-100 border-success-700/20 text-success-700'
               : notification.type === 'error'
-              ? 'bg-red-500/10 border-red-500/30 text-red-400'
-              : 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+              ? 'bg-error-100 border-error-700/20 text-error-700'
+              : 'bg-info-100 border-info-700/20 text-info-700'
           }`}
         >
           <span>{notification.message}</span>
           <button
             onClick={clearNotification}
-            className="text-gray-500 hover:text-gray-300 ml-2"
+            className="text-slate-400 hover:text-ink-900 ml-2"
           >
             &times;
           </button>

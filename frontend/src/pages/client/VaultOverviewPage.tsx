@@ -83,45 +83,45 @@ export default function VaultOverviewPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">Portfolio Overview</h1>
-          <p className="text-xs text-vault-muted mt-1">Your stablecoin balances and vault performance</p>
+          <h1 className="text-xl font-bold font-display text-ink-900">Portfolio Overview</h1>
+          <p className="text-xs text-slate-500 mt-1">Your stablecoin balances and vault performance</p>
         </div>
-        <button onClick={loadData} className="flex items-center gap-1.5 text-xs text-vault-muted hover:text-vault-accent transition-colors">
+        <button onClick={loadData} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-teal-700 transition-colors">
           <RefreshCw className="w-3.5 h-3.5" /> Refresh
         </button>
       </div>
 
       {/* Top Cards — 4 key metrics + wallet balance merged */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-vault-card border border-vault-border rounded-lg p-4">
-          <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-1">Total Balance</p>
-          <p className="text-xl font-bold font-mono text-white">{fmt((usdcBalance || 0) + totalNAV)}</p>
-          <p className="text-[10px] text-vault-muted mt-0.5">
+        <div className="bg-white border border-slate-200 rounded-[18px] p-6 shadow-1">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Total Balance</p>
+          <p className="text-xl font-bold font-mono font-display text-ink-900">{fmt((usdcBalance || 0) + totalNAV)}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">
             {usdcBalance !== null ? fmt(usdcBalance) : '0.00'} wallet + {fmt(totalNAV)} in vaults
           </p>
         </div>
-        <div className="bg-vault-card border border-vault-border rounded-lg p-4">
-          <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-1">Wallet Balance</p>
-          <p className="text-xl font-bold font-mono text-yellow-400">{usdcBalance !== null ? fmt(usdcBalance) : '—'}</p>
-          <p className="text-[10px] text-vault-muted mt-0.5">
+        <div className="bg-white border border-slate-200 rounded-[18px] p-6 shadow-1">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Wallet Balance</p>
+          <p className="text-xl font-bold font-mono font-display text-warning-700">{usdcBalance !== null ? fmt(usdcBalance) : '—'}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">
             USDC in wallet
             {walletAddress && (
               <a href={`https://solscan.io/account/${walletAddress}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                className="ml-1.5 text-vault-accent hover:underline inline-flex items-center gap-0.5">
+                className="ml-1.5 text-teal-700 hover:underline inline-flex items-center gap-0.5">
                 Explorer <ExternalLink className="w-2.5 h-2.5" />
               </a>
             )}
           </p>
         </div>
-        <div className="bg-vault-card border border-vault-border rounded-lg p-4">
-          <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-1">In Vaults</p>
-          <p className="text-xl font-bold font-mono text-vault-accent">{fmt(totalNAV)}</p>
-          <p className="text-[10px] text-vault-muted mt-0.5">USDC across all vaults</p>
+        <div className="bg-white border border-slate-200 rounded-[18px] p-6 shadow-1">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">In Vaults</p>
+          <p className="text-xl font-bold font-mono font-display text-teal-700">{fmt(totalNAV)}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">USDC across all vaults</p>
         </div>
-        <div className="bg-vault-card border border-vault-border rounded-lg p-4">
-          <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-1">Yield Earned</p>
-          <p className="text-xl font-bold font-mono text-green-400">+{fmt(totalYield)}</p>
-          <p className="text-[10px] text-vault-muted mt-0.5">Accrued returns</p>
+        <div className="bg-white border border-slate-200 rounded-[18px] p-6 shadow-1">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Yield Earned</p>
+          <p className="text-xl font-bold font-mono font-display text-success-700">+{fmt(totalYield)}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Accrued returns</p>
         </div>
       </div>
 
@@ -132,23 +132,23 @@ export default function VaultOverviewPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-[10px] uppercase tracking-wider text-vault-muted">
-                  <th className="text-left py-2.5 pr-4 font-semibold border-b border-vault-border">Vault</th>
-                  <th className="text-right py-2.5 pr-4 font-semibold border-b border-vault-border">Deployed</th>
-                  <th className="text-right py-2.5 pr-4 font-semibold border-b border-vault-border">Yield</th>
-                  <th className="text-right py-2.5 font-semibold border-b border-vault-border">On-Chain</th>
+                <tr className="text-[10px] uppercase tracking-wider text-slate-500">
+                  <th className="text-left py-2.5 pr-4 font-semibold border-b border-slate-200">Vault</th>
+                  <th className="text-right py-2.5 pr-4 font-semibold border-b border-slate-200">Deployed</th>
+                  <th className="text-right py-2.5 pr-4 font-semibold border-b border-slate-200">Yield</th>
+                  <th className="text-right py-2.5 font-semibold border-b border-slate-200">On-Chain</th>
                 </tr>
               </thead>
               <tbody>
                 {vaultRows.map((v, i) => (
-                  <tr key={v.vaultId} className={`hover:bg-white/[0.015] transition-colors ${i < vaultRows.length - 1 ? 'border-b border-vault-border/30' : ''}`}>
-                    <td className="py-3 pr-4 font-mono font-semibold text-white">{v.vaultId}</td>
-                    <td className="py-3 pr-4 text-right font-mono text-white">{fmt(v.deployed)}</td>
-                    <td className="py-3 pr-4 text-right font-mono text-green-400">{v.yieldAmt > 0 ? `+${fmt(v.yieldAmt)}` : '—'}</td>
+                  <tr key={v.vaultId} className={`hover:bg-teal-50 transition-colors ${i < vaultRows.length - 1 ? 'border-b border-slate-200/60' : ''}`}>
+                    <td className="py-3 pr-4 font-mono font-semibold text-ink-900">{v.vaultId}</td>
+                    <td className="py-3 pr-4 text-right font-mono text-ink-900">{fmt(v.deployed)}</td>
+                    <td className="py-3 pr-4 text-right font-mono text-success-700">{v.yieldAmt > 0 ? `+${fmt(v.yieldAmt)}` : '—'}</td>
                     <td className="py-3 text-right">
                       {v.onChainAddress ? (
                         <a href={`https://solscan.io/account/${v.onChainAddress}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[10px] text-vault-accent hover:underline">
+                          className="inline-flex items-center gap-1 text-[10px] text-teal-700 hover:underline">
                           View <ExternalLink className="w-2.5 h-2.5" />
                         </a>
                       ) : null}
@@ -161,9 +161,9 @@ export default function VaultOverviewPage() {
         </Card>
       )}
 
-      {loading && <p className="text-sm text-vault-muted animate-pulse text-center py-8">Loading portfolio...</p>}
+      {loading && <p className="text-sm text-slate-500 animate-pulse text-center py-8">Loading portfolio...</p>}
       {!loading && vaults.length === 0 && (
-        <p className="text-sm text-vault-muted text-center py-8">No vaults found. Vaults are created by Amina Bank for your account.</p>
+        <p className="text-sm text-slate-500 text-center py-8">No vaults found. Vaults are created by Amina Bank for your account.</p>
       )}
     </div>
   );

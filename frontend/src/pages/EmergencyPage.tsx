@@ -142,7 +142,7 @@ export default function EmergencyPage() {
   if (!activeVaultId) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-vault-muted text-sm">
+        <p className="text-slate-700 text-sm">
           Select a vault to access emergency controls.
         </p>
       </div>
@@ -152,8 +152,8 @@ export default function EmergencyPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-white">Emergency Controls</h1>
-        <p className="text-sm text-vault-muted mt-1">
+        <h1 className="text-xl font-bold text-ink-900">Emergency Controls</h1>
+        <p className="text-sm text-slate-700 mt-1">
           Pause operations, disable adapters, and initiate strategy unwinds.
         </p>
       </div>
@@ -161,9 +161,9 @@ export default function EmergencyPage() {
       {/* Section 1: Vault Pause Controls */}
       <Card title="Vault Pause Controls" subtitle="Immediately halt all vault operations">
         {loadingSnapshot ? (
-          <p className="text-xs text-vault-muted">Loading vault state...</p>
+          <p className="text-xs text-slate-700">Loading vault state...</p>
         ) : !snapshot ? (
-          <p className="text-xs text-vault-muted">Unable to load vault snapshot.</p>
+          <p className="text-xs text-slate-700">Unable to load vault snapshot.</p>
         ) : (
           <div className="space-y-4">
             {/* Pause state indicator */}
@@ -173,10 +173,10 @@ export default function EmergencyPage() {
                   snapshot.paused ? 'bg-red-500 animate-pulse' : 'bg-green-500'
                 }`}
               />
-              <span className="text-sm font-semibold text-white">
+              <span className="text-sm font-semibold text-ink-900">
                 Vault is{' '}
                 <span
-                  className={snapshot.paused ? 'text-red-400' : 'text-green-400'}
+                  className={snapshot.paused ? 'text-error-700' : 'text-success-700'}
                 >
                   {snapshot.paused ? 'PAUSED' : 'ACTIVE'}
                 </span>
@@ -184,8 +184,8 @@ export default function EmergencyPage() {
             </div>
 
             {snapshot.paused && (
-              <div className="rounded bg-red-900/20 border border-red-800 px-3 py-2">
-                <p className="text-xs text-red-400 font-medium">
+              <div className="rounded-[12px] bg-error-100 border border-red-800 px-3 py-2">
+                <p className="text-xs text-error-700 font-medium">
                   When paused, all allocations and deposits are blocked.
                 </p>
               </div>
@@ -194,10 +194,10 @@ export default function EmergencyPage() {
             <button
               onClick={handleTogglePause}
               disabled={togglingPause}
-              className={`w-full py-3 rounded text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              className={`w-full py-3 rounded-[12px] text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                 snapshot.paused
                   ? 'bg-green-600 hover:bg-green-500 text-white'
-                  : 'bg-red-600 hover:bg-red-500 text-white'
+                  : 'bg-error-700 hover:bg-error-700/90 text-white'
               }`}
             >
               {togglingPause
@@ -216,18 +216,18 @@ export default function EmergencyPage() {
         subtitle="Enable or disable individual strategy adapters"
       >
         {loadingStrategies ? (
-          <p className="text-xs text-vault-muted">Loading strategies...</p>
+          <p className="text-xs text-slate-700">Loading strategies...</p>
         ) : strategies.length === 0 ? (
-          <p className="text-xs text-vault-muted">No strategies configured.</p>
+          <p className="text-xs text-slate-700">No strategies configured.</p>
         ) : (
           <div className="space-y-2">
             {strategies.map((strategy) => (
               <div
                 key={strategy.strategyId}
-                className="flex items-center justify-between px-3 py-2.5 rounded bg-vault-bg border border-vault-border"
+                className="flex items-center justify-between px-3 py-2.5 rounded-[12px] bg-teal-50 border border-slate-200"
               >
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-white font-medium">
+                  <span className="text-sm text-ink-900 font-medium">
                     {strategy.name}
                   </span>
                   <StatusBadge
@@ -239,10 +239,10 @@ export default function EmergencyPage() {
                     handleToggleStrategy(strategy.strategyId, strategy.disabled)
                   }
                   disabled={togglingStrategyId === strategy.strategyId}
-                  className={`px-4 py-1.5 text-xs font-semibold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                  className={`px-4 py-1.5 text-xs font-semibold rounded-[12px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     strategy.disabled
                       ? 'bg-green-600 hover:bg-green-500 text-white'
-                      : 'bg-red-600 hover:bg-red-500 text-white'
+                      : 'bg-error-700 hover:bg-error-700/90 text-white'
                   }`}
                 >
                   {togglingStrategyId === strategy.strategyId
@@ -264,18 +264,18 @@ export default function EmergencyPage() {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-xs text-vault-muted mb-1">
+            <label className="block text-xs text-slate-700 mb-1">
               Strategy (active allocations only)
             </label>
             {activeStrategies.length === 0 ? (
-              <p className="text-xs text-vault-muted">
+              <p className="text-xs text-slate-700">
                 No strategies with active allocations.
               </p>
             ) : (
               <select
                 value={unwindStrategyId}
                 onChange={(e) => setUnwindStrategyId(e.target.value)}
-                className="w-full px-3 py-2 rounded bg-vault-bg border border-vault-border text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full px-3 py-2 rounded-[12px] bg-white border border-slate-200 text-ink-900 text-sm focus:outline-none focus:ring-teal-600/20 focus:border-teal-600 transition-colors"
               >
                 <option value="">Select a strategy</option>
                 {activeStrategies.map((s) => (
@@ -293,17 +293,17 @@ export default function EmergencyPage() {
           <button
             onClick={handleUnwind}
             disabled={unwinding || !unwindStrategyId}
-            className="w-full py-2 rounded bg-orange-600 hover:bg-orange-500 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full py-2 rounded-[12px] bg-warning-700 hover:bg-warning-700/90 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {unwinding ? 'Initiating Unwind...' : 'Initiate Unwind'}
           </button>
 
           {unwindResult && (
             <div
-              className={`rounded p-3 text-sm ${
+              className={`rounded-[12px] p-3 text-sm ${
                 unwindResult.success
-                  ? 'bg-green-900/20 border border-green-800 text-green-400'
-                  : 'bg-red-900/20 border border-red-800 text-red-400'
+                  ? 'bg-success-100 border border-success-700/20 text-success-700'
+                  : 'bg-error-100 border border-red-800 text-error-700'
               }`}
             >
               <p className="font-semibold">
@@ -311,9 +311,9 @@ export default function EmergencyPage() {
               </p>
               <p className="text-xs mt-1 opacity-80">{unwindResult.message}</p>
               {unwindResult.success && unwindResult.amountReturned !== undefined && (
-                <p className="text-xs mt-2 text-vault-muted">
+                <p className="text-xs mt-2 text-slate-700">
                   Amount returned to idle:{' '}
-                  <span className="text-white font-mono">
+                  <span className="text-ink-900 font-mono">
                     {unwindResult.amountReturned.toLocaleString()}
                   </span>
                 </p>

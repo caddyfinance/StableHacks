@@ -21,7 +21,7 @@ interface FlowRow {
 }
 
 const statusColor: Record<string, string> = {
-  Completed: 'text-green-400', Passed: 'text-green-400', Pending: 'text-yellow-400', Failed: 'text-red-400', 'Not Required': 'text-vault-muted',
+  Completed: 'text-success-700', Passed: 'text-success-700', Pending: 'text-warning-700', Failed: 'text-error-700', 'Not Required': 'text-slate-500',
 };
 
 const fmt = (v: number) => v > 0 ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
@@ -168,7 +168,7 @@ export default function FundingPage() {
   if (!activeVaultId) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-vault-muted text-sm">No vault selected.</p>
+        <p className="text-slate-500 text-sm">No vault selected.</p>
       </div>
     );
   }
@@ -181,16 +181,16 @@ export default function FundingPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            <Banknote className="w-5 h-5 text-vault-accent" />
+          <h1 className="text-xl font-bold text-ink-900 flex items-center gap-2">
+            <Banknote className="w-5 h-5 text-teal-700" />
             Client Funding and Settlement Tracking
           </h1>
-          <p className="text-xs text-vault-muted mt-1 max-w-2xl">
+          <p className="text-xs text-slate-500 mt-1 max-w-2xl">
             Track client money across fiat funding, stablecoin on-ramp, vault allocation, vault return, and fiat off-ramp.
           </p>
         </div>
         <button onClick={loadData}
-          className="flex items-center gap-1.5 text-xs text-vault-muted hover:text-vault-accent transition-colors">
+          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-teal-700 transition-all ease-amina duration-150">
           <RefreshCw className="w-3.5 h-3.5" /> Refresh
         </button>
       </div>
@@ -199,14 +199,14 @@ export default function FundingPage() {
       <Card title="Funding & Settlement Overview" subtitle="Aggregated client money movement">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {[
-            { label: 'Total Fiat On-Ramped', amount: totals.onRamped, sub: 'USD → USDC across all vaults', color: 'text-green-400' },
-            { label: 'Total Stablecoins Deployed', amount: totals.deployed, sub: 'USDC deployed across vaults', color: 'text-vault-accent' },
-            { label: 'Total Fiat Off-Ramped', amount: totals.offRamped, sub: 'USDC → USD returned to client', color: 'text-amber-400' },
+            { label: 'Total Fiat On-Ramped', amount: totals.onRamped, sub: 'USD → USDC across all vaults', color: 'text-success-700' },
+            { label: 'Total Stablecoins Deployed', amount: totals.deployed, sub: 'USDC deployed across vaults', color: 'text-teal-700' },
+            { label: 'Total Fiat Off-Ramped', amount: totals.offRamped, sub: 'USDC → USD returned to client', color: 'text-warning-700' },
           ].map(({ label, amount, sub, color }) => (
-            <div key={label} className="bg-vault-bg rounded-lg p-4 text-center">
-              <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-1">{label}</p>
+            <div key={label} className="bg-slate-100 rounded-[18px] p-4 text-center">
+              <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">{label}</p>
               <p className={`text-2xl font-bold font-mono ${color}`}>{fmt(amount)}</p>
-              <p className="text-[10px] text-vault-muted mt-1">{sub}</p>
+              <p className="text-[10px] text-slate-500 mt-1">{sub}</p>
             </div>
           ))}
         </div>
@@ -216,15 +216,15 @@ export default function FundingPage() {
       <Card title="Fund Flow Timeline" subtitle={`${filteredFlows.length} events — ${scopeVault === 'ALL' ? 'all vaults' : scopeVault}`}>
         {/* Scope selector */}
         <div className="flex items-center gap-3 mb-4">
-          <span className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold">Scope</span>
+          <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Scope</span>
           <div className="flex gap-1.5 flex-wrap">
             <button onClick={() => setScopeVault('ALL')}
-              className={`px-3 py-1 text-xs rounded border transition-colors ${scopeVault === 'ALL' ? 'bg-vault-accent/10 border-vault-accent text-vault-accent font-semibold' : 'bg-vault-bg border-vault-border text-vault-muted hover:text-white'}`}>
+              className={`px-3 py-1 text-xs rounded-[12px] border transition-all ease-amina duration-150 ${scopeVault === 'ALL' ? 'bg-teal-50 border-teal-700 text-teal-700 font-semibold' : 'bg-white border-slate-200 text-slate-500 hover:text-ink-900'}`}>
               All Vaults
             </button>
             {uniqueVaults.map(v => (
               <button key={v} onClick={() => setScopeVault(v)}
-                className={`px-3 py-1 text-xs rounded border font-mono transition-colors ${scopeVault === v ? 'bg-vault-accent/10 border-vault-accent text-vault-accent font-semibold' : 'bg-vault-bg border-vault-border text-vault-muted hover:text-white'}`}>
+                className={`px-3 py-1 text-xs rounded-[12px] border font-mono transition-all ease-amina duration-150 ${scopeVault === v ? 'bg-teal-50 border-teal-700 text-teal-700 font-semibold' : 'bg-white border-slate-200 text-slate-500 hover:text-ink-900'}`}>
                 {v}
               </button>
             ))}
@@ -232,14 +232,14 @@ export default function FundingPage() {
         </div>
 
         {loading ? (
-          <p className="text-sm text-vault-muted py-4">Loading settlement data...</p>
+          <p className="text-sm text-slate-500 py-4">Loading settlement data...</p>
         ) : filteredFlows.length === 0 ? (
-          <p className="text-sm text-vault-muted py-4">No fund flows recorded yet. Deposits and redemptions will appear here.</p>
+          <p className="text-sm text-slate-500 py-4">No fund flows recorded yet. Deposits and redemptions will appear here.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-vault-border text-[10px] uppercase tracking-wider text-vault-muted">
+                <tr className="border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-500">
                   <th className="text-left py-2 pr-2 font-semibold">Time</th>
                   <th className="text-left py-2 pr-2 font-semibold">Vault</th>
                   <th className="text-left py-2 pr-2 font-semibold">Flow Stage</th>
@@ -255,31 +255,31 @@ export default function FundingPage() {
               </thead>
               <tbody>
                 {filteredFlows.map((row, i) => (
-                  <tr key={i} className="border-b border-vault-border/30 hover:bg-vault-bg/50 transition-colors">
-                    <td className="py-2 pr-2 text-vault-muted whitespace-nowrap">{row.time.slice(5, 16)}</td>
-                    <td className="py-2 pr-2 font-mono text-white text-[10px]">{row.vault}</td>
+                  <tr key={i} className="border-b border-slate-200/30 hover:bg-teal-50 transition-colors">
+                    <td className="py-2 pr-2 text-slate-500 whitespace-nowrap">{row.time.slice(5, 16)}</td>
+                    <td className="py-2 pr-2 font-mono text-ink-900 text-[10px]">{row.vault}</td>
                     <td className="py-2 pr-2">
-                      <span className="bg-vault-bg text-white rounded px-1.5 py-0.5 text-[10px] font-medium">{row.stage}</span>
+                      <span className="bg-slate-100 text-ink-900 rounded px-1.5 py-0.5 text-[10px] font-medium">{row.stage}</span>
                     </td>
-                    <td className="py-2 pr-2 text-vault-muted max-w-[100px] truncate" title={row.from}>{row.from}</td>
-                    <td className="py-2 pr-2 text-vault-muted max-w-[100px] truncate" title={row.to}>{row.to}</td>
-                    <td className="py-2 pr-2 text-white">{row.asset}</td>
-                    <td className="py-2 pr-2 text-right font-mono text-white">{row.amount > 0 ? fmt(row.amount) : '—'}</td>
+                    <td className="py-2 pr-2 text-slate-500 max-w-[100px] truncate" title={row.from}>{row.from}</td>
+                    <td className="py-2 pr-2 text-slate-500 max-w-[100px] truncate" title={row.to}>{row.to}</td>
+                    <td className="py-2 pr-2 text-ink-900">{row.asset}</td>
+                    <td className="py-2 pr-2 text-right font-mono text-ink-900">{row.amount > 0 ? fmt(row.amount) : '—'}</td>
                     <td className="py-2 pr-2">
-                      <span className={`text-[10px] font-semibold ${statusColor[row.compliance] || 'text-vault-muted'}`}>{row.compliance}</span>
+                      <span className={`text-[10px] font-semibold ${statusColor[row.compliance] || 'text-slate-500'}`}>{row.compliance}</span>
                     </td>
                     <td className="py-2 pr-2">
-                      <span className={`text-[10px] font-semibold ${statusColor[row.status] || 'text-vault-muted'}`}>{row.status}</span>
+                      <span className={`text-[10px] font-semibold ${statusColor[row.status] || 'text-slate-500'}`}>{row.status}</span>
                     </td>
-                    <td className="py-2 pr-2 font-mono text-vault-muted text-[10px]">{row.ref}</td>
+                    <td className="py-2 pr-2 font-mono text-slate-500 text-[10px]">{row.ref}</td>
                     <td className="py-2">
                       {row.txSig ? (
                         <a href={`${EXPLORER_BASE}/tx/${row.txSig}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-0.5 text-[10px] text-vault-accent hover:underline">
+                          className="flex items-center gap-0.5 text-[10px] text-teal-700 hover:underline">
                           View <ExternalLink className="w-2.5 h-2.5" />
                         </a>
                       ) : (
-                        <span className="text-[10px] text-vault-muted">—</span>
+                        <span className="text-[10px] text-slate-500">—</span>
                       )}
                     </td>
                   </tr>
@@ -300,12 +300,12 @@ export default function FundingPage() {
               { label: 'Vault Return Reconciled', status: totals.offRamped > 0 ? 'Passed' : 'Pending', detail: `${fmt(totals.offRamped)} USDC returned from vaults to stablecoin accounts` },
               { label: 'Off-Ramp Reconciled', status: totals.offRamped > 0 ? 'Pending' : 'N/A', detail: `${fmt(totals.offRamped)} USD pending fiat settlement to client bank accounts` },
             ].map(({ label, status, detail }) => (
-              <div key={label} className="flex items-center justify-between bg-vault-bg rounded px-3 py-2">
+              <div key={label} className="flex items-center justify-between bg-slate-100 rounded-[12px] px-3 py-2">
                 <div>
-                  <p className="text-xs text-white font-medium">{label}</p>
-                  <p className="text-[10px] text-vault-muted">{detail}</p>
+                  <p className="text-xs text-ink-900 font-medium">{label}</p>
+                  <p className="text-[10px] text-slate-500">{detail}</p>
                 </div>
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${status === 'Passed' ? 'bg-green-900/30 text-green-400' : status === 'Pending' ? 'bg-yellow-900/30 text-yellow-400' : 'bg-vault-border text-vault-muted'}`}>{status}</span>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${status === 'Passed' ? 'bg-success-100 text-success-700' : status === 'Pending' ? 'bg-warning-100 text-warning-700' : 'bg-slate-200 text-slate-500'}`}>{status}</span>
               </div>
             ))}
           </div>
@@ -321,13 +321,13 @@ export default function FundingPage() {
               { label: 'Explorer Trace Available', status: 'Active', detail: 'On-chain legs traceable via Solana Explorer' },
               { label: 'Active Exceptions', status: 'None', detail: 'No flagged transactions or exceptions' },
             ].map(({ label, status, detail }) => (
-              <div key={label} className="flex items-center justify-between bg-vault-bg rounded px-3 py-2">
+              <div key={label} className="flex items-center justify-between bg-slate-100 rounded-[12px] px-3 py-2">
                 <div>
-                  <p className="text-xs text-white font-medium">{label}</p>
-                  <p className="text-[10px] text-vault-muted">{detail}</p>
+                  <p className="text-xs text-ink-900 font-medium">{label}</p>
+                  <p className="text-[10px] text-slate-500">{detail}</p>
                 </div>
                 <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
-                  status === 'Active' ? 'bg-green-900/30 text-green-400' : status === 'None' ? 'bg-vault-border text-vault-muted' : 'bg-yellow-900/30 text-yellow-400'
+                  status === 'Active' ? 'bg-success-100 text-success-700' : status === 'None' ? 'bg-slate-200 text-slate-500' : 'bg-warning-100 text-warning-700'
                 }`}>{status}</span>
               </div>
             ))}

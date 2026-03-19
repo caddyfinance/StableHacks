@@ -121,11 +121,11 @@ export default function RedemptionPage() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <p className="text-vault-muted text-sm">
+          <p className="text-slate-500 text-sm">
             No vault selected. Your vault will be loaded automatically.
           </p>
           {autoLoading && (
-            <p className="text-vault-muted text-xs mt-2 animate-pulse">Loading vaults...</p>
+            <p className="text-slate-500 text-xs mt-2 animate-pulse">Loading vaults...</p>
           )}
         </div>
       </div>
@@ -135,7 +135,7 @@ export default function RedemptionPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-vault-muted text-sm animate-pulse">Loading redemption data...</p>
+        <p className="text-slate-500 text-sm animate-pulse">Loading redemption data...</p>
       </div>
     );
   }
@@ -145,8 +145,8 @@ export default function RedemptionPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-white">Redemption</h1>
-        <p className="text-sm text-vault-muted mt-1">
+        <h1 className="text-xl font-bold font-display text-ink-900">Redemption</h1>
+        <p className="text-sm text-slate-500 mt-1">
           Withdraw funds to pre-approved destination wallets
         </p>
       </div>
@@ -155,31 +155,31 @@ export default function RedemptionPage() {
       <Card title="Current Balances" subtitle="Available funds in your vault">
         <div className="grid grid-cols-3 gap-6">
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-1">
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">
               Total NAV
             </p>
-            <p className="text-xl font-bold text-white font-mono">
+            <p className="text-xl font-bold text-ink-900 font-mono font-display">
               {snapshot?.totalNav?.toLocaleString(undefined, { minimumFractionDigits: 2 }) ?? '0.00'}
             </p>
-            <p className="text-xs text-vault-muted">{baseAsset}</p>
+            <p className="text-xs text-slate-500">{baseAsset}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-1">
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">
               Idle Balance
             </p>
-            <p className="text-lg font-semibold text-green-400 font-mono">
+            <p className="text-lg font-semibold text-success-700 font-mono">
               {snapshot?.idleBalance?.toLocaleString(undefined, { minimumFractionDigits: 2 }) ?? '0.00'}
             </p>
-            <p className="text-xs text-vault-muted">Available for withdrawal</p>
+            <p className="text-xs text-slate-500">Available for withdrawal</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-1">
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">
               Deployed Balance
             </p>
-            <p className="text-lg font-semibold text-vault-muted font-mono">
+            <p className="text-lg font-semibold text-slate-500 font-mono">
               {snapshot?.deployedBalance?.toLocaleString(undefined, { minimumFractionDigits: 2 }) ?? '0.00'}
             </p>
-            <p className="text-xs text-vault-muted">In active strategies</p>
+            <p className="text-xs text-slate-500">In active strategies</p>
           </div>
         </div>
       </Card>
@@ -188,7 +188,7 @@ export default function RedemptionPage() {
       <Card title="Execute Redemption" subtitle="Submit a withdrawal request">
         <div className="space-y-4">
           <div>
-            <label className="block text-xs text-vault-muted mb-1">
+            <label className="block text-xs text-slate-500 mb-1">
               Amount ({baseAsset})
             </label>
             <input
@@ -198,19 +198,19 @@ export default function RedemptionPage() {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
-              className="w-full px-3 py-2 rounded bg-vault-bg border border-vault-border text-white text-sm placeholder:text-vault-muted/50 focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full px-3 py-2 rounded-[12px] bg-white border border-slate-200 text-ink-900 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-teal-600/20 focus:border-teal-600 transition-colors"
             />
           </div>
 
           <div>
-            <label className="block text-xs text-vault-muted mb-1">
+            <label className="block text-xs text-slate-500 mb-1">
               Destination Wallet
             </label>
             {mandate && mandate.approvedDestinations.length > 0 ? (
               <select
                 value={destinationWallet}
                 onChange={(e) => setDestinationWallet(e.target.value)}
-                className="w-full px-3 py-2 rounded bg-vault-bg border border-vault-border text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full px-3 py-2 rounded-[12px] bg-white border border-slate-200 text-ink-900 text-sm focus:outline-none focus:ring-teal-600/20 focus:border-teal-600 transition-colors"
               >
                 {mandate.approvedDestinations.map((w) => (
                   <option key={w} value={w}>
@@ -219,7 +219,7 @@ export default function RedemptionPage() {
                 ))}
               </select>
             ) : (
-              <p className="text-xs text-red-400">
+              <p className="text-xs text-error-700">
                 No approved destinations configured. Contact your relationship manager.
               </p>
             )}
@@ -233,7 +233,7 @@ export default function RedemptionPage() {
               !destinationWallet ||
               !mandate?.approvedDestinations.length
             }
-            className="w-full py-2.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full py-2.5 rounded-[12px] bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-1"
           >
             {redeeming ? 'Executing Redemption...' : 'Execute Redemption'}
           </button>
@@ -241,10 +241,10 @@ export default function RedemptionPage() {
           {/* Result */}
           {result && (
             <div
-              className={`rounded p-3 text-sm ${
+              className={`rounded-[18px] p-3 text-sm ${
                 result.success
-                  ? 'bg-green-900/20 border border-green-800 text-green-400'
-                  : 'bg-red-900/20 border border-red-800 text-red-400'
+                  ? 'bg-success-100 border border-success-700/20 text-success-700'
+                  : 'bg-error-100 border border-error-700/20 text-error-700'
               }`}
             >
               <p className="font-semibold">
@@ -252,9 +252,9 @@ export default function RedemptionPage() {
               </p>
               <p className="text-xs mt-1 opacity-80">{result.message}</p>
               {result.success && result.newBalance !== undefined && (
-                <p className="text-xs mt-2 text-vault-muted">
+                <p className="text-xs mt-2 text-slate-500">
                   Updated idle balance:{' '}
-                  <span className="text-white font-mono">
+                  <span className="text-ink-900 font-mono">
                     {result.newBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </span>{' '}
                   {baseAsset}
@@ -264,8 +264,8 @@ export default function RedemptionPage() {
           )}
 
           {/* Withdrawal notice */}
-          <div className="px-3 py-2 rounded bg-yellow-900/15 border border-yellow-800/40">
-            <p className="text-xs text-yellow-300">
+          <div className="px-3 py-2 rounded-[18px] bg-warning-100 border border-warning-700/20">
+            <p className="text-xs text-warning-700">
               Withdrawals are only permitted to pre-approved destination wallets as defined in the vault mandate.
             </p>
           </div>
@@ -275,7 +275,7 @@ export default function RedemptionPage() {
       {/* Approved Destinations */}
       <Card title="Approved Destinations" subtitle="Wallets authorized for withdrawals">
         {!mandate || mandate.approvedDestinations.length === 0 ? (
-          <p className="text-xs text-vault-muted">
+          <p className="text-xs text-slate-500">
             No approved destinations configured for this vault.
           </p>
         ) : (
@@ -283,12 +283,12 @@ export default function RedemptionPage() {
             {mandate.approvedDestinations.map((wallet, i) => (
               <li
                 key={wallet}
-                className="flex items-center gap-3 px-3 py-2 rounded bg-vault-bg border border-vault-border"
+                className="flex items-center gap-3 px-3 py-2 rounded-[18px] bg-slate-100 border border-slate-200"
               >
-                <span className="w-5 h-5 flex items-center justify-center rounded-full bg-green-900/40 text-green-400 text-[10px] font-bold">
+                <span className="w-5 h-5 flex items-center justify-center rounded-full bg-success-100 text-success-700 text-[10px] font-bold">
                   {i + 1}
                 </span>
-                <span className="font-mono text-xs text-white break-all">{wallet}</span>
+                <span className="font-mono text-xs text-ink-900 break-all">{wallet}</span>
                 <span className="ml-auto">
                   <StatusBadge status="approved" />
                 </span>

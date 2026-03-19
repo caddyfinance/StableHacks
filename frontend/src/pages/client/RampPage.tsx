@@ -158,33 +158,33 @@ export default function RampPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            <Banknote className="w-5 h-5 text-vault-accent" />
+          <h1 className="text-xl font-bold font-display text-ink-900 flex items-center gap-2">
+            <Banknote className="w-5 h-5 text-teal-700" />
             On/Off Ramp
           </h1>
-          <p className="text-xs text-vault-muted mt-1">Bridge between your bank account and crypto wallet</p>
+          <p className="text-xs text-slate-500 mt-1">Bridge between your bank account and crypto wallet</p>
         </div>
         <button onClick={() => { setBankBal(getBankBalance()); }}
-          className="flex items-center gap-1.5 text-xs text-vault-muted hover:text-vault-accent transition-colors">
+          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-teal-700 transition-colors">
           <RefreshCw className="w-3.5 h-3.5" /> Refresh
         </button>
       </div>
 
       {/* Balance Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="bg-vault-card border border-vault-border rounded-lg p-4">
-          <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-1">Bank Account (USD)</p>
-          <p className="text-xl font-bold font-mono text-white">${fmt(bankBal)}</p>
-          <p className="text-[10px] text-vault-muted mt-0.5">Amina Bank fiat account</p>
+        <div className="bg-white border border-slate-200 rounded-[18px] p-6 shadow-1">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Bank Account (USD)</p>
+          <p className="text-xl font-bold font-mono font-display text-ink-900">${fmt(bankBal)}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Amina Bank fiat account</p>
         </div>
-        <div className="bg-vault-card border border-vault-border rounded-lg p-4">
-          <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-1">Wallet (USDC)</p>
-          <p className="text-xl font-bold font-mono text-vault-accent">{usdcBal !== null ? fmt(usdcBal) : '—'}</p>
-          <p className="text-[10px] text-vault-muted mt-0.5">
+        <div className="bg-white border border-slate-200 rounded-[18px] p-6 shadow-1">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Wallet (USDC)</p>
+          <p className="text-xl font-bold font-mono font-display text-teal-700">{usdcBal !== null ? fmt(usdcBal) : '—'}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">
             On-chain balance
             {wallet && (
               <a href={`https://solscan.io/account/${wallet}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                className="ml-1.5 text-vault-accent hover:underline inline-flex items-center gap-0.5">
+                className="ml-1.5 text-teal-700 hover:underline inline-flex items-center gap-0.5">
                 <ExternalLink className="w-2.5 h-2.5" />
               </a>
             )}
@@ -193,15 +193,15 @@ export default function RampPage() {
       </div>
 
       {/* Ramp Card */}
-      <div className="bg-vault-card border border-vault-border rounded-lg overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-[18px] overflow-hidden shadow-1">
         {/* Tabs */}
-        <div className="flex border-b border-vault-border">
+        <div className="flex border-b border-slate-200">
           <button onClick={() => { setTab('onramp'); reset(); }}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 text-xs font-medium transition-colors ${tab === 'onramp' ? 'text-green-400 bg-green-500/5 border-b-2 border-green-400' : 'text-vault-muted hover:text-white'}`}>
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-xs font-medium transition-colors ${tab === 'onramp' ? 'text-success-700 bg-success-100 border-b-2 border-success-700' : 'text-slate-500 hover:text-ink-900'}`}>
             <ArrowDownToLine className="w-3.5 h-3.5" /> On-Ramp (USD → USDC)
           </button>
           <button onClick={() => { setTab('offramp'); reset(); }}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 text-xs font-medium transition-colors ${tab === 'offramp' ? 'text-amber-400 bg-amber-500/5 border-b-2 border-amber-400' : 'text-vault-muted hover:text-white'}`}>
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-xs font-medium transition-colors ${tab === 'offramp' ? 'text-warning-700 bg-warning-100 border-b-2 border-warning-700' : 'text-slate-500 hover:text-ink-900'}`}>
             <ArrowUpFromLine className="w-3.5 h-3.5" /> Off-Ramp (USDC → USD)
           </button>
         </div>
@@ -211,19 +211,19 @@ export default function RampPage() {
           <div className="flex items-center justify-center gap-2 mb-5 text-[10px]">
             {tab === 'onramp' ? (
               <>
-                <span className="px-2.5 py-1 rounded-md bg-vault-bg border border-vault-border text-white font-medium">Bank (USD)</span>
-                <span className="text-vault-muted">→</span>
-                <span className="px-2.5 py-1 rounded-md bg-vault-bg border border-vault-border text-vault-accent font-medium">USDC Mint</span>
-                <span className="text-vault-muted">→</span>
-                <span className="px-2.5 py-1 rounded-md bg-green-900/20 border border-green-800/30 text-green-400 font-medium">Wallet</span>
+                <span className="px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-ink-900 font-medium">Bank (USD)</span>
+                <span className="text-slate-500">→</span>
+                <span className="px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-teal-700 font-medium">USDC Mint</span>
+                <span className="text-slate-500">→</span>
+                <span className="px-2.5 py-1 rounded-md bg-success-100 border border-success-700/20 text-success-700 font-medium">Wallet</span>
               </>
             ) : (
               <>
-                <span className="px-2.5 py-1 rounded-md bg-amber-900/20 border border-amber-800/30 text-amber-400 font-medium">Wallet</span>
-                <span className="text-vault-muted">→</span>
-                <span className="px-2.5 py-1 rounded-md bg-vault-bg border border-vault-border text-vault-accent font-medium">USDC Burn</span>
-                <span className="text-vault-muted">→</span>
-                <span className="px-2.5 py-1 rounded-md bg-vault-bg border border-vault-border text-white font-medium">Bank (USD)</span>
+                <span className="px-2.5 py-1 rounded-md bg-warning-100 border border-warning-700/20 text-warning-700 font-medium">Wallet</span>
+                <span className="text-slate-500">→</span>
+                <span className="px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-teal-700 font-medium">USDC Burn</span>
+                <span className="text-slate-500">→</span>
+                <span className="px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-ink-900 font-medium">Bank (USD)</span>
               </>
             )}
           </div>
@@ -233,49 +233,49 @@ export default function RampPage() {
               {/* Swap Card */}
               <div className="max-w-[280px] mx-auto">
                 {/* From */}
-                <div className="rounded-lg border border-vault-border bg-vault-card p-3">
+                <div className="rounded-[18px] border border-slate-200 bg-white p-3 shadow-1">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] text-vault-muted font-medium">{tab === 'onramp' ? 'You pay' : 'You send'}</span>
-                    <button onClick={() => setAmount(fromBal.toString())} className="text-[9px] text-vault-muted hover:text-vault-text transition-colors">
-                      Bal: {fmt(fromBal)} <span className={tab === 'onramp' ? 'text-emerald-400' : 'text-blue-400'}>{fromAsset}</span>
+                    <span className="text-[10px] text-slate-500 font-medium">{tab === 'onramp' ? 'You pay' : 'You send'}</span>
+                    <button onClick={() => setAmount(fromBal.toString())} className="text-[9px] text-slate-500 hover:text-ink-900 transition-colors">
+                      Bal: {fmt(fromBal)} <span className={tab === 'onramp' ? 'text-success-700' : 'text-teal-700'}>{fromAsset}</span>
                     </button>
                   </div>
                   <div className="flex items-center gap-2">
                     <input type="text" inputMode="decimal" value={amount}
                       onChange={e => { const v = e.target.value; if (v === '' || /^\d*\.?\d*$/.test(v)) setAmount(v); }}
                       placeholder="0.00"
-                      className="w-full min-w-0 px-3 py-2 rounded bg-vault-bg border border-vault-border text-vault-text text-sm font-mono font-semibold focus:outline-none focus:border-vault-accent transition-colors placeholder:text-vault-muted/40" />
-                    <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 border flex-shrink-0 ${tab === 'onramp' ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-blue-500/10 border-blue-500/30'}`}>
-                      <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${tab === 'onramp' ? 'bg-emerald-500 text-white' : 'bg-blue-500 text-white'}`}>
+                      className="w-full min-w-0 px-3 py-2 rounded-[12px] bg-white border border-slate-200 text-ink-900 text-sm font-mono font-semibold focus:outline-none focus:ring-teal-600/20 focus:border-teal-600 transition-colors placeholder:text-slate-400" />
+                    <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 border flex-shrink-0 ${tab === 'onramp' ? 'bg-success-100 border-success-700/20' : 'bg-teal-100 border-teal-300/40'}`}>
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${tab === 'onramp' ? 'bg-success-700 text-white' : 'bg-teal-700 text-white'}`}>
                         {tab === 'onramp' ? '$' : 'U'}
                       </div>
-                      <span className={`text-[11px] font-semibold ${tab === 'onramp' ? 'text-emerald-400' : 'text-blue-400'}`}>{fromAsset}</span>
+                      <span className={`text-[11px] font-semibold ${tab === 'onramp' ? 'text-success-700' : 'text-teal-700'}`}>{fromAsset}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Arrow */}
                 <div className="flex justify-center -my-2.5 relative z-10">
-                  <div className={`w-7 h-7 rounded-lg border-2 border-vault-card flex items-center justify-center ${tab === 'onramp' ? 'bg-blue-500' : 'bg-emerald-500'}`}>
+                  <div className={`w-7 h-7 rounded-[12px] border-2 border-white flex items-center justify-center ${tab === 'onramp' ? 'bg-teal-700' : 'bg-success-700'}`}>
                     <ArrowDown className="w-3 h-3 text-white" />
                   </div>
                 </div>
 
                 {/* To */}
-                <div className="rounded-lg border border-vault-border bg-vault-card p-3">
+                <div className="rounded-[18px] border border-slate-200 bg-white p-3 shadow-1">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] text-vault-muted font-medium">You receive</span>
-                    <span className="text-[9px] text-vault-muted">Bal: {fmt(toBal)} <span className={tab === 'onramp' ? 'text-blue-400' : 'text-emerald-400'}>{toAsset}</span></span>
+                    <span className="text-[10px] text-slate-500 font-medium">You receive</span>
+                    <span className="text-[9px] text-slate-500">Bal: {fmt(toBal)} <span className={tab === 'onramp' ? 'text-teal-700' : 'text-success-700'}>{toAsset}</span></span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-full px-3 py-2 rounded bg-vault-bg border border-vault-border text-vault-text text-sm font-mono font-semibold">
-                      {parsed > 0 ? fmt(parsed) : <span className="text-vault-muted/40">0.00</span>}
+                    <div className="w-full px-3 py-2 rounded-[12px] bg-white border border-slate-200 text-ink-900 text-sm font-mono font-semibold">
+                      {parsed > 0 ? fmt(parsed) : <span className="text-slate-400">0.00</span>}
                     </div>
-                    <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 border flex-shrink-0 ${tab === 'onramp' ? 'bg-blue-500/10 border-blue-500/30' : 'bg-emerald-500/10 border-emerald-500/30'}`}>
-                      <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${tab === 'onramp' ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'}`}>
+                    <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 border flex-shrink-0 ${tab === 'onramp' ? 'bg-teal-100 border-teal-300/40' : 'bg-success-100 border-success-700/20'}`}>
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${tab === 'onramp' ? 'bg-teal-700 text-white' : 'bg-success-700 text-white'}`}>
                         {tab === 'onramp' ? 'U' : '$'}
                       </div>
-                      <span className={`text-[11px] font-semibold ${tab === 'onramp' ? 'text-blue-400' : 'text-emerald-400'}`}>{toAsset}</span>
+                      <span className={`text-[11px] font-semibold ${tab === 'onramp' ? 'text-teal-700' : 'text-success-700'}`}>{toAsset}</span>
                     </div>
                   </div>
                 </div>
@@ -283,29 +283,29 @@ export default function RampPage() {
                 {parsed > 0 && (
                   <div className="mt-2 px-0.5 space-y-0.5">
                     <div className="flex justify-between text-[9px]">
-                      <span className="text-vault-muted">Rate</span>
-                      <span className="text-vault-muted">1 <span className="text-emerald-400">USD</span> = 1 <span className="text-blue-400">USDC</span></span>
+                      <span className="text-slate-500">Rate</span>
+                      <span className="text-slate-500">1 <span className="text-success-700">USD</span> = 1 <span className="text-teal-700">USDC</span></span>
                     </div>
                     <div className="flex justify-between text-[9px]">
-                      <span className="text-vault-muted">Fee</span>
-                      <span className="text-emerald-400">Free</span>
+                      <span className="text-slate-500">Fee</span>
+                      <span className="text-success-700">Free</span>
                     </div>
                   </div>
                 )}
 
                 <button onClick={handleInitSwap} disabled={!canSubmit}
-                  className={`w-full mt-3 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+                  className={`w-full mt-3 py-2.5 rounded-[12px] text-xs font-semibold transition-all shadow-1 ${
                     canSubmit
-                      ? 'bg-vault-accent hover:bg-blue-400 text-white'
-                      : 'bg-vault-border text-vault-muted cursor-not-allowed'
+                      ? 'bg-teal-700 hover:bg-teal-800 text-white'
+                      : 'bg-slate-200 text-slate-500 cursor-not-allowed'
                   }`}>
                   {parsed <= 0
                     ? 'Enter an amount'
                     : parsed > fromBal
                     ? `Insufficient ${fromAsset}`
                     : tab === 'onramp'
-                    ? <><span className="text-emerald-300">$</span> USD → <span className="text-blue-300">◈</span> USDC</>
-                    : <><span className="text-blue-300">◈</span> USDC → <span className="text-emerald-300">$</span> USD</>
+                    ? <><span className="text-teal-300">$</span> USD → <span className="text-teal-300">◈</span> USDC</>
+                    : <><span className="text-teal-300">◈</span> USDC → <span className="text-teal-300">$</span> USD</>
                   }
                 </button>
               </div>
@@ -315,14 +315,14 @@ export default function RampPage() {
           {/* Processing */}
           {(step === 'processing' || step === 'confirming') && (
             <div className="flex flex-col items-center py-8 gap-4">
-              <div className="w-12 h-12 rounded-full bg-vault-bg flex items-center justify-center">
-                <Loader2 className="w-6 h-6 text-vault-accent animate-spin" />
+              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
+                <Loader2 className="w-6 h-6 text-teal-700 animate-spin" />
               </div>
               <div className="text-center">
-                <p className="text-sm text-white font-medium">
+                <p className="text-sm text-ink-900 font-medium">
                   {step === 'processing' ? `Converting ${fromAsset} to ${toAsset}...` : 'Confirming...'}
                 </p>
-                <p className="text-[11px] text-vault-muted mt-1 font-mono">{fmt(parsed)} {fromAsset} → {fmt(parsed)} {toAsset}</p>
+                <p className="text-[11px] text-slate-500 mt-1 font-mono">{fmt(parsed)} {fromAsset} → {fmt(parsed)} {toAsset}</p>
               </div>
             </div>
           )}
@@ -331,54 +331,54 @@ export default function RampPage() {
           {step === 'done' && (
             <div className="py-6 px-4 space-y-4">
               <div className="flex items-center gap-2 justify-center">
-                <CheckCircle className={`w-5 h-5 ${tab === 'onramp' ? 'text-green-400' : 'text-amber-400'}`} />
-                <p className="text-sm text-white font-medium">Conversion Complete</p>
+                <CheckCircle className={`w-5 h-5 ${tab === 'onramp' ? 'text-success-700' : 'text-warning-700'}`} />
+                <p className="text-sm text-ink-900 font-medium">Conversion Complete</p>
               </div>
-              <p className="text-[11px] text-vault-muted text-center font-mono">{fmt(parsed)} {fromAsset} → {fmt(parsed)} {toAsset}</p>
+              <p className="text-[11px] text-slate-500 text-center font-mono">{fmt(parsed)} {fromAsset} → {fmt(parsed)} {toAsset}</p>
 
               {/* On-chain transaction details */}
               {txSig && (
-                <div className="bg-vault-bg rounded-lg p-3 space-y-2 text-xs">
-                  <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold">On-Chain Transaction</p>
+                <div className="bg-slate-100 rounded-[18px] p-3 space-y-2 text-xs">
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">On-Chain Transaction</p>
                   {aminaSender && (
                     <div className="flex justify-between">
-                      <span className="text-vault-muted">Sent by</span>
+                      <span className="text-slate-500">Sent by</span>
                       <a href={`https://solscan.io/account/${aminaSender}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                        className="text-vault-accent hover:underline font-mono flex items-center gap-1">
+                        className="text-teal-700 hover:underline font-mono flex items-center gap-1">
                         {aminaSender.slice(0, 6)}...{aminaSender.slice(-4)} <ExternalLink className="w-2.5 h-2.5" />
                       </a>
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span className="text-vault-muted">Transaction</span>
+                    <span className="text-slate-500">Transaction</span>
                     <a href={`https://solscan.io/tx/${txSig}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                      className="text-vault-accent hover:underline font-mono flex items-center gap-1">
+                      className="text-teal-700 hover:underline font-mono flex items-center gap-1">
                       {txSig.slice(0, 8)}...{txSig.slice(-4)} <ExternalLink className="w-2.5 h-2.5" />
                     </a>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-vault-muted">Amount</span>
-                    <span className="text-blue-400 font-mono">{fmt(parsed)} USDC</span>
+                    <span className="text-slate-500">Amount</span>
+                    <span className="text-teal-700 font-mono">{fmt(parsed)} USDC</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-vault-muted">Status</span>
-                    <span className="text-emerald-400 font-medium">Confirmed</span>
+                    <span className="text-slate-500">Status</span>
+                    <span className="text-success-700 font-medium">Confirmed</span>
                   </div>
                 </div>
               )}
 
               <div className="flex items-center justify-center gap-6 text-xs">
                 <div className="text-center">
-                  <p className="text-vault-muted">Bank</p>
-                  <p className="text-white font-mono font-medium">${fmt(bankBal)}</p>
+                  <p className="text-slate-500">Bank</p>
+                  <p className="text-ink-900 font-mono font-medium">${fmt(bankBal)}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-vault-muted">Wallet</p>
-                  <p className="text-white font-mono font-medium">{usdcBal !== null ? fmt(usdcBal) : '—'} USDC</p>
+                  <p className="text-slate-500">Wallet</p>
+                  <p className="text-ink-900 font-mono font-medium">{usdcBal !== null ? fmt(usdcBal) : '—'} USDC</p>
                 </div>
               </div>
               <button onClick={reset}
-                className="w-full py-2.5 rounded-lg text-xs font-medium bg-vault-bg text-vault-muted hover:text-white transition-colors">
+                className="w-full py-2.5 rounded-[12px] text-xs font-medium bg-slate-100 text-slate-500 hover:text-ink-900 transition-colors">
                 New Conversion
               </button>
             </div>
@@ -387,71 +387,71 @@ export default function RampPage() {
           {/* Error */}
           {step === 'error' && (
             <div className="flex flex-col items-center py-8 gap-3">
-              <p className="text-sm text-red-400">{error}</p>
-              <button onClick={reset} className="text-xs text-vault-muted hover:text-white">Try Again</button>
+              <p className="text-sm text-error-700">{error}</p>
+              <button onClick={reset} className="text-xs text-slate-500 hover:text-ink-900">Try Again</button>
             </div>
           )}
         </div>
       </div>
       {/* Bank Payment Confirmation Modal — same style as vault mandate modal */}
       {showBankModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowBankModal(false)}>
-          <div className="bg-[#111827] border border-vault-border rounded-xl max-w-lg w-full flex flex-col" style={{ maxHeight: '85vh' }} onClick={e => e.stopPropagation()}>
-            <div className="p-5 border-b border-vault-border flex-shrink-0">
-              <h3 className="text-sm font-bold text-white">Confirm Payment</h3>
-              <p className="text-[10px] text-vault-muted mt-1">Review and approve this bank transfer</p>
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" onClick={() => setShowBankModal(false)}>
+          <div className="bg-white border border-slate-200 rounded-[24px] max-w-lg w-full flex flex-col shadow-3" style={{ maxHeight: '85vh' }} onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-slate-200 flex-shrink-0">
+              <h3 className="text-sm font-bold text-ink-900">Confirm Payment</h3>
+              <p className="text-[10px] text-slate-500 mt-1">Review and approve this bank transfer</p>
             </div>
 
             <div className="p-5 overflow-y-auto flex-1">
-              <div className="space-y-4 text-xs text-vault-muted leading-relaxed">
+              <div className="space-y-4 text-xs text-slate-500 leading-relaxed">
                 {/* Amount */}
                 <div className="text-center py-3">
-                  <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold mb-2">Transfer Amount</p>
-                  <p className="text-2xl font-bold font-mono text-white">${fmt(parsed)}</p>
-                  <p className="text-xs text-vault-muted mt-1">from Amina Bank Account → USDC Wallet</p>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Transfer Amount</p>
+                  <p className="text-2xl font-bold font-mono font-display text-ink-900">${fmt(parsed)}</p>
+                  <p className="text-xs text-slate-500 mt-1">from Amina Bank Account → USDC Wallet</p>
                 </div>
 
                 {/* Transfer Details */}
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold mb-2">Transfer Details</p>
-                  <div className="bg-vault-bg rounded-lg p-3 space-y-2">
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Transfer Details</p>
+                  <div className="bg-slate-100 rounded-[18px] p-3 space-y-2">
                     <div className="flex justify-between">
-                      <span className="text-vault-muted">From</span>
-                      <span className="text-white">Amina Bank Account (USD)</span>
+                      <span className="text-slate-500">From</span>
+                      <span className="text-ink-900">Amina Bank Account (USD)</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-vault-muted">To</span>
-                      <span className="text-blue-400 font-mono">{wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : '—'}</span>
+                      <span className="text-slate-500">To</span>
+                      <span className="text-teal-700 font-mono">{wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : '—'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-vault-muted">Currency</span>
-                      <span className="text-blue-400">USDC (Solana)</span>
+                      <span className="text-slate-500">Currency</span>
+                      <span className="text-teal-700">USDC (Solana)</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-vault-muted">Exchange Rate</span>
-                      <span className="text-white">1 <span className="text-emerald-400">USD</span> = 1 <span className="text-blue-400">USDC</span></span>
+                      <span className="text-slate-500">Exchange Rate</span>
+                      <span className="text-ink-900">1 <span className="text-success-700">USD</span> = 1 <span className="text-teal-700">USDC</span></span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-vault-muted">Fee</span>
-                      <span className="text-emerald-400">Waived</span>
+                      <span className="text-slate-500">Fee</span>
+                      <span className="text-success-700">Waived</span>
                     </div>
-                    <div className="flex justify-between border-t border-vault-border pt-2">
-                      <span className="text-vault-muted font-semibold">Total Debit</span>
-                      <span className="text-white font-mono font-semibold">${fmt(parsed)}</span>
+                    <div className="flex justify-between border-t border-slate-200 pt-2">
+                      <span className="text-slate-500 font-semibold">Total Debit</span>
+                      <span className="text-ink-900 font-mono font-semibold">${fmt(parsed)}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Compliance Verification */}
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold mb-2">Compliance Verification</p>
-                  <div className="bg-vault-bg rounded-lg p-3 space-y-2">
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Compliance Verification</p>
+                  <div className="bg-slate-100 rounded-[18px] p-3 space-y-2">
                     {bankChecks.map((c, i) => (
                       <div key={i} className="flex items-center justify-between">
-                        <span className={c.status === 'pass' ? 'text-vault-text' : 'text-vault-muted'}>{c.label}</span>
+                        <span className={c.status === 'pass' ? 'text-ink-900' : 'text-slate-500'}>{c.label}</span>
                         {c.status === 'pass'
-                          ? <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-900/30 text-emerald-400">Passed</span>
-                          : <Loader2 className="w-3 h-3 text-vault-muted animate-spin" />
+                          ? <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-success-100 text-success-700">Passed</span>
+                          : <Loader2 className="w-3 h-3 text-slate-500 animate-spin" />
                         }
                       </div>
                     ))}
@@ -459,22 +459,22 @@ export default function RampPage() {
                 </div>
 
                 {/* Notice */}
-                <div className="bg-amber-900/10 border border-amber-800/30 rounded-lg p-3">
-                  <p className="text-[10px] text-amber-400">
+                <div className="bg-warning-100 border border-warning-700/20 rounded-[18px] p-3">
+                  <p className="text-[10px] text-warning-700">
                     By confirming, you authorise AMINA Bank to debit ${fmt(parsed)} from your fiat account and convert it to USDC stablecoin on the Solana blockchain.
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="p-5 border-t border-vault-border flex-shrink-0 flex justify-end gap-3">
+            <div className="p-5 border-t border-slate-200 flex-shrink-0 flex justify-end gap-3">
               <button onClick={() => setShowBankModal(false)}
-                className="px-4 py-2 text-xs text-vault-muted hover:text-white transition-colors">
+                className="px-4 py-2 text-xs text-slate-500 hover:text-ink-900 transition-colors">
                 Cancel
               </button>
               <button onClick={executeSwap} disabled={!bankApproved}
-                className={`px-5 py-2 text-xs font-semibold rounded transition-all flex items-center gap-1.5 ${
-                  bankApproved ? 'bg-vault-accent hover:bg-blue-400 text-white' : 'bg-vault-border text-vault-muted cursor-not-allowed'
+                className={`px-5 py-2 text-xs font-semibold rounded-[12px] transition-all flex items-center gap-1.5 shadow-1 ${
+                  bankApproved ? 'bg-teal-700 hover:bg-teal-800 text-white' : 'bg-slate-200 text-slate-500 cursor-not-allowed'
                 }`}>
                 {bankApproved ? 'Confirm Payment' : 'Verifying...'}
               </button>

@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   LogOut,
   ChevronDown,
+  ScrollText,
 } from 'lucide-react';
 import { useStore, Role, ROLE_LABELS, AMINA_ROLES, Portal } from '../store/useStore';
 
@@ -21,11 +22,12 @@ const navItems = [
   { path: '/amina/funding', label: 'Vault Funding', icon: Wallet, end: false },
   { path: '/amina/execution', label: 'Execution', icon: TrendingUp, end: false },
   { path: '/amina/compliance', label: 'Compliance', icon: ClipboardCheck, end: false },
+  { path: '/amina/audit-log', label: 'Audit Log', icon: ScrollText, end: false },
   { path: '/amina/emergency', label: 'Emergency Controls', icon: AlertTriangle, end: false },
 ];
 
 const roleAccess: Record<Role, string[]> = {
-  admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance'],
+  admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance', '/amina/audit-log'],
   portfolio_manager: ['/amina', '/amina/execution', '/amina/compliance'],
   compliance_officer: ['/amina', '/amina/compliance'],
   emergency_admin: ['/amina', '/amina/emergency', '/amina/compliance'],
@@ -33,11 +35,11 @@ const roleAccess: Record<Role, string[]> = {
 };
 
 const roleBadgeColor: Record<Role, string> = {
-  admin: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  portfolio_manager: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  compliance_officer: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  emergency_admin: 'bg-red-500/20 text-red-400 border-red-500/30',
-  client_representative: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  admin: 'bg-teal-100 text-teal-700 border-teal-300/40',
+  portfolio_manager: 'bg-success-100 text-success-700 border-success-700/20',
+  compliance_officer: 'bg-warning-100 text-warning-700 border-warning-700/20',
+  emergency_admin: 'bg-error-100 text-error-700 border-error-700/20',
+  client_representative: 'bg-review-100 text-review-700 border-review-700/20',
 };
 
 export default function AdminLayout() {
@@ -52,8 +54,6 @@ export default function AdminLayout() {
   const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newRole = e.target.value as Role;
     setRole(newRole);
-
-    // If current page is not accessible by the new role, redirect to dashboard
     const newAccess = roleAccess[newRole] || [];
     const currentPath = location.pathname;
     if (currentPath !== '/amina' && !newAccess.includes(currentPath)) {
@@ -67,49 +67,49 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-950 text-gray-100">
+    <div className="flex h-screen bg-amina-ops-bg text-ink-900">
       {/* Sidebar */}
-      <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col">
+      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col">
         {/* Header */}
-        <div className="p-5 border-b border-gray-800">
-          <h1 className="text-xl font-bold tracking-wide text-white">AMINA</h1>
-          <p className="text-xs text-gray-400 mt-0.5">Administration Console</p>
+        <div className="p-5 border-b border-slate-200">
+          <h1 className="text-xl font-bold tracking-wide text-teal-800">AMINA</h1>
+          <p className="text-xs text-slate-500 mt-0.5">Administration Console</p>
           <div className="flex gap-2 mt-3">
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-medium">
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 border border-teal-300/40 font-medium">
               Segregated
             </span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20 font-medium">
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-review-100 text-review-700 border border-review-700/20 font-medium">
               Permissioned
             </span>
           </div>
         </div>
 
         {/* Current User Card */}
-        <div className="px-4 py-3 border-b border-gray-800">
-          <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1.5">Signed In As</p>
+        <div className="px-4 py-3 border-b border-slate-200">
+          <p className="text-[10px] uppercase tracking-wider text-slate-400 mb-1.5">Signed In As</p>
           {adminUser && (
-            <p className="text-sm font-medium text-white mb-1">{adminUser.name}</p>
+            <p className="text-sm font-medium text-ink-900 mb-1">{adminUser.name}</p>
           )}
           {adminUser && (
-            <p className="text-[11px] text-gray-500 mb-1.5">{adminUser.email}</p>
+            <p className="text-[11px] text-slate-500 mb-1.5">{adminUser.email}</p>
           )}
           <div className="flex items-center gap-2">
-            <span className={`text-xs px-2 py-0.5 rounded border font-medium ${roleBadgeColor[currentRole]}`}>
+            <span className={`text-xs px-2 py-0.5 rounded-md border font-medium ${roleBadgeColor[currentRole]}`}>
               {ROLE_LABELS[currentRole]}
             </span>
           </div>
         </div>
 
         {/* Role Switcher */}
-        <div className="px-4 py-3 border-b border-gray-800">
-          <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1.5">
+        <div className="px-4 py-3 border-b border-slate-200">
+          <label className="text-[10px] uppercase tracking-wider text-slate-400 block mb-1.5">
             Switch Role (Demo)
           </label>
           <div className="relative">
             <select
               value={currentRole}
               onChange={handleRoleChange}
-              className="w-full bg-gray-800 border border-gray-700 rounded-md text-xs text-gray-200 py-1.5 px-2 pr-7 appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+              className="w-full bg-white border border-slate-200 rounded-md text-xs text-ink-900 py-1.5 px-2 pr-7 appearance-none focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600 cursor-pointer transition-colors"
             >
               {AMINA_ROLES.map((role) => (
                 <option key={role} value={role}>
@@ -117,7 +117,7 @@ export default function AdminLayout() {
                 </option>
               ))}
             </select>
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
           </div>
         </div>
 
@@ -129,10 +129,10 @@ export default function AdminLayout() {
               to={item.path}
               end={item.end}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                `flex items-center gap-3 px-3 py-2 rounded-[12px] text-sm font-medium transition-all ease-amina duration-150 ${
                   isActive
-                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/20'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/60 border border-transparent'
+                    ? 'bg-teal-100 text-teal-800 border-l-2 border-teal-600'
+                    : 'text-slate-600 hover:text-ink-900 hover:bg-slate-100 border-l-2 border-transparent'
                 }`
               }
             >
@@ -143,10 +143,10 @@ export default function AdminLayout() {
         </nav>
 
         {/* Logout */}
-        <div className="px-4 py-3 border-t border-gray-800">
+        <div className="px-4 py-3 border-t border-slate-200">
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            className="flex items-center gap-2 w-full px-3 py-2 rounded-[12px] text-sm text-slate-500 hover:text-error-700 hover:bg-error-100 transition-all ease-amina duration-150"
           >
             <LogOut className="w-4 h-4" />
             Logout
@@ -154,31 +154,31 @@ export default function AdminLayout() {
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t border-gray-800">
-          <p className="text-[10px] text-gray-600 text-center">Solana Devnet | Hackathon Demo v1.0</p>
+        <div className="px-4 py-3 border-t border-slate-200">
+          <p className="text-[10px] text-slate-400 text-center">Solana Devnet | Hackathon Demo v1.0</p>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto bg-gray-950">
+      <main className="flex-1 overflow-y-auto bg-amina-ops-bg">
         <Outlet />
       </main>
 
       {/* Notification Toast */}
       {notification && (
         <div
-          className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-lg shadow-lg border text-sm font-medium transition-all ${
+          className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-[12px] shadow-2 border text-sm font-medium transition-all ease-amina duration-240 ${
             notification.type === 'success'
-              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+              ? 'bg-success-100 border-success-700/20 text-success-700'
               : notification.type === 'error'
-              ? 'bg-red-500/10 border-red-500/30 text-red-400'
-              : 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+              ? 'bg-error-100 border-error-700/20 text-error-700'
+              : 'bg-info-100 border-info-700/20 text-info-700'
           }`}
         >
           <span>{notification.message}</span>
           <button
             onClick={clearNotification}
-            className="text-gray-500 hover:text-gray-300 ml-2"
+            className="text-slate-400 hover:text-ink-900 ml-2"
           >
             &times;
           </button>

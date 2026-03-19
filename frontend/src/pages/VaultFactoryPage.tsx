@@ -49,7 +49,7 @@ const ExplorerLink = ({ type, value }: { type: 'address' | 'tx'; value: string }
     href={`https://solscan.io/${type === 'tx' ? 'tx' : 'account'}/${value}?cluster=devnet`}
     target="_blank"
     rel="noopener noreferrer"
-    className="flex items-center gap-1 text-vault-accent hover:underline font-mono text-xs"
+    className="flex items-center gap-1 text-teal-700 hover:underline font-mono text-xs"
   >
     {truncate(value, 18)}
     <ExternalLink className="w-3 h-3 flex-shrink-0" />
@@ -215,26 +215,26 @@ export default function VaultFactoryPage() {
   const selectedCred = credentials.find((c) => c.credentialId === selectedCredentialId);
 
   const inputClass =
-    'w-full bg-vault-bg border border-vault-border rounded px-3 py-2 text-sm text-vault-text focus:outline-none focus:border-vault-accent transition-colors';
+    'w-full bg-white border border-slate-200 rounded-[12px] px-3 py-2 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600 transition-colors';
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-bold text-white tracking-tight">
+        <h2 className="text-xl font-bold text-ink-900 tracking-tight">
           Segregated Vault Factory
         </h2>
-        <p className="text-sm text-vault-muted mt-1">
+        <p className="text-sm text-slate-700 mt-1">
           Provision individually segregated, non-pooled vaults for institutional clients
         </p>
         <div className="flex gap-2 mt-3">
-          <span className="text-[10px] px-2 py-0.5 bg-blue-900/40 text-blue-400 rounded font-semibold">
+          <span className="text-[10px] px-2 py-0.5 bg-teal-100 text-teal-700 rounded font-semibold">
             Segregated
           </span>
-          <span className="text-[10px] px-2 py-0.5 bg-purple-900/40 text-purple-400 rounded font-semibold">
+          <span className="text-[10px] px-2 py-0.5 bg-purple-100 text-purple-700 rounded font-semibold">
             Non-Pooled
           </span>
-          <span className="text-[10px] px-2 py-0.5 bg-green-900/40 text-green-400 rounded font-semibold">
+          <span className="text-[10px] px-2 py-0.5 bg-success-100 text-success-700 rounded font-semibold">
             Permissioned
           </span>
         </div>
@@ -245,11 +245,11 @@ export default function VaultFactoryPage() {
         <form onSubmit={handleCreate} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[11px] uppercase tracking-wider text-vault-muted font-semibold mb-1.5">
+              <label className="block text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-1.5">
                 Credential ID
               </label>
               {credentials.length === 0 ? (
-                <p className="text-sm text-vault-muted py-2">
+                <p className="text-sm text-slate-500 py-2">
                   No active credentials available. Issue a credential first.
                 </p>
               ) : (
@@ -271,7 +271,7 @@ export default function VaultFactoryPage() {
             </div>
 
             <div>
-              <label className="block text-[11px] uppercase tracking-wider text-vault-muted font-semibold mb-1.5">
+              <label className="block text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-1.5">
                 Base Asset
               </label>
               <input
@@ -284,10 +284,10 @@ export default function VaultFactoryPage() {
           </div>
 
           {selectedCred && (
-            <div className="bg-vault-bg/50 border border-vault-border rounded px-3 py-2.5 text-xs text-vault-muted">
-              Selected credential: <span className="text-vault-text font-medium">{selectedCred.clientReference}</span>
-              <span className="mx-2 text-vault-border">|</span>
-              ID: <span className="font-mono text-vault-text">{selectedCred.credentialId}</span>
+            <div className="bg-teal-50 border border-slate-200 rounded-[12px] px-3 py-2.5 text-xs text-slate-500">
+              Selected credential: <span className="text-ink-900 font-medium">{selectedCred.clientReference}</span>
+              <span className="mx-2 text-slate-200">|</span>
+              ID: <span className="font-mono text-ink-900">{selectedCred.credentialId}</span>
             </div>
           )}
 
@@ -295,7 +295,7 @@ export default function VaultFactoryPage() {
             <button
               type="submit"
               disabled={submitting || credentials.length === 0}
-              className="px-5 py-2 bg-vault-accent text-white text-sm font-semibold rounded hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-5 py-2 bg-teal-700 text-white text-sm font-semibold rounded-[12px] hover:bg-teal-800 transition-all ease-amina duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
               {submitting ? 'Deploying Segregated Program...' : 'Create Segregated Vault'}
@@ -334,34 +334,34 @@ export default function VaultFactoryPage() {
                   {/* Connector line */}
                   {i < liveSteps.length - 1 && (
                     <div className={`absolute left-[19px] top-[40px] w-0.5 h-[calc(100%-24px)] transition-colors duration-500 ${
-                      isDone ? 'bg-green-500/50' : isFailed ? 'bg-red-500/50' : 'bg-vault-border/30'
+                      isDone ? 'bg-success-700/50' : isFailed ? 'bg-error-700/50' : 'bg-slate-200/30'
                     }`} />
                   )}
 
-                  <div className={`flex items-start gap-3 rounded-lg px-3 py-3 transition-all duration-500 ${
-                    isActive ? 'bg-vault-accent/5 ring-1 ring-vault-accent/20' :
-                    isDone ? 'bg-green-900/5' :
-                    isFailed ? 'bg-red-900/5' :
+                  <div className={`flex items-start gap-3 rounded-[12px] px-3 py-3 transition-all duration-500 ${
+                    isActive ? 'bg-teal-50 ring-2 ring-teal-600/20' :
+                    isDone ? 'bg-success-100/30' :
+                    isFailed ? 'bg-error-100/30' :
                     ''
                   }`}>
                     {/* Step icon */}
-                    <div className={`w-[38px] h-[38px] rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-500 ${
-                      isActive ? 'bg-vault-accent/20 ring-2 ring-vault-accent/40' :
-                      isDone ? 'bg-green-500/20' :
-                      isFailed ? 'bg-red-500/20' :
-                      isSkipped ? 'bg-yellow-500/10' :
-                      'bg-vault-border/20'
+                    <div className={`w-[38px] h-[38px] rounded-[12px] flex items-center justify-center flex-shrink-0 transition-all duration-500 ${
+                      isActive ? 'bg-teal-100 ring-2 ring-teal-600/40' :
+                      isDone ? 'bg-success-100' :
+                      isFailed ? 'bg-error-100' :
+                      isSkipped ? 'bg-warning-100' :
+                      'bg-slate-200/20'
                     }`}>
                       {isActive ? (
-                        <Loader2 className="w-4.5 h-4.5 text-vault-accent animate-spin" />
+                        <Loader2 className="w-4.5 h-4.5 text-teal-700 animate-spin" />
                       ) : isDone ? (
-                        <CheckCircle className="w-4.5 h-4.5 text-green-400" />
+                        <CheckCircle className="w-4.5 h-4.5 text-success-700" />
                       ) : isFailed ? (
-                        <XCircle className="w-4.5 h-4.5 text-red-400" />
+                        <XCircle className="w-4.5 h-4.5 text-error-700" />
                       ) : isSkipped ? (
-                        <Clock className="w-4.5 h-4.5 text-yellow-400" />
+                        <Clock className="w-4.5 h-4.5 text-warning-700" />
                       ) : (
-                        <StepIcon className="w-4.5 h-4.5 text-vault-muted/50" />
+                        <StepIcon className="w-4.5 h-4.5 text-slate-700/50" />
                       )}
                     </div>
 
@@ -370,32 +370,32 @@ export default function VaultFactoryPage() {
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <span className={`text-sm font-medium transition-colors duration-300 ${
-                            isActive ? 'text-vault-accent' :
-                            isDone ? 'text-green-400' :
-                            isFailed ? 'text-red-400' :
-                            isPending ? 'text-vault-muted/50' :
-                            'text-yellow-400'
+                            isActive ? 'text-teal-700' :
+                            isDone ? 'text-success-700' :
+                            isFailed ? 'text-error-700' :
+                            isPending ? 'text-slate-700/50' :
+                            'text-warning-700'
                           }`}>
                             {step.label}
                           </span>
-                          <span className="text-[10px] text-vault-muted/40 font-mono">{i + 1}/5</span>
+                          <span className="text-[10px] text-slate-700/40 font-mono">{i + 1}/5</span>
                         </div>
 
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded transition-all duration-300 ${
-                          isActive ? 'bg-vault-accent/20 text-vault-accent animate-pulse' :
-                          isDone ? 'bg-green-900/30 text-green-400' :
-                          isFailed ? 'bg-red-900/30 text-red-400' :
-                          isSkipped ? 'bg-yellow-900/30 text-yellow-400' :
-                          'bg-vault-border/20 text-vault-muted/40'
+                          isActive ? 'bg-teal-100 text-teal-700 animate-pulse' :
+                          isDone ? 'bg-success-100 text-success-700' :
+                          isFailed ? 'bg-error-100 text-error-700' :
+                          isSkipped ? 'bg-warning-100 text-warning-700' :
+                          'bg-slate-200/20 text-slate-700/40'
                         }`}>
                           {isActive ? 'in progress' : step.status}
                         </span>
                       </div>
 
                       <p className={`text-[11px] mt-0.5 transition-colors duration-300 ${
-                        isActive ? 'text-vault-muted' :
-                        isPending ? 'text-vault-muted/30' :
-                        'text-vault-muted/60'
+                        isActive ? 'text-slate-700' :
+                        isPending ? 'text-slate-700/30' :
+                        'text-slate-700/60'
                       }`}>
                         {step.detail || step.description}
                       </p>
@@ -405,7 +405,7 @@ export default function VaultFactoryPage() {
                         <div className="flex gap-3 mt-1.5">
                           {step.txSignature && (
                             <a href={`https://solscan.io/tx/${step.txSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                              className="flex items-center gap-0.5 text-[10px] text-vault-accent hover:underline">
+                              className="flex items-center gap-0.5 text-[10px] text-teal-700 hover:underline">
                               View Tx <ExternalLink className="w-2.5 h-2.5" />
                             </a>
                           )}
@@ -420,8 +420,8 @@ export default function VaultFactoryPage() {
 
                       {/* Progress bar for active step */}
                       {isActive && (
-                        <div className="mt-2 h-1 bg-vault-border/20 rounded-full overflow-hidden">
-                          <div className="h-full bg-vault-accent/60 rounded-full animate-pulse" style={{ width: '60%' }} />
+                        <div className="mt-2 h-1 bg-slate-200/20 rounded-full overflow-hidden">
+                          <div className="h-full bg-teal-700/60 rounded-full animate-pulse" style={{ width: '60%' }} />
                         </div>
                       )}
                     </div>
@@ -433,8 +433,8 @@ export default function VaultFactoryPage() {
 
           {/* Success summary after completion */}
           {!submitting && lastCreated && (
-            <div className="mt-4 pt-4 border-t border-vault-border/30">
-              <div className="flex items-center gap-2 text-green-400 mb-3">
+            <div className="mt-4 pt-4 border-t border-slate-200/30">
+              <div className="flex items-center gap-2 text-success-700 mb-3">
                 <CheckCircle className="w-5 h-5" />
                 <span className="text-sm font-medium">
                   Segregated vault {lastCreated.vaultId} deployed with unique program
@@ -442,8 +442,8 @@ export default function VaultFactoryPage() {
               </div>
 
             {/* Vault Details */}
-            <div className="bg-vault-bg rounded-lg p-4 space-y-2.5">
-              <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold mb-1">Vault Details</p>
+            <div className="bg-slate-100 rounded-[18px] p-4 space-y-2.5">
+              <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Vault Details</p>
               {[
                 ['Vault ID', lastCreated.vaultId],
                 ['Credential ID', lastCreated.credentialId],
@@ -452,8 +452,8 @@ export default function VaultFactoryPage() {
                 ['Status', lastCreated.status],
               ].map(([label, value]) => (
                 <div key={label} className="flex justify-between text-sm">
-                  <span className="text-vault-muted">{label}</span>
-                  <span className="text-white font-mono text-xs">
+                  <span className="text-slate-500">{label}</span>
+                  <span className="text-ink-900 font-mono text-xs">
                     {typeof value === 'string' && value.length > 20 ? truncate(value, 20) : value}
                   </span>
                 </div>
@@ -461,35 +461,35 @@ export default function VaultFactoryPage() {
 
               {lastCreated.programId && (
                 <div className="flex justify-between text-sm items-center">
-                  <span className="text-vault-muted">Contract Address</span>
+                  <span className="text-slate-500">Contract Address</span>
                   <ExplorerLink type="address" value={lastCreated.programId} />
                 </div>
               )}
 
               {lastCreated.aminaBankWallet && (
                 <div className="flex justify-between text-sm items-center">
-                  <span className="text-vault-muted">Deployed by (Amina Bank)</span>
+                  <span className="text-slate-500">Deployed by (Amina Bank)</span>
                   <ExplorerLink type="address" value={lastCreated.aminaBankWallet} />
                 </div>
               )}
 
               {lastCreated.onChainAddress && (
                 <div className="flex justify-between text-sm items-center">
-                  <span className="text-vault-muted">Vault PDA (On-Chain)</span>
+                  <span className="text-slate-500">Vault PDA (On-Chain)</span>
                   <ExplorerLink type="address" value={lastCreated.onChainAddress} />
                 </div>
               )}
 
               {lastCreated.credentialPda && (
                 <div className="flex justify-between text-sm items-center">
-                  <span className="text-vault-muted">Credential PDA</span>
+                  <span className="text-slate-500">Credential PDA</span>
                   <ExplorerLink type="address" value={lastCreated.credentialPda} />
                 </div>
               )}
 
               {lastCreated.vaultAttestationPda && (
                 <div className="flex justify-between text-sm items-center">
-                  <span className="text-vault-muted">SAS Attestation PDA</span>
+                  <span className="text-slate-500">SAS Attestation PDA</span>
                   <ExplorerLink type="address" value={lastCreated.vaultAttestationPda} />
                 </div>
               )}
@@ -499,19 +499,19 @@ export default function VaultFactoryPage() {
             <div className="flex flex-wrap gap-2 mt-3">
               {lastCreated.programId && (
                 <a href={`https://solscan.io/account/${lastCreated.programId}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-xs text-white hover:underline bg-vault-border/50 px-3 py-1.5 rounded">
+                  className="flex items-center gap-1.5 text-xs text-ink-900 hover:underline bg-slate-100 px-3 py-1.5 rounded-[12px]">
                   <ExternalLink className="w-3 h-3" /> View Contract
                 </a>
               )}
               {lastCreated.onChainAddress && (
                 <a href={`https://solscan.io/account/${lastCreated.onChainAddress}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-xs text-vault-accent hover:underline bg-vault-accent/10 px-3 py-1.5 rounded">
+                  className="flex items-center gap-1.5 text-xs text-teal-700 hover:underline bg-teal-700/10 px-3 py-1.5 rounded-[12px]">
                   <ExternalLink className="w-3 h-3" /> View Vault Account
                 </a>
               )}
               {lastCreated.vaultProgramTxSig && (
                 <a href={`https://solscan.io/tx/${lastCreated.vaultProgramTxSig}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-xs text-green-400 hover:underline bg-green-900/20 px-3 py-1.5 rounded">
+                  className="flex items-center gap-1.5 text-xs text-success-700 hover:underline bg-success-100 px-3 py-1.5 rounded-[12px]">
                   <ExternalLink className="w-3 h-3" /> View Deploy Tx
                 </a>
               )}
@@ -519,7 +519,7 @@ export default function VaultFactoryPage() {
 
             <button
               onClick={() => { setLastCreated(null); setLiveSteps([]); }}
-              className="text-xs text-vault-muted hover:text-white transition-colors mt-2"
+              className="text-xs text-slate-500 hover:text-ink-900 transition-colors mt-2"
             >
               Dismiss
             </button>
@@ -531,27 +531,27 @@ export default function VaultFactoryPage() {
       {/* Vault Summary Cards */}
       <Card title="Provisioned Vaults" subtitle="Individually segregated vault instances">
         {loading ? (
-          <p className="text-sm text-vault-muted">Loading vaults...</p>
+          <p className="text-sm text-slate-500">Loading vaults...</p>
         ) : vaults.length === 0 ? (
-          <p className="text-sm text-vault-muted">No vaults created yet.</p>
+          <p className="text-sm text-slate-500">No vaults created yet.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {vaults.map((v) => (
               <div
                 key={v.vaultId}
-                className="bg-vault-bg border border-vault-border rounded-lg p-4 hover:border-vault-accent/40 transition-colors"
+                className="bg-white border border-slate-200 rounded-[18px] p-4 hover:border-teal-700/40 transition-colors shadow-1"
               >
                 <div className="flex items-center justify-between mb-3">
                   <StatusBadge status={v.status} size="md" />
-                  <span className="text-[10px] font-semibold text-vault-muted uppercase tracking-wider">
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                     {v.baseAsset}
                   </span>
                 </div>
 
                 <div className="space-y-2">
                   <div>
-                    <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold">Vault ID</p>
-                    <p className="text-xs font-mono text-vault-text mt-0.5">
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Vault ID</p>
+                    <p className="text-xs font-mono text-ink-900 mt-0.5">
                       {v.vaultId.length > 20
                         ? `${v.vaultId.slice(0, 8)}...${v.vaultId.slice(-6)}`
                         : v.vaultId}
@@ -559,8 +559,8 @@ export default function VaultFactoryPage() {
                   </div>
 
                   <div>
-                    <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold">Credential ID</p>
-                    <p className="text-xs font-mono text-vault-text mt-0.5">
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Credential ID</p>
+                    <p className="text-xs font-mono text-ink-900 mt-0.5">
                       {v.credentialId.length > 20
                         ? `${v.credentialId.slice(0, 8)}...${v.credentialId.slice(-6)}`
                         : v.credentialId}
@@ -569,21 +569,21 @@ export default function VaultFactoryPage() {
 
                   {v.clientReference && (
                     <div>
-                      <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold">Client</p>
-                      <p className="text-xs text-vault-text mt-0.5">{v.clientReference}</p>
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Client</p>
+                      <p className="text-xs text-ink-900 mt-0.5">{v.clientReference}</p>
                     </div>
                   )}
 
                   {v.ownerWallet && (
                     <div>
-                      <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold">Owner Wallet</p>
-                      <p className="text-xs font-mono text-vault-muted mt-0.5">{truncate(v.ownerWallet)}</p>
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Owner Wallet</p>
+                      <p className="text-xs font-mono text-slate-500 mt-0.5">{truncate(v.ownerWallet)}</p>
                     </div>
                   )}
 
                   {v.programId && (
                     <div>
-                      <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold">Unique Program ID</p>
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Unique Program ID</p>
                       <div className="mt-0.5">
                         <ExplorerLink type="address" value={v.programId} />
                       </div>
@@ -592,7 +592,7 @@ export default function VaultFactoryPage() {
 
                   {v.onChainAddress && (
                     <div>
-                      <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold">On-Chain</p>
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">On-Chain</p>
                       <div className="mt-0.5">
                         <ExplorerLink type="address" value={v.onChainAddress} />
                       </div>
@@ -605,7 +605,7 @@ export default function VaultFactoryPage() {
                     useStore.getState().setActiveVaultId(v.vaultId);
                     notify('info', `Active vault set to ${v.vaultId.slice(0, 8)}...`);
                   }}
-                  className="mt-3 w-full text-xs text-vault-accent hover:text-white border border-vault-accent/30 hover:bg-vault-accent/10 rounded py-1.5 font-medium transition-colors"
+                  className="mt-3 w-full text-xs text-teal-700 hover:text-ink-900 border border-teal-700/30 hover:bg-teal-50 rounded-[12px] py-1.5 font-medium transition-all ease-amina duration-150"
                 >
                   Set as Active Vault
                 </button>

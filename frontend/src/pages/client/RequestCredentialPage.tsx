@@ -80,8 +80,8 @@ export default function RequestCredentialPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-white">Request Credential Access</h1>
-        <p className="text-sm text-vault-muted mt-1">
+        <h1 className="text-xl font-bold font-display text-ink-900">Request Credential Access</h1>
+        <p className="text-sm text-slate-500 mt-1">
           Link your wallet to an institutional credential issued by AMINA
         </p>
       </div>
@@ -90,16 +90,16 @@ export default function RequestCredentialPage() {
       {hasCredential && (
         <Card title="Credential Status" subtitle="Your wallet is linked to an active credential">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-green-400" />
+            <div className="w-10 h-10 rounded-[18px] bg-success-100 flex items-center justify-center">
+              <CheckCircle className="w-5 h-5 text-success-700" />
             </div>
             <div>
-              <p className="text-sm font-medium text-white">Credential Active</p>
-              <p className="text-xs text-vault-muted">Your wallet is verified and linked</p>
+              <p className="text-sm font-medium text-ink-900">Credential Active</p>
+              <p className="text-xs text-slate-500">Your wallet is verified and linked</p>
             </div>
             <StatusBadge status="active" size="md" />
           </div>
-          <div className="bg-vault-bg rounded-lg p-4 space-y-2.5">
+          <div className="bg-slate-100 rounded-[18px] p-6 space-y-2.5">
             {[
               ['Wallet', walletAddress.length > 20 ? `${walletAddress.slice(0, 8)}...${walletAddress.slice(-8)}` : walletAddress],
               ['Credential ID', clientInfo?.credentialId || '—'],
@@ -108,20 +108,20 @@ export default function RequestCredentialPage() {
               ['Risk Tier', clientInfo?.riskTier || '—'],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between text-sm">
-                <span className="text-vault-muted">{label}</span>
-                <span className="text-white font-mono text-xs">{value}</span>
+                <span className="text-slate-500">{label}</span>
+                <span className="text-ink-900 font-mono text-xs">{value}</span>
               </div>
             ))}
 
             {/* On-chain attestation links */}
             {credentialDetail?.attestationPda && (
               <div className="flex justify-between text-sm items-center">
-                <span className="text-vault-muted">SAS Attestation</span>
+                <span className="text-slate-500">SAS Attestation</span>
                 <a
                   href={`https://solscan.io/account/${credentialDetail.attestationPda}?cluster=devnet`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-vault-accent hover:underline font-mono text-xs"
+                  className="flex items-center gap-1 text-teal-700 hover:underline font-mono text-xs"
                 >
                   {credentialDetail.attestationPda.slice(0, 6)}...{credentialDetail.attestationPda.slice(-6)}
                   <ExternalLink className="w-3 h-3" />
@@ -131,12 +131,12 @@ export default function RequestCredentialPage() {
 
             {credentialDetail?.attestationTxSig && (
               <div className="flex justify-between text-sm items-center">
-                <span className="text-vault-muted">Attestation Tx</span>
+                <span className="text-slate-500">Attestation Tx</span>
                 <a
                   href={`https://solscan.io/tx/${credentialDetail.attestationTxSig}?cluster=devnet`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-green-400 hover:underline font-mono text-xs"
+                  className="flex items-center gap-1 text-success-700 hover:underline font-mono text-xs"
                 >
                   {credentialDetail.attestationTxSig.slice(0, 6)}...{credentialDetail.attestationTxSig.slice(-6)}
                   <ExternalLink className="w-3 h-3" />
@@ -146,12 +146,12 @@ export default function RequestCredentialPage() {
 
             {/* Wallet explorer link */}
             <div className="flex justify-between text-sm items-center">
-              <span className="text-vault-muted">Wallet on Explorer</span>
+              <span className="text-slate-500">Wallet on Explorer</span>
               <a
                 href={`https://solscan.io/account/${walletAddress}?cluster=devnet`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-vault-muted hover:text-vault-accent font-mono text-xs"
+                className="flex items-center gap-1 text-slate-500 hover:text-teal-700 font-mono text-xs"
               >
                 View <ExternalLink className="w-3 h-3" />
               </a>
@@ -163,13 +163,13 @@ export default function RequestCredentialPage() {
             <div className="flex gap-3 mt-3">
               {credentialDetail.attestationPda && (
                 <a href={`https://solscan.io/account/${credentialDetail.attestationPda}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-xs text-vault-accent hover:underline bg-vault-accent/10 px-3 py-1.5 rounded">
+                  className="flex items-center gap-1.5 text-xs text-teal-700 hover:underline bg-teal-100 px-3 py-1.5 rounded-[12px]">
                   <ExternalLink className="w-3 h-3" /> View Attestation on Solana
                 </a>
               )}
               {credentialDetail.attestationTxSig && (
                 <a href={`https://solscan.io/tx/${credentialDetail.attestationTxSig}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-xs text-green-400 hover:underline bg-green-900/20 px-3 py-1.5 rounded">
+                  className="flex items-center gap-1.5 text-xs text-success-700 hover:underline bg-success-100 px-3 py-1.5 rounded-[12px]">
                   <ExternalLink className="w-3 h-3" /> View Transaction
                 </a>
               )}
@@ -177,8 +177,8 @@ export default function RequestCredentialPage() {
           )}
 
           {!credentialDetail?.attestationPda && (
-            <div className="mt-3 px-3 py-2 rounded bg-yellow-900/15 border border-yellow-800/40">
-              <p className="text-xs text-yellow-400">On-chain SAS attestation not yet created for this credential. Contact AMINA admin to issue an on-chain attestation.</p>
+            <div className="mt-3 px-3 py-2 rounded-[18px] bg-warning-100 border border-warning-700/20">
+              <p className="text-xs text-warning-700">On-chain SAS attestation not yet created for this credential. Contact AMINA admin to issue an on-chain attestation.</p>
             </div>
           )}
         </Card>
@@ -189,11 +189,11 @@ export default function RequestCredentialPage() {
         <>
           {/* Current Wallet */}
           <Card title="Connected Wallet" subtitle="This wallet will be bound to your credential">
-            <div className="bg-vault-bg rounded-lg p-3 flex items-center gap-3">
-              <Shield className="w-5 h-5 text-vault-accent flex-shrink-0" />
+            <div className="bg-slate-100 rounded-[18px] p-3 flex items-center gap-3">
+              <Shield className="w-5 h-5 text-teal-700 flex-shrink-0" />
               <div>
-                <p className="text-xs text-vault-muted">Wallet Address</p>
-                <p className="text-sm font-mono text-white">{walletAddress}</p>
+                <p className="text-xs text-slate-500">Wallet Address</p>
+                <p className="text-sm font-mono text-ink-900">{walletAddress}</p>
               </div>
             </div>
           </Card>
@@ -207,12 +207,12 @@ export default function RequestCredentialPage() {
                 { step: 3, title: 'Bind Wallet', desc: 'Your Solana wallet is bound to the credential, giving you access to your segregated vault' },
               ].map(({ step, title, desc }) => (
                 <div key={step} className="flex items-start gap-3">
-                  <div className="w-7 h-7 rounded-full bg-vault-accent/20 text-vault-accent flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
+                  <div className="w-7 h-7 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
                     {step}
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-white">{title}</p>
-                    <p className="text-xs text-vault-muted">{desc}</p>
+                    <p className="text-sm font-medium text-ink-900">{title}</p>
+                    <p className="text-xs text-slate-500">{desc}</p>
                   </div>
                 </div>
               ))}
@@ -228,12 +228,12 @@ export default function RequestCredentialPage() {
                   value={clientRef}
                   onChange={(e) => setClientRef(e.target.value)}
                   placeholder="e.g. INST-2048"
-                  className="flex-1 bg-vault-bg border border-vault-border rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-vault-accent"
+                  className="flex-1 bg-white border border-slate-200 rounded-[12px] px-3 py-2.5 text-sm text-ink-900 placeholder-slate-400 focus:outline-none focus:ring-teal-600/20 focus:border-teal-600"
                   onKeyDown={(e) => e.key === 'Enter' && handleLookup()}
                 />
                 <button
                   onClick={handleLookup}
-                  className="bg-vault-accent hover:bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                  className="bg-teal-700 hover:bg-teal-800 text-white px-5 py-2.5 rounded-[12px] text-sm font-medium transition-colors flex items-center gap-2 shadow-1"
                 >
                   <Search className="w-4 h-4" />
                   Look Up
@@ -241,7 +241,7 @@ export default function RequestCredentialPage() {
               </div>
 
               {lookupError && (
-                <div className="flex items-center gap-2 text-red-400 text-sm">
+                <div className="flex items-center gap-2 text-error-700 text-sm">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
                   {lookupError}
                 </div>
@@ -249,12 +249,12 @@ export default function RequestCredentialPage() {
 
               {/* Lookup Result */}
               {lookupResult && (
-                <div className="border border-vault-border rounded-lg p-4 space-y-3">
-                  <div className="flex items-center gap-2 text-green-400 mb-1">
+                <div className="border border-slate-200 rounded-[18px] p-4 space-y-3 shadow-1">
+                  <div className="flex items-center gap-2 text-success-700 mb-1">
                     <CheckCircle className="w-4 h-4" />
                     <span className="text-sm font-medium">Credential Found</span>
                   </div>
-                  <div className="bg-vault-bg rounded-lg p-3 space-y-2">
+                  <div className="bg-slate-100 rounded-[18px] p-3 space-y-2">
                     {[
                       ['Credential ID', lookupResult.credentialId],
                       ['Client Reference', lookupResult.clientReference],
@@ -262,20 +262,20 @@ export default function RequestCredentialPage() {
                       ['Risk Tier', lookupResult.riskTier],
                     ].map(([label, value]) => (
                       <div key={label} className="flex justify-between text-sm">
-                        <span className="text-vault-muted">{label}</span>
-                        <span className="text-white font-mono text-xs">{value}</span>
+                        <span className="text-slate-500">{label}</span>
+                        <span className="text-ink-900 font-mono text-xs">{value}</span>
                       </div>
                     ))}
                   </div>
 
                   <div className="pt-2">
-                    <p className="text-xs text-vault-muted mb-3">
+                    <p className="text-xs text-slate-500 mb-3">
                       Confirm this is your credential. Clicking below will bind your connected wallet to this credential permanently.
                     </p>
                     <button
                       onClick={handleBind}
                       disabled={binding}
-                      className="w-full bg-vault-accent hover:bg-blue-600 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                      className="w-full bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white font-semibold py-3 rounded-[12px] transition-colors flex items-center justify-center gap-2 shadow-1"
                     >
                       {binding ? (
                         <><Loader2 className="w-4 h-4 animate-spin" /> Binding Wallet...</>
@@ -295,15 +295,15 @@ export default function RequestCredentialPage() {
       {bound && boundResult && (
         <Card title="Credential Bound Successfully" subtitle="Your wallet is now linked to your institutional credential">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-green-400" />
+            <div className="w-10 h-10 rounded-[18px] bg-success-100 flex items-center justify-center">
+              <CheckCircle className="w-5 h-5 text-success-700" />
             </div>
             <div>
-              <p className="text-sm font-medium text-white">Wallet Bound</p>
-              <p className="text-xs text-vault-muted">You now have full access to your vault</p>
+              <p className="text-sm font-medium text-ink-900">Wallet Bound</p>
+              <p className="text-xs text-slate-500">You now have full access to your vault</p>
             </div>
           </div>
-          <div className="bg-vault-bg rounded-lg p-4 space-y-2">
+          <div className="bg-slate-100 rounded-[18px] p-6 space-y-2">
             {[
               ['Credential ID', boundResult.credential?.credentialId],
               ['Client Reference', boundResult.credential?.clientReference],
@@ -311,12 +311,12 @@ export default function RequestCredentialPage() {
               ...(boundResult.vault ? [['Vault', boundResult.vault.vaultId]] : []),
             ].map(([label, value]) => (
               <div key={label as string} className="flex justify-between text-sm">
-                <span className="text-vault-muted">{label}</span>
-                <span className="text-white font-mono text-xs">{value}</span>
+                <span className="text-slate-500">{label}</span>
+                <span className="text-ink-900 font-mono text-xs">{value}</span>
               </div>
             ))}
           </div>
-          <p className="text-xs text-vault-muted mt-3">
+          <p className="text-xs text-slate-500 mt-3">
             Navigate to Overview to see your vault status and balances.
           </p>
         </Card>

@@ -18,6 +18,7 @@ import FundingPage from './pages/FundingPage';
 import ExecutionPage from './pages/ExecutionPage';
 import CompliancePage from './pages/CompliancePage';
 import EmergencyPage from './pages/EmergencyPage';
+import AuditLogPage from './pages/admin/AuditLogPage';
 
 // Client pages
 import VaultOverviewPage from './pages/client/VaultOverviewPage';
@@ -30,7 +31,7 @@ import VaultDetailPage from './pages/client/VaultDetailPage';
 
 // Role → allowed routes
 const roleAccess: Record<Role, string[]> = {
-  admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance'],
+  admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance', '/amina/audit-log'],
   portfolio_manager: ['/amina', '/amina/execution', '/amina/compliance'],
   compliance_officer: ['/amina', '/amina/compliance'],
   emergency_admin: ['/amina', '/amina/emergency', '/amina/compliance'],
@@ -70,6 +71,7 @@ function AccessDenied({ role, route }: { role: Role; route: string }) {
       { label: 'Mandate Config', path: '/amina/mandate' },
       { label: 'Vault Funding', path: '/amina/funding' },
       { label: 'Compliance', path: '/amina/compliance' },
+      { label: 'Audit Log', path: '/amina/audit-log' },
     ],
     portfolio_manager: [
       { label: 'Execution', path: '/amina/execution' },
@@ -88,34 +90,34 @@ function AccessDenied({ role, route }: { role: Role; route: string }) {
   return (
     <div className="p-6 flex items-center justify-center min-h-[60vh]">
       <div className="max-w-md text-center space-y-5">
-        <div className="w-14 h-14 rounded-full bg-red-900/20 border border-red-800/40 flex items-center justify-center mx-auto">
-          <svg className="w-7 h-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <div className="w-14 h-14 rounded-full bg-error-100 border border-error-700/20 flex items-center justify-center mx-auto">
+          <svg className="w-7 h-7 text-error-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
           </svg>
         </div>
 
         <div>
-          <h2 className="text-lg font-bold text-white">Access Restricted</h2>
-          <p className="text-sm text-gray-400 mt-1">
-            Your current role <span className="text-white font-medium">({roleLabels[role]})</span> does not have permission to access <span className="text-white font-mono text-xs">{route}</span>.
+          <h2 className="text-lg font-bold text-ink-900">Access Restricted</h2>
+          <p className="text-sm text-slate-700 mt-1">
+            Your current role <span className="text-ink-900 font-medium">({roleLabels[role]})</span> does not have permission to access <span className="text-ink-900 font-mono text-xs">{route}</span>.
           </p>
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 text-left">
-          <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-2">Pages available to you</p>
+        <div className="bg-white border border-slate-200 rounded-[18px] p-4 text-left shadow-1">
+          <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Pages available to you</p>
           <div className="space-y-1.5">
-            <a href="/amina" className="flex items-center gap-2 text-xs text-gray-300 hover:text-blue-400 transition-colors">
-              <span className="w-1 h-1 rounded-full bg-blue-400" /> Dashboard
+            <a href="/amina" className="flex items-center gap-2 text-xs text-slate-700 hover:text-teal-700 transition-colors">
+              <span className="w-1 h-1 rounded-full bg-teal-700" /> Dashboard
             </a>
             {(rolePages[role] || []).map((p) => (
-              <a key={p.path} href={p.path} className="flex items-center gap-2 text-xs text-gray-300 hover:text-blue-400 transition-colors">
-                <span className="w-1 h-1 rounded-full bg-blue-400" /> {p.label}
+              <a key={p.path} href={p.path} className="flex items-center gap-2 text-xs text-slate-700 hover:text-teal-700 transition-colors">
+                <span className="w-1 h-1 rounded-full bg-teal-700" /> {p.label}
               </a>
             ))}
           </div>
         </div>
 
-        <p className="text-[10px] text-gray-600">
+        <p className="text-[10px] text-slate-500">
           Switch roles from the sidebar to access other areas, or contact your administrator.
         </p>
       </div>
@@ -147,6 +149,7 @@ export default function App() {
         <Route path="execution" element={<RequireRole route="/amina/execution"><ExecutionPage /></RequireRole>} />
         <Route path="compliance" element={<RequireRole route="/amina/compliance"><CompliancePage /></RequireRole>} />
         <Route path="emergency" element={<RequireRole route="/amina/emergency"><EmergencyPage /></RequireRole>} />
+        <Route path="audit-log" element={<RequireRole route="/amina/audit-log"><AuditLogPage /></RequireRole>} />
       </Route>
 
       {/* Client routes */}

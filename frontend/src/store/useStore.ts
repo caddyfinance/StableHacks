@@ -77,7 +77,17 @@ export const useStore = create<AppState>((set) => ({
     isAuthenticated: false, portal: null, currentRole: 'admin',
     activeVaultId: null, clientInfo: null, adminUser: null,
   }),
-  setRole: (role) => set({ currentRole: role }),
+  setRole: (role) => {
+    const rolePersonas: Record<Role, { id: string; email: string; name: string }> = {
+      admin: { id: 'admin-1', email: 'admin@amina.bank', name: 'Sarah Chen' },
+      portfolio_manager: { id: 'pm-1', email: 'pm@amina.bank', name: 'Marcus Weber' },
+      compliance_officer: { id: 'co-1', email: 'compliance@amina.bank', name: 'Elena Rossi' },
+      emergency_admin: { id: 'ea-1', email: 'emergency@amina.bank', name: 'James Park' },
+      client_representative: { id: 'cr-1', email: 'client@amina.bank', name: 'Client User' },
+    };
+    const persona = rolePersonas[role];
+    set({ currentRole: role, adminUser: { ...persona, role } });
+  },
   setActiveVaultId: (id) => set({ activeVaultId: id }),
   notify: (type, message) => {
     set({ notification: { type, message } });

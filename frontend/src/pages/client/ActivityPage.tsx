@@ -42,12 +42,12 @@ function formatTimestamp(iso: string): string {
 function resultBadge(result: string) {
   const r = result?.toLowerCase();
   if (r === 'success' || r === 'approved')
-    return <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-green-900/30 text-green-400">Success</span>;
+    return <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-success-100 text-success-700">Success</span>;
   if (r === 'failure' || r === 'failed' || r === 'rejected' || r === 'blocked')
-    return <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-900/30 text-red-400">Failed</span>;
+    return <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-error-100 text-error-700">Failed</span>;
   if (r === 'pending')
-    return <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-yellow-900/30 text-yellow-400">Pending</span>;
-  return <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-vault-border text-vault-muted">{result}</span>;
+    return <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-warning-100 text-warning-700">Pending</span>;
+  return <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-500">{result}</span>;
 }
 
 function actionLabel(actionType: string): string {
@@ -120,10 +120,10 @@ export default function ActivityPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">Activity Log</h1>
-          <p className="text-sm text-vault-muted mt-1">Complete audit trail of vault operations</p>
+          <h1 className="text-xl font-bold font-display text-ink-900">Activity Log</h1>
+          <p className="text-sm text-slate-500 mt-1">Complete audit trail of vault operations</p>
         </div>
-        <button onClick={loadData} className="flex items-center gap-1.5 text-xs text-vault-muted hover:text-vault-accent transition-colors">
+        <button onClick={loadData} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-teal-700 transition-colors">
           <RefreshCw className="w-3.5 h-3.5" /> Refresh
         </button>
       </div>
@@ -131,45 +131,45 @@ export default function ActivityPage() {
       <Card title="Transaction History" subtitle={`${filtered.length} event${filtered.length !== 1 ? 's' : ''}`}>
         <div className="flex items-center gap-3 mb-4">
           <select value={filterAction} onChange={e => setFilterAction(e.target.value)}
-            className="px-3 py-1.5 rounded bg-vault-bg border border-vault-border text-white text-xs focus:outline-none focus:border-vault-accent transition-colors">
+            className="px-3 py-1.5 rounded-[12px] bg-white border border-slate-200 text-ink-900 text-xs focus:outline-none focus:ring-teal-600/20 focus:border-teal-600 transition-colors">
             {ACTION_FILTERS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
           </select>
         </div>
 
         {loading ? (
-          <p className="text-xs text-vault-muted animate-pulse py-4">Loading...</p>
+          <p className="text-xs text-slate-500 animate-pulse py-4">Loading...</p>
         ) : filtered.length === 0 ? (
-          <p className="text-sm text-vault-muted py-8 text-center">No events found.</p>
+          <p className="text-sm text-slate-500 py-8 text-center">No events found.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-[10px] uppercase tracking-wider text-vault-muted">
-                  <th className="text-left py-2.5 pr-3 font-semibold border-b border-vault-border">Date</th>
-                  <th className="text-left py-2.5 pr-3 font-semibold border-b border-vault-border">Action</th>
-                  <th className="text-right py-2.5 pr-3 font-semibold border-b border-vault-border">Amount</th>
-                  <th className="text-left py-2.5 pr-3 font-semibold border-b border-vault-border">Status</th>
-                  <th className="text-left py-2.5 pr-3 font-semibold border-b border-vault-border">Explorer</th>
-                  <th className="text-left py-2.5 font-semibold border-b border-vault-border">Details</th>
+                <tr className="text-[10px] uppercase tracking-wider text-slate-500">
+                  <th className="text-left py-2.5 pr-3 font-semibold border-b border-slate-200">Date</th>
+                  <th className="text-left py-2.5 pr-3 font-semibold border-b border-slate-200">Action</th>
+                  <th className="text-right py-2.5 pr-3 font-semibold border-b border-slate-200">Amount</th>
+                  <th className="text-left py-2.5 pr-3 font-semibold border-b border-slate-200">Status</th>
+                  <th className="text-left py-2.5 pr-3 font-semibold border-b border-slate-200">Explorer</th>
+                  <th className="text-left py-2.5 font-semibold border-b border-slate-200">Details</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((evt, i) => (
-                  <tr key={evt.eventId} className={`hover:bg-white/[0.015] transition-colors ${i < filtered.length - 1 ? 'border-b border-vault-border/30' : ''}`}>
-                    <td className="py-3 pr-3 text-vault-muted whitespace-nowrap align-top">
+                  <tr key={evt.eventId} className={`hover:bg-teal-50 transition-colors ${i < filtered.length - 1 ? 'border-b border-slate-200/60' : ''}`}>
+                    <td className="py-3 pr-3 text-slate-500 whitespace-nowrap align-top">
                       {formatTimestamp(evt.timestamp ?? evt.createdAt)}
                     </td>
                     <td className="py-3 pr-3 align-top">
-                      <span className="text-white font-medium">{actionLabel(evt.actionType)}</span>
+                      <span className="text-ink-900 font-medium">{actionLabel(evt.actionType)}</span>
                       {evt.vaultId && vaults.length > 1 && (
-                        <span className="text-vault-muted font-mono ml-1.5">{evt.vaultId}</span>
+                        <span className="text-slate-500 font-mono ml-1.5">{evt.vaultId}</span>
                       )}
                     </td>
                     <td className="py-3 pr-3 text-right font-mono align-top">
                       {evt.amount != null && evt.amount > 0 ? (
-                        <span className={evt.actionType?.includes('REDEMPTION') ? 'text-amber-400' : 'text-white'}>
+                        <span className={evt.actionType?.includes('REDEMPTION') ? 'text-warning-700' : 'text-ink-900'}>
                           {evt.actionType?.includes('REDEMPTION') ? '-' : '+'}{fmt(evt.amount)}
-                          {evt.asset ? <span className="text-vault-muted ml-1">{evt.asset}</span> : null}
+                          {evt.asset ? <span className="text-slate-500 ml-1">{evt.asset}</span> : null}
                         </span>
                       ) : null}
                     </td>
@@ -179,17 +179,17 @@ export default function ActivityPage() {
                     <td className="py-3 pr-3 align-top">
                       {evt.txSignature ? (
                         <a href={`https://solscan.io/tx/${evt.txSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[10px] text-vault-accent hover:underline font-mono">
+                          className="inline-flex items-center gap-1 text-[10px] text-teal-700 hover:underline font-mono">
                           Tx {truncate(evt.txSignature)} <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
                         </a>
                       ) : evt.onChainAddress && (evt.actionType === 'VAULT_CREATED' || evt.actionType === 'CREDENTIAL_ISSUED') ? (
                         <a href={`https://solscan.io/account/${evt.onChainAddress}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[10px] text-purple-400 hover:underline font-mono">
+                          className="inline-flex items-center gap-1 text-[10px] text-review-700 hover:underline font-mono">
                           Acc {truncate(evt.onChainAddress)} <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
                         </a>
                       ) : null}
                     </td>
-                    <td className="py-3 text-vault-muted max-w-[240px] align-top">
+                    <td className="py-3 text-slate-500 max-w-[240px] align-top">
                       <span className="line-clamp-2">{evt.reason}</span>
                     </td>
                   </tr>

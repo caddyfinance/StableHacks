@@ -47,12 +47,12 @@ function StrategyTabs({ vault, strategies, activeAllocs, deployed }: { vault: an
   return (
     <Card title="Strategies" subtitle="">
       {/* Tabs */}
-      <div className="flex gap-1 mb-4 border-b border-vault-border">
+      <div className="flex gap-1 mb-4 border-b border-slate-200">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`px-3 py-2 text-xs font-medium transition-colors relative ${tab === t.key ? 'text-white' : 'text-vault-muted hover:text-white'}`}>
-            {t.label} {t.count > 0 && <span className="ml-1 text-vault-muted">({t.count})</span>}
-            {tab === t.key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-vault-accent rounded-t" />}
+            className={`px-3 py-2 text-xs font-medium transition-colors relative ${tab === t.key ? 'text-ink-900' : 'text-slate-500 hover:text-ink-900'}`}>
+            {t.label} {t.count > 0 && <span className="ml-1 text-slate-500">({t.count})</span>}
+            {tab === t.key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-700 rounded-t" />}
           </button>
         ))}
       </div>
@@ -63,13 +63,13 @@ function StrategyTabs({ vault, strategies, activeAllocs, deployed }: { vault: an
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-[10px] uppercase tracking-wider text-vault-muted">
-                  <th className="text-left py-2 pr-4 font-semibold border-b border-vault-border">Strategy</th>
-                  <th className="text-left py-2 pr-4 font-semibold border-b border-vault-border">Risk</th>
-                  <th className="text-right py-2 pr-4 font-semibold border-b border-vault-border">Allocated</th>
-                  <th className="text-right py-2 pr-4 font-semibold border-b border-vault-border">% of NAV</th>
-                  <th className="text-right py-2 pr-4 font-semibold border-b border-vault-border">Yield</th>
-                  <th className="text-right py-2 font-semibold border-b border-vault-border">Current APY</th>
+                <tr className="text-[10px] uppercase tracking-wider text-slate-500">
+                  <th className="text-left py-2 pr-4 font-semibold border-b border-slate-200">Strategy</th>
+                  <th className="text-left py-2 pr-4 font-semibold border-b border-slate-200">Risk</th>
+                  <th className="text-right py-2 pr-4 font-semibold border-b border-slate-200">Allocated</th>
+                  <th className="text-right py-2 pr-4 font-semibold border-b border-slate-200">% of NAV</th>
+                  <th className="text-right py-2 pr-4 font-semibold border-b border-slate-200">Yield</th>
+                  <th className="text-right py-2 font-semibold border-b border-slate-200">Current APY</th>
                 </tr>
               </thead>
               <tbody>
@@ -77,40 +77,40 @@ function StrategyTabs({ vault, strategies, activeAllocs, deployed }: { vault: an
                   const strat = strategies.find((s: any) => s.strategyId === a.strategyId);
                   const pct = nav > 0 ? ((a.amount || 0) / nav * 100) : 0;
                   return (
-                    <tr key={i} className={`hover:bg-white/[0.015] ${i < activeAllocs.length - 1 ? 'border-b border-vault-border/30' : ''}`}>
+                    <tr key={i} className={`hover:bg-teal-50 ${i < activeAllocs.length - 1 ? 'border-b border-slate-200/60' : ''}`}>
                       <td className="py-3 pr-4">
-                        <p className="text-white font-medium">{a.strategy?.name || a.strategyId}</p>
-                        {strat?.description && <p className="text-[10px] text-vault-muted mt-0.5">{strat.description}</p>}
+                        <p className="text-ink-900 font-medium">{a.strategy?.name || a.strategyId}</p>
+                        {strat?.description && <p className="text-[10px] text-slate-500 mt-0.5">{strat.description}</p>}
                       </td>
                       <td className="py-3 pr-4">
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${strat?.riskLevel === 'low' ? 'bg-green-900/30 text-green-400' : strat?.riskLevel === 'high' ? 'bg-red-900/30 text-red-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${strat?.riskLevel === 'low' ? 'bg-success-100 text-success-700' : strat?.riskLevel === 'high' ? 'bg-error-100 text-error-700' : 'bg-warning-100 text-warning-700'}`}>
                           {strat?.riskLevel || '—'}
                         </span>
                       </td>
-                      <td className="py-3 pr-4 text-right font-mono text-white">{fmt(a.amount || 0)}</td>
+                      <td className="py-3 pr-4 text-right font-mono text-ink-900">{fmt(a.amount || 0)}</td>
                       <td className="py-3 pr-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <div className="w-10 h-1.5 bg-vault-border rounded-full overflow-hidden">
-                            <div className="h-full bg-vault-accent rounded-full" style={{ width: `${Math.min(pct, 100)}%` }} />
+                          <div className="w-10 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                            <div className="h-full bg-teal-700 rounded-full" style={{ width: `${Math.min(pct, 100)}%` }} />
                           </div>
-                          <span className="text-vault-muted font-mono w-10 text-right">{pct.toFixed(1)}%</span>
+                          <span className="text-slate-500 font-mono w-10 text-right">{pct.toFixed(1)}%</span>
                         </div>
                       </td>
-                      <td className="py-3 pr-4 text-right font-mono text-green-400">{a.yieldAccrued > 0 ? `+${fmt(a.yieldAccrued)}` : '—'}</td>
-                      <td className="py-3 text-right font-mono text-vault-accent">{strat?.currentYield ? `${strat.currentYield}%` : '—'}</td>
+                      <td className="py-3 pr-4 text-right font-mono text-success-700">{a.yieldAccrued > 0 ? `+${fmt(a.yieldAccrued)}` : '—'}</td>
+                      <td className="py-3 text-right font-mono text-teal-700">{strat?.currentYield ? `${strat.currentYield}%` : '—'}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
             {/* Summary bar */}
-            <div className="flex items-center justify-between mt-3 pt-3 border-t border-vault-border text-xs">
-              <span className="text-vault-muted">Total deployed: <span className="text-white font-mono font-semibold">{fmt(totalAllocated)}</span> USDC</span>
-              <span className="text-vault-muted">{nav > 0 ? (totalAllocated / nav * 100).toFixed(1) : '0.0'}% of NAV deployed</span>
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-200 text-xs">
+              <span className="text-slate-500">Total deployed: <span className="text-ink-900 font-mono font-semibold">{fmt(totalAllocated)}</span> USDC</span>
+              <span className="text-slate-500">{nav > 0 ? (totalAllocated / nav * 100).toFixed(1) : '0.0'}% of NAV deployed</span>
             </div>
           </div>
         ) : (
-          <p className="text-xs text-vault-muted py-4">No active allocations. The portfolio manager will deploy funds to strategies from the idle balance.</p>
+          <p className="text-xs text-slate-500 py-4">No active allocations. The portfolio manager will deploy funds to strategies from the idle balance.</p>
         )
       )}
 
@@ -122,24 +122,24 @@ function StrategyTabs({ vault, strategies, activeAllocs, deployed }: { vault: an
               const maxBps = (vault.mandate?.maxAllocationBps as any)?.[s.strategyId] || 0;
               const maxPct = maxBps / 100;
               return (
-                <div key={s.strategyId} className="flex items-center justify-between bg-vault-bg rounded-lg px-4 py-3">
+                <div key={s.strategyId} className="flex items-center justify-between bg-slate-100 rounded-[18px] px-4 py-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-white font-medium">{s.name}</p>
-                    <p className="text-[10px] text-vault-muted">{s.description}</p>
+                    <p className="text-xs text-ink-900 font-medium">{s.name}</p>
+                    <p className="text-[10px] text-slate-500">{s.description}</p>
                   </div>
                   <div className="flex items-center gap-4 ml-4">
-                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${s.riskLevel === 'low' ? 'bg-green-900/30 text-green-400' : s.riskLevel === 'high' ? 'bg-red-900/30 text-red-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${s.riskLevel === 'low' ? 'bg-success-100 text-success-700' : s.riskLevel === 'high' ? 'bg-error-100 text-error-700' : 'bg-warning-100 text-warning-700'}`}>
                       {s.riskLevel}
                     </span>
-                    {maxPct > 0 && <span className="text-[10px] text-vault-muted">Max {maxPct}%</span>}
-                    <span className="text-xs font-mono text-vault-accent">{s.currentYield}% APY</span>
+                    {maxPct > 0 && <span className="text-[10px] text-slate-500">Max {maxPct}%</span>}
+                    <span className="text-xs font-mono text-teal-700">{s.currentYield}% APY</span>
                   </div>
                 </div>
               );
             })}
           </div>
         ) : (
-          <p className="text-xs text-vault-muted py-4">All allowed strategies are currently active.</p>
+          <p className="text-xs text-slate-500 py-4">All allowed strategies are currently active.</p>
         )
       )}
 
@@ -148,25 +148,25 @@ function StrategyTabs({ vault, strategies, activeAllocs, deployed }: { vault: an
         blockedStrats.length > 0 ? (
           <div className="space-y-2">
             {blockedStrats.map((s: any) => (
-              <div key={s.strategyId} className="flex items-center justify-between bg-vault-bg rounded-lg px-4 py-3 opacity-60">
+              <div key={s.strategyId} className="flex items-center justify-between bg-slate-100 rounded-[18px] px-4 py-3 opacity-60">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-vault-muted line-through">{s.name}</p>
-                  <p className="text-[10px] text-vault-muted">{s.description}</p>
+                  <p className="text-xs text-slate-500 line-through">{s.name}</p>
+                  <p className="text-[10px] text-slate-500">{s.description}</p>
                 </div>
                 <div className="flex items-center gap-3 ml-4">
-                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-900/30 text-red-400">{s.riskLevel}</span>
-                  <span className="text-[10px] text-red-400">Blocked by mandate</span>
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-error-100 text-error-700">{s.riskLevel}</span>
+                  <span className="text-[10px] text-error-700">Blocked by mandate</span>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-xs text-vault-muted py-4">No strategies are blocked.</p>
+          <p className="text-xs text-slate-500 py-4">No strategies are blocked.</p>
         )
       )}
 
       {!vault.mandate && (
-        <p className="text-xs text-vault-muted py-2">Strategies will be available after mandate is attached (auto-created on first deposit).</p>
+        <p className="text-xs text-slate-500 py-2">Strategies will be available after mandate is attached (auto-created on first deposit).</p>
       )}
     </Card>
   );
@@ -297,8 +297,8 @@ export default function VaultDetailPage() {
     }
   };
 
-  if (loading) return <div className="p-6"><p className="text-sm text-vault-muted animate-pulse">Loading vault...</p></div>;
-  if (!vault) return <div className="p-6"><p className="text-sm text-vault-muted">Vault not found.</p></div>;
+  if (loading) return <div className="p-6"><p className="text-sm text-slate-500 animate-pulse">Loading vault...</p></div>;
+  if (!vault) return <div className="p-6"><p className="text-sm text-slate-500">Vault not found.</p></div>;
 
   const activeAllocs = vault.allocations?.filter((a: any) => a.status === 'active') || [];
   const deployed = activeAllocs.reduce((s: number, a: any) => s + (a.amount || 0), 0);
@@ -309,40 +309,40 @@ export default function VaultDetailPage() {
     <div className="p-6 space-y-6">
       {/* Back + Header */}
       <div className="flex items-center gap-3">
-        <button onClick={() => navigate('/client/vaults')} className="text-vault-muted hover:text-white transition-colors">
+        <button onClick={() => navigate('/client/vaults')} className="text-slate-500 hover:text-ink-900 transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold font-mono text-white">{vault.vaultId}</h1>
+            <h1 className="text-xl font-bold font-mono font-display text-ink-900">{vault.vaultId}</h1>
             <StatusBadge status={vault.status} />
-            {vault.paused && <span className="text-[9px] px-1.5 py-0.5 bg-red-900/30 text-red-400 rounded font-semibold">PAUSED</span>}
+            {vault.paused && <span className="text-[9px] px-1.5 py-0.5 bg-error-100 text-error-700 rounded font-semibold">PAUSED</span>}
           </div>
-          <p className="text-xs text-vault-muted mt-0.5">{vault.baseAsset} segregated vault for {vault.clientReference}</p>
+          <p className="text-xs text-slate-500 mt-0.5">{vault.baseAsset} segregated vault for {vault.clientReference}</p>
         </div>
-        <button onClick={loadData} className="flex items-center gap-1.5 text-xs text-vault-muted hover:text-vault-accent transition-colors">
+        <button onClick={loadData} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-teal-700 transition-colors">
           <RefreshCw className="w-3.5 h-3.5" /> Refresh
         </button>
       </div>
 
       {/* Key Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <div className="bg-vault-card border border-vault-border rounded-lg p-4">
-          <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-1">Total Money Deployed</p>
-          <p className="text-xl font-bold font-mono text-white">{fmt(vault.totalNAV || 0)}</p>
-          <p className="text-[10px] text-vault-muted mt-0.5">USDC in vault</p>
+        <div className="bg-white border border-slate-200 rounded-[18px] p-6 shadow-1">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Total Money Deployed</p>
+          <p className="text-xl font-bold font-mono font-display text-ink-900">{fmt(vault.totalNAV || 0)}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">USDC in vault</p>
         </div>
-        <div className="bg-vault-card border border-vault-border rounded-lg p-4">
-          <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-1">Yield Earned</p>
-          <p className="text-xl font-bold font-mono text-green-400">+{fmt(yieldTotal)}</p>
-          <p className="text-[10px] text-vault-muted mt-0.5">USDC accrued</p>
+        <div className="bg-white border border-slate-200 rounded-[18px] p-6 shadow-1">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Yield Earned</p>
+          <p className="text-xl font-bold font-mono font-display text-success-700">+{fmt(yieldTotal)}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">USDC accrued</p>
         </div>
-        <div className="bg-vault-card border border-vault-border rounded-lg p-4">
-          <p className="text-[10px] uppercase tracking-wider text-vault-muted mb-1">Current APY</p>
-          <p className="text-xl font-bold font-mono text-green-400">
+        <div className="bg-white border border-slate-200 rounded-[18px] p-6 shadow-1">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Current APY</p>
+          <p className="text-xl font-bold font-mono font-display text-success-700">
             {(vault.totalDeposited || 0) > 0 ? `${((yieldTotal / (vault.totalDeposited || 1)) * 365 * 100).toFixed(2)}%` : '—'}
           </p>
-          <p className="text-[10px] text-vault-muted mt-0.5">Annualised from yield / deposits</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Annualised from yield / deposits</p>
         </div>
       </div>
 
@@ -350,11 +350,11 @@ export default function VaultDetailPage() {
       {vault.status === 'active' && !vault.paused && (
         <div className="flex gap-3">
           <button onClick={() => { resetTx(); setShowMandateModal(true); }}
-            className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded border transition-colors ${mode === 'deposit' ? 'bg-green-600 text-white border-green-600' : 'bg-vault-bg text-vault-accent border-vault-accent/30 hover:bg-vault-accent/10'}`}>
+            className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-[12px] border transition-colors shadow-1 ${mode === 'deposit' ? 'bg-success-700 text-white border-success-700' : 'bg-white text-teal-700 border-teal-300/40 hover:bg-teal-100'}`}>
             <ArrowDownToLine className="w-3.5 h-3.5" /> Deposit USDC
           </button>
           <button onClick={() => { resetTx(); setMode('withdraw'); }}
-            className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded border transition-colors ${mode === 'withdraw' ? 'bg-amber-600 text-white border-amber-600' : 'bg-vault-bg text-amber-400 border-amber-500/30 hover:bg-amber-500/10'}`}>
+            className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-[12px] border transition-colors shadow-1 ${mode === 'withdraw' ? 'bg-warning-700 text-white border-warning-700' : 'bg-white text-warning-700 border-warning-700/30 hover:bg-warning-100'}`}>
             <ArrowUpFromLine className="w-3.5 h-3.5" /> Request Withdrawal
           </button>
         </div>
@@ -362,11 +362,11 @@ export default function VaultDetailPage() {
 
       {/* Mandate & Terms Modal — must scroll to end to accept */}
       {showMandateModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => { setShowMandateModal(false); setHasScrolledToEnd(false); }}>
-          <div className="bg-[#111827] border border-vault-border rounded-xl max-w-lg w-full flex flex-col" style={{ maxHeight: '85vh' }} onClick={e => e.stopPropagation()}>
-            <div className="p-5 border-b border-vault-border flex-shrink-0">
-              <h3 className="text-sm font-bold text-white">Vault Terms & Mandate</h3>
-              <p className="text-[10px] text-vault-muted mt-1">Read and scroll to the end to accept before depositing into {vault.vaultId}</p>
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" onClick={() => { setShowMandateModal(false); setHasScrolledToEnd(false); }}>
+          <div className="bg-white border border-slate-200 rounded-[24px] max-w-lg w-full flex flex-col shadow-3" style={{ maxHeight: '85vh' }} onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-slate-200 flex-shrink-0">
+              <h3 className="text-sm font-bold text-ink-900">Vault Terms & Mandate</h3>
+              <p className="text-[10px] text-slate-500 mt-1">Read and scroll to the end to accept before depositing into {vault.vaultId}</p>
             </div>
 
             <div
@@ -378,23 +378,23 @@ export default function VaultDetailPage() {
                 }
               }}
             >
-              <div className="space-y-4 text-xs text-vault-muted leading-relaxed">
+              <div className="space-y-4 text-xs text-slate-500 leading-relaxed">
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold mb-2">1. Segregated Vault Agreement</p>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">1. Segregated Vault Agreement</p>
                   <p>By depositing digital assets into this segregated vault ("{vault.vaultId}"), you ("the Client") acknowledge and agree that your assets will be managed by AMINA Bank AG ("the Custodian") under the terms of this mandate. This vault is individually segregated and non-commingled — your assets are not pooled with those of other clients.</p>
                 </div>
 
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold mb-2">2. Custody & Safekeeping</p>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">2. Custody & Safekeeping</p>
                   <p>All digital assets deposited into this vault are held in custody by the Custodian on the Solana blockchain. The vault operates through a smart contract deployed at a unique program address. The Custodian maintains sole authority over the vault's on-chain operations, including allocation to approved strategies and processing of withdrawal requests.</p>
                 </div>
 
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold mb-2">3. Investment Mandate</p>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">3. Investment Mandate</p>
                   {vault.mandate ? (
                     <div className="space-y-2 ml-2">
                       <p>The following mandate governs the management of assets in this vault:</p>
-                      <div className="bg-vault-bg rounded-lg p-3 space-y-1.5">
+                      <div className="bg-slate-100 rounded-[18px] p-3 space-y-1.5">
                         {[
                           ['Mandate Status', vault.mandate.status?.toUpperCase()],
                           ['Liquidity Buffer', `${(vault.mandate.liquidityBufferBps / 100).toFixed(0)}% of NAV maintained as idle balance`],
@@ -402,8 +402,8 @@ export default function VaultDetailPage() {
                           ['Leverage', vault.mandate.leverageAllowed ? 'Permitted' : 'Not permitted'],
                         ].map(([label, value]) => (
                           <div key={label} className="flex justify-between">
-                            <span className="text-vault-muted">{label}</span>
-                            <span className="text-white font-medium">{value}</span>
+                            <span className="text-slate-500">{label}</span>
+                            <span className="text-ink-900 font-medium">{value}</span>
                           </div>
                         ))}
                       </div>
@@ -414,17 +414,17 @@ export default function VaultDetailPage() {
                 </div>
 
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold mb-2">4. Approved Strategies</p>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">4. Approved Strategies</p>
                   <p className="mb-2">The Custodian may only deploy your assets into the following pre-approved strategies:</p>
-                  <div className="bg-vault-bg rounded-lg p-3 space-y-1.5">
+                  <div className="bg-slate-100 rounded-[18px] p-3 space-y-1.5">
                     {vault.mandate ? strategies
                       .filter((s: any) => vault.mandate.allowedStrategies?.includes(s.strategyId))
                       .map((s: any) => (
                         <div key={s.strategyId} className="flex items-center justify-between">
-                          <span className="text-white">{s.name}</span>
+                          <span className="text-ink-900">{s.name}</span>
                           <div className="flex items-center gap-2">
-                            <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${s.riskLevel === 'low' ? 'bg-green-900/30 text-green-400' : 'bg-yellow-900/30 text-yellow-400'}`}>{s.riskLevel}</span>
-                            <span className="text-vault-muted font-mono">{s.currentYield}% APY</span>
+                            <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${s.riskLevel === 'low' ? 'bg-success-100 text-success-700' : 'bg-warning-100 text-warning-700'}`}>{s.riskLevel}</span>
+                            <span className="text-slate-500 font-mono">{s.currentYield}% APY</span>
                           </div>
                         </div>
                       ))
@@ -441,54 +441,54 @@ export default function VaultDetailPage() {
                 </div>
 
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold mb-2">5. Withdrawals</p>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">5. Withdrawals</p>
                   <p>Withdrawal requests are submitted by the Client and processed by the Custodian. Funds will only be sent to pre-approved destination wallets. Processing times may vary depending on strategy unwind requirements and compliance checks.</p>
                   {vault.mandate?.approvedDestinations?.length > 0 && (
-                    <div className="bg-vault-bg rounded-lg p-3 mt-2 space-y-1">
-                      <p className="text-vault-muted font-semibold">Approved destinations:</p>
+                    <div className="bg-slate-100 rounded-[18px] p-3 mt-2 space-y-1">
+                      <p className="text-slate-500 font-semibold">Approved destinations:</p>
                       {vault.mandate.approvedDestinations.map((d: string, i: number) => (
-                        <p key={i} className="font-mono text-white">{truncate(d, 24)}</p>
+                        <p key={i} className="font-mono text-ink-900">{truncate(d, 24)}</p>
                       ))}
                     </div>
                   )}
                 </div>
 
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold mb-2">6. Risks</p>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">6. Risks</p>
                   <p>Digital asset investments carry inherent risks including but not limited to: smart contract risk, market volatility, liquidity risk, and regulatory risk. Past performance is not indicative of future results. The Custodian does not guarantee returns on deposited assets.</p>
                 </div>
 
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold mb-2">7. Compliance & Audit Trail</p>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">7. Compliance & Audit Trail</p>
                   <p>All vault operations are recorded on-chain and in the Custodian's compliance database. The Client may view the complete audit trail through the Activity Log. On-chain transactions are verifiable via the Solana blockchain explorer.</p>
                 </div>
 
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold mb-2">8. Governing Law</p>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">8. Governing Law</p>
                   <p>This agreement is governed by the laws of Switzerland. Any disputes shall be resolved through arbitration in Zurich, Switzerland under the rules of the Swiss Chambers' Arbitration Institution.</p>
                 </div>
 
-                <div className="bg-amber-900/10 border border-amber-800/30 rounded-lg p-3 mt-4">
-                  <p className="text-[10px] text-amber-400">
+                <div className="bg-warning-100 border border-warning-700/20 rounded-[18px] p-3 mt-4">
+                  <p className="text-[10px] text-warning-700">
                     By clicking "Accept & Proceed to Deposit" below, you confirm that you have read, understood, and agree to the terms and mandate rules set out above. You acknowledge that your deposited funds will be managed according to these terms.
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="p-5 border-t border-vault-border flex-shrink-0">
+            <div className="p-5 border-t border-slate-200 flex-shrink-0">
               {!hasScrolledToEnd && (
-                <p className="text-[10px] text-vault-muted text-center mb-3 animate-pulse">Scroll to the end to accept the terms</p>
+                <p className="text-[10px] text-slate-500 text-center mb-3 animate-pulse">Scroll to the end to accept the terms</p>
               )}
               <div className="flex justify-end gap-3">
                 <button onClick={() => { setShowMandateModal(false); setHasScrolledToEnd(false); }}
-                  className="px-4 py-2 text-xs text-vault-muted hover:text-white transition-colors">
+                  className="px-4 py-2 text-xs text-slate-500 hover:text-ink-900 transition-colors">
                   Cancel
                 </button>
                 <button
                   onClick={() => { setShowMandateModal(false); setHasScrolledToEnd(false); setMode('deposit'); }}
                   disabled={!hasScrolledToEnd}
-                  className={`px-5 py-2 text-xs font-semibold rounded flex items-center gap-1.5 transition-colors ${hasScrolledToEnd ? 'bg-green-600 text-white hover:bg-green-500' : 'bg-vault-border text-vault-muted cursor-not-allowed'}`}>
+                  className={`px-5 py-2 text-xs font-semibold rounded-[12px] flex items-center gap-1.5 transition-colors shadow-1 ${hasScrolledToEnd ? 'bg-success-700 text-white hover:bg-teal-800' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`}>
                   <ArrowDownToLine className="w-3.5 h-3.5" /> Accept & Proceed to Deposit
                 </button>
               </div>
@@ -504,18 +504,18 @@ export default function VaultDetailPage() {
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <input type="number" placeholder="Amount (USDC)" value={amount} onChange={e => setAmount(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-vault-bg border border-vault-border rounded text-sm text-white font-mono focus:outline-none focus:border-vault-accent" />
+                  className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-[12px] text-sm text-ink-900 font-mono focus:outline-none focus:ring-teal-600/20 focus:border-teal-600" />
               </div>
               {mode === 'withdraw' && publicKey && (
-                <p className="text-[10px] text-vault-muted">Funds will be redeemed to your wallet: <span className="font-mono text-white">{publicKey.toBase58().slice(0, 8)}...{publicKey.toBase58().slice(-6)}</span></p>
+                <p className="text-[10px] text-slate-500">Funds will be redeemed to your wallet: <span className="font-mono text-ink-900">{publicKey.toBase58().slice(0, 8)}...{publicKey.toBase58().slice(-6)}</span></p>
               )}
               <div className="flex items-center gap-2">
                 <button onClick={mode === 'deposit' ? handleDeposit : handleWithdraw}
                   disabled={!publicKey}
-                  className={`px-4 py-2 text-xs font-semibold rounded flex items-center gap-1.5 ${mode === 'deposit' ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-amber-600 hover:bg-amber-500 text-white'} disabled:opacity-50`}>
+                  className={`px-4 py-2 text-xs font-semibold rounded-[12px] flex items-center gap-1.5 shadow-1 ${mode === 'deposit' ? 'bg-success-700 hover:bg-teal-800 text-white' : 'bg-warning-700 hover:bg-warning-700 text-white'} disabled:opacity-50`}>
                   {mode === 'deposit' ? <><ArrowDownToLine className="w-3.5 h-3.5" /> Transfer On-Chain</> : <><ArrowUpFromLine className="w-3.5 h-3.5" /> Submit Request</>}
                 </button>
-                <button onClick={resetTx} className="text-xs text-vault-muted hover:text-white px-3 py-2">Cancel</button>
+                <button onClick={resetTx} className="text-xs text-slate-500 hover:text-ink-900 px-3 py-2">Cancel</button>
               </div>
             </div>
           )}
@@ -528,16 +528,16 @@ export default function VaultDetailPage() {
                 const isCurrent = i === currentIdx;
                 return (
                   <div key={step} className="flex items-center gap-3">
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${isDone ? 'bg-green-500 text-white' : isCurrent ? 'bg-vault-accent text-white' : 'bg-vault-border text-vault-muted'}`}>
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${isDone ? 'bg-success-700 text-white' : isCurrent ? 'bg-teal-700 text-white' : 'bg-slate-200 text-slate-500'}`}>
                       {isDone ? '\u2713' : isCurrent ? <Loader2 className="w-3 h-3 animate-spin" /> : i + 1}
                     </div>
-                    <span className={`text-xs ${isDone ? 'text-green-400' : isCurrent ? 'text-white' : 'text-vault-muted'}`}>{STEP_LABELS[step]}</span>
+                    <span className={`text-xs ${isDone ? 'text-success-700' : isCurrent ? 'text-ink-900' : 'text-slate-500'}`}>{STEP_LABELS[step]}</span>
                   </div>
                 );
               })}
               {txSig && (
                 <a href={`https://solscan.io/tx/${txSig}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-[10px] text-vault-accent hover:underline mt-2">
+                  className="flex items-center gap-1 text-[10px] text-teal-700 hover:underline mt-2">
                   Tx: {truncate(txSig, 18)} <ExternalLink className="w-2.5 h-2.5" />
                 </a>
               )}
@@ -546,7 +546,7 @@ export default function VaultDetailPage() {
 
           {txStep === 'done' && (
             <div className="space-y-2">
-              <div className={`flex items-center gap-2 ${mode === 'deposit' ? 'text-green-400' : 'text-amber-400'}`}>
+              <div className={`flex items-center gap-2 ${mode === 'deposit' ? 'text-success-700' : 'text-warning-700'}`}>
                 <CheckCircle className="w-4 h-4" />
                 <span className="text-xs font-medium">
                   {mode === 'deposit' ? 'USDC deposited on-chain' : 'Withdrawal request submitted — pending Amina Bank approval'}
@@ -554,18 +554,18 @@ export default function VaultDetailPage() {
               </div>
               {txSig && (
                 <a href={`https://solscan.io/tx/${txSig}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs text-vault-accent hover:underline">
+                  className="flex items-center gap-1 text-xs text-teal-700 hover:underline">
                   View on Explorer <ExternalLink className="w-3 h-3" />
                 </a>
               )}
-              <button onClick={resetTx} className="text-xs text-vault-muted hover:text-white">Done</button>
+              <button onClick={resetTx} className="text-xs text-slate-500 hover:text-ink-900">Done</button>
             </div>
           )}
 
           {txStep === 'error' && (
             <div className="space-y-2">
-              <p className="text-xs text-red-400">{txError}</p>
-              <button onClick={resetTx} className="text-xs text-vault-muted hover:text-white">Try again</button>
+              <p className="text-xs text-error-700">{txError}</p>
+              <button onClick={resetTx} className="text-xs text-slate-500 hover:text-ink-900">Try again</button>
             </div>
           )}
         </Card>
@@ -577,41 +577,41 @@ export default function VaultDetailPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <div className="flex justify-between text-xs py-1.5">
-                <span className="text-vault-muted">Mandate Status</span>
+                <span className="text-slate-500">Mandate Status</span>
                 <StatusBadge status={vault.mandate.status} />
               </div>
               <div className="flex justify-between text-xs py-1.5">
-                <span className="text-vault-muted">Liquidity Buffer</span>
-                <span className="text-white font-mono">{(vault.mandate.liquidityBufferBps / 100).toFixed(0)}%</span>
+                <span className="text-slate-500">Liquidity Buffer</span>
+                <span className="text-ink-900 font-mono">{(vault.mandate.liquidityBufferBps / 100).toFixed(0)}%</span>
               </div>
               <div className="flex justify-between text-xs py-1.5">
-                <span className="text-vault-muted">Consent Threshold</span>
-                <span className="text-white font-mono">{fmt(vault.mandate.consentThreshold)} USDC</span>
+                <span className="text-slate-500">Consent Threshold</span>
+                <span className="text-ink-900 font-mono">{fmt(vault.mandate.consentThreshold)} USDC</span>
               </div>
               <div className="flex justify-between text-xs py-1.5">
-                <span className="text-vault-muted">Leverage</span>
-                <span className={`text-xs font-medium ${vault.mandate.leverageAllowed ? 'text-amber-400' : 'text-green-400'}`}>
+                <span className="text-slate-500">Leverage</span>
+                <span className={`text-xs font-medium ${vault.mandate.leverageAllowed ? 'text-warning-700' : 'text-success-700'}`}>
                   {vault.mandate.leverageAllowed ? 'Allowed' : 'Not Allowed'}
                 </span>
               </div>
             </div>
             <div className="space-y-2">
-              <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold">Approved Destinations</p>
+              <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Approved Destinations</p>
               {vault.mandate.approvedDestinations?.length > 0 ? (
                 <div className="space-y-1">
                   {vault.mandate.approvedDestinations.map((d: string, i: number) => (
-                    <p key={i} className="text-xs font-mono text-white">{truncate(d, 20)}</p>
+                    <p key={i} className="text-xs font-mono text-ink-900">{truncate(d, 20)}</p>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-vault-muted">No restrictions</p>
+                <p className="text-xs text-slate-500">No restrictions</p>
               )}
             </div>
           </div>
         </Card>
       ) : (
         <Card title="Mandate Policy" subtitle="">
-          <p className="text-xs text-vault-muted py-2">No mandate attached. A default mandate will be created on first deposit.</p>
+          <p className="text-xs text-slate-500 py-2">No mandate attached. A default mandate will be created on first deposit.</p>
         </Card>
       )}
 
@@ -631,27 +631,27 @@ export default function VaultDetailPage() {
             ['Created', new Date(vault.createdAt).toLocaleDateString()],
           ].map(([label, value]) => (
             <div key={label} className="flex justify-between py-1.5">
-              <span className="text-vault-muted">{label}</span>
-              <span className="text-white font-mono">{typeof value === 'string' && value.length > 20 ? truncate(value, 18) : value}</span>
+              <span className="text-slate-500">{label}</span>
+              <span className="text-ink-900 font-mono">{typeof value === 'string' && value.length > 20 ? truncate(value, 18) : value}</span>
             </div>
           ))}
         </div>
-        <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-vault-border">
+        <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-slate-200">
           {vault.onChainAddress && (
             <a href={`https://solscan.io/account/${vault.onChainAddress}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-[10px] text-vault-accent hover:underline">
+              className="flex items-center gap-1 text-[10px] text-teal-700 hover:underline">
               Vault PDA: {truncate(vault.onChainAddress)} <ExternalLink className="w-2.5 h-2.5" />
             </a>
           )}
           {vault.programId && (
             <a href={`https://solscan.io/account/${vault.programId}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-[10px] text-purple-400 hover:underline">
+              className="flex items-center gap-1 text-[10px] text-review-700 hover:underline">
               Program: {truncate(vault.programId)} <ExternalLink className="w-2.5 h-2.5" />
             </a>
           )}
           {vault.vaultAttestationPda && (
             <a href={`https://solscan.io/account/${vault.vaultAttestationPda}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-[10px] text-green-400 hover:underline">
+              className="flex items-center gap-1 text-[10px] text-success-700 hover:underline">
               SAS: {truncate(vault.vaultAttestationPda)} <ExternalLink className="w-2.5 h-2.5" />
             </a>
           )}
@@ -664,21 +664,21 @@ export default function VaultDetailPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-[10px] uppercase tracking-wider text-vault-muted">
-                  <th className="text-left py-2.5 pr-3 font-semibold border-b border-vault-border">Date</th>
-                  <th className="text-left py-2.5 pr-3 font-semibold border-b border-vault-border">Action</th>
-                  <th className="text-right py-2.5 pr-3 font-semibold border-b border-vault-border">Amount</th>
-                  <th className="text-left py-2.5 font-semibold border-b border-vault-border">Status</th>
+                <tr className="text-[10px] uppercase tracking-wider text-slate-500">
+                  <th className="text-left py-2.5 pr-3 font-semibold border-b border-slate-200">Date</th>
+                  <th className="text-left py-2.5 pr-3 font-semibold border-b border-slate-200">Action</th>
+                  <th className="text-right py-2.5 pr-3 font-semibold border-b border-slate-200">Amount</th>
+                  <th className="text-left py-2.5 font-semibold border-b border-slate-200">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {recentEvents.map((e: any, i: number) => (
-                  <tr key={i} className={`hover:bg-white/[0.015] ${i < recentEvents.length - 1 ? 'border-b border-vault-border/30' : ''}`}>
-                    <td className="py-2.5 pr-3 text-vault-muted whitespace-nowrap">{new Date(e.timestamp).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} {new Date(e.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</td>
-                    <td className="py-2.5 pr-3 text-white capitalize">{(e.actionType || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()).replace(/\bUsdc\b/gi, 'USDC')}</td>
-                    <td className="py-2.5 pr-3 text-right font-mono text-white">{e.amount ? fmt(e.amount) : ''}</td>
+                  <tr key={i} className={`hover:bg-teal-50 ${i < recentEvents.length - 1 ? 'border-b border-slate-200/60' : ''}`}>
+                    <td className="py-2.5 pr-3 text-slate-500 whitespace-nowrap">{new Date(e.timestamp).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} {new Date(e.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</td>
+                    <td className="py-2.5 pr-3 text-ink-900 capitalize">{(e.actionType || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()).replace(/\bUsdc\b/gi, 'USDC')}</td>
+                    <td className="py-2.5 pr-3 text-right font-mono text-ink-900">{e.amount ? fmt(e.amount) : ''}</td>
                     <td className="py-2.5">
-                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${e.result === 'success' ? 'bg-green-900/30 text-green-400' : e.result === 'pending' ? 'bg-amber-900/30 text-amber-400' : e.result === 'failure' || e.result === 'blocked' ? 'bg-red-900/30 text-red-400' : 'bg-vault-border text-vault-muted'}`}>
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${e.result === 'success' ? 'bg-success-100 text-success-700' : e.result === 'pending' ? 'bg-warning-100 text-warning-700' : e.result === 'failure' || e.result === 'blocked' ? 'bg-error-100 text-error-700' : 'bg-slate-200 text-slate-500'}`}>
                         {e.result === 'pending' ? 'Pending Approval' : e.result}
                       </span>
                     </td>

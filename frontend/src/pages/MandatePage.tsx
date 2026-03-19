@@ -36,8 +36,8 @@ export default function MandatePage() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <p className="text-vault-muted text-sm">No vault selected.</p>
-          <p className="text-vault-muted text-xs mt-1">
+          <p className="text-slate-500 text-sm">No vault selected.</p>
+          <p className="text-slate-500 text-xs mt-1">
             Select an active vault from the dashboard to configure its mandate.
           </p>
         </div>
@@ -92,8 +92,8 @@ export default function MandatePage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-lg font-semibold text-white">Mandate and Policy Engine</h1>
-        <p className="text-xs text-vault-muted mt-1">
+        <h1 className="text-lg font-semibold text-ink-900">Mandate and Policy Engine</h1>
+        <p className="text-xs text-slate-500 mt-1">
           Configure investment mandate restrictions for vault {activeVaultId}
         </p>
       </div>
@@ -104,11 +104,11 @@ export default function MandatePage() {
           {/* Strategy A */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs text-gray-300">
+              <label className="text-xs text-ink-900">
                 Stablecoin Lending
-                <span className="ml-1.5 text-vault-muted font-mono text-[10px]">STBL-YIELD-01</span>
+                <span className="ml-1.5 text-slate-500 font-mono text-[10px]">STBL-YIELD-01</span>
               </label>
-              <span className="text-xs font-mono text-white">{allocA}%</span>
+              <span className="text-xs font-mono text-ink-900">{allocA}%</span>
             </div>
             <input
               type="range"
@@ -116,18 +116,18 @@ export default function MandatePage() {
               max={100}
               value={allocA}
               onChange={(e) => setAllocA(Number(e.target.value))}
-              className="w-full h-1.5 bg-vault-border rounded-lg appearance-none cursor-pointer accent-blue-500"
+              className="w-full h-1.5 bg-slate-200 rounded-[12px] appearance-none cursor-pointer accent-teal-700"
             />
           </div>
 
           {/* Strategy B */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs text-gray-300">
+              <label className="text-xs text-ink-900">
                 Tokenised Treasury
-                <span className="ml-1.5 text-vault-muted font-mono text-[10px]">TRSY-YIELD-01</span>
+                <span className="ml-1.5 text-slate-500 font-mono text-[10px]">TRSY-YIELD-01</span>
               </label>
-              <span className="text-xs font-mono text-white">{allocB}%</span>
+              <span className="text-xs font-mono text-ink-900">{allocB}%</span>
             </div>
             <input
               type="range"
@@ -135,16 +135,16 @@ export default function MandatePage() {
               max={100}
               value={allocB}
               onChange={(e) => setAllocB(Number(e.target.value))}
-              className="w-full h-1.5 bg-vault-border rounded-lg appearance-none cursor-pointer accent-blue-500"
+              className="w-full h-1.5 bg-slate-200 rounded-[12px] appearance-none cursor-pointer accent-teal-700"
             />
           </div>
 
           {/* Strategy C — blocked toggle */}
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-xs text-gray-300">
+              <span className="text-xs text-ink-900">
                 High Yield DeFi
-                <span className="ml-1.5 text-vault-muted font-mono text-[10px]">HIGH-DEFI-01</span>
+                <span className="ml-1.5 text-slate-500 font-mono text-[10px]">HIGH-DEFI-01</span>
               </span>
             </div>
             <button
@@ -162,9 +162,9 @@ export default function MandatePage() {
             </button>
             <span className="text-[10px] font-medium ml-2 min-w-[56px]">
               {blockedC ? (
-                <span className="text-red-400">BLOCKED</span>
+                <span className="text-error-700">BLOCKED</span>
               ) : (
-                <span className="text-green-400">ALLOWED</span>
+                <span className="text-success-700">ALLOWED</span>
               )}
             </span>
           </div>
@@ -175,34 +175,34 @@ export default function MandatePage() {
       <Card title="Policy Controls" subtitle="Consent thresholds and risk limits">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs text-gray-300 mb-1">Consent Threshold (USDC)</label>
+            <label className="block text-xs text-ink-900 mb-1">Consent Threshold (USDC)</label>
             <input
               type="number"
               value={consentThreshold}
               onChange={(e) => setConsentThreshold(Number(e.target.value))}
-              className="w-full bg-vault-bg border border-vault-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
+              className="w-full bg-white border border-slate-200 rounded-[12px] px-3 py-1.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600"
             />
           </div>
 
           <div>
-            <label className="block text-xs text-gray-300 mb-1">Min Idle Buffer (%)</label>
+            <label className="block text-xs text-ink-900 mb-1">Min Idle Buffer (%)</label>
             <input
               type="number"
               min={0}
               max={100}
               value={idleBuffer}
               onChange={(e) => setIdleBuffer(Number(e.target.value))}
-              className="w-full bg-vault-bg border border-vault-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
+              className="w-full bg-white border border-slate-200 rounded-[12px] px-3 py-1.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600"
             />
           </div>
 
           <div className="flex items-center justify-between sm:col-span-2">
-            <label className="text-xs text-gray-300">Leverage Allowed</label>
+            <label className="text-xs text-ink-900">Leverage Allowed</label>
             <button
               type="button"
               onClick={() => setLeverageAllowed(!leverageAllowed)}
               className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                leverageAllowed ? 'bg-green-700' : 'bg-gray-600'
+                leverageAllowed ? 'bg-green-700' : 'bg-slate-400'
               }`}
             >
               <span
@@ -213,9 +213,9 @@ export default function MandatePage() {
             </button>
             <span className="text-[10px] font-medium ml-2 min-w-[24px]">
               {leverageAllowed ? (
-                <span className="text-green-400">Yes</span>
+                <span className="text-success-700">Yes</span>
               ) : (
-                <span className="text-vault-muted">No</span>
+                <span className="text-slate-500">No</span>
               )}
             </span>
           </div>
@@ -232,13 +232,13 @@ export default function MandatePage() {
                 value={w}
                 onChange={(e) => updateWallet(i, e.target.value)}
                 placeholder="0x..."
-                className="flex-1 bg-vault-bg border border-vault-border rounded px-3 py-1.5 text-sm text-white font-mono focus:outline-none focus:border-blue-500"
+                className="flex-1 bg-white border border-slate-200 rounded-[12px] px-3 py-1.5 text-sm text-ink-900 font-mono focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600"
               />
               <button
                 type="button"
                 onClick={() => removeWallet(i)}
                 disabled={wallets.length <= 1}
-                className="text-xs text-red-400 hover:text-red-300 disabled:text-gray-600 disabled:cursor-not-allowed px-1"
+                className="text-xs text-error-700 hover:text-red-500 disabled:text-slate-400 disabled:cursor-not-allowed px-1"
               >
                 Remove
               </button>
@@ -247,7 +247,7 @@ export default function MandatePage() {
           <button
             type="button"
             onClick={addWallet}
-            className="text-xs text-blue-400 hover:text-blue-300 mt-1"
+            className="text-xs text-teal-700 hover:text-teal-800 mt-1"
           >
             + Add wallet
           </button>
@@ -259,7 +259,7 @@ export default function MandatePage() {
         <button
           onClick={handleApply}
           disabled={submitting}
-          className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-not-allowed text-white text-sm font-medium rounded transition-colors"
+          className="px-5 py-2 bg-teal-700 hover:bg-teal-800 disabled:bg-teal-900 disabled:cursor-not-allowed text-white text-sm font-medium rounded-[12px] transition-all ease-amina duration-150"
         >
           {submitting ? 'Applying...' : 'Apply Mandate'}
         </button>
@@ -270,42 +270,42 @@ export default function MandatePage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="text-[10px] uppercase tracking-wider text-vault-muted border-b border-vault-border">
+              <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
                 <th className="pb-2 pr-4">Strategy</th>
                 <th className="pb-2 pr-4">Status</th>
                 <th className="pb-2">Max Allocation</th>
               </tr>
             </thead>
             <tbody className="text-xs">
-              <tr className="border-b border-vault-border/50">
+              <tr className="border-b border-slate-200/50">
                 <td className="py-2 pr-4">
-                  <span className="text-gray-200">Stablecoin Lending</span>
-                  <span className="ml-1.5 text-vault-muted font-mono text-[10px]">STBL-YIELD-01</span>
+                  <span className="text-ink-900">Stablecoin Lending</span>
+                  <span className="ml-1.5 text-slate-500 font-mono text-[10px]">STBL-YIELD-01</span>
                 </td>
                 <td className="py-2 pr-4">
                   <StatusBadge status="approved" />
                 </td>
-                <td className="py-2 font-mono text-white">{allocA}%</td>
+                <td className="py-2 font-mono text-ink-900">{allocA}%</td>
               </tr>
-              <tr className="border-b border-vault-border/50">
+              <tr className="border-b border-slate-200/50">
                 <td className="py-2 pr-4">
-                  <span className="text-gray-200">Tokenised Treasury</span>
-                  <span className="ml-1.5 text-vault-muted font-mono text-[10px]">TRSY-YIELD-01</span>
+                  <span className="text-ink-900">Tokenised Treasury</span>
+                  <span className="ml-1.5 text-slate-500 font-mono text-[10px]">TRSY-YIELD-01</span>
                 </td>
                 <td className="py-2 pr-4">
                   <StatusBadge status="approved" />
                 </td>
-                <td className="py-2 font-mono text-white">{allocB}%</td>
+                <td className="py-2 font-mono text-ink-900">{allocB}%</td>
               </tr>
               <tr>
                 <td className="py-2 pr-4">
-                  <span className="text-gray-200">High Yield DeFi</span>
-                  <span className="ml-1.5 text-vault-muted font-mono text-[10px]">HIGH-DEFI-01</span>
+                  <span className="text-ink-900">High Yield DeFi</span>
+                  <span className="ml-1.5 text-slate-500 font-mono text-[10px]">HIGH-DEFI-01</span>
                 </td>
                 <td className="py-2 pr-4">
                   <StatusBadge status={blockedC ? 'blocked' : 'approved'} />
                 </td>
-                <td className="py-2 font-mono text-white">0%</td>
+                <td className="py-2 font-mono text-ink-900">0%</td>
               </tr>
             </tbody>
           </table>
@@ -315,48 +315,48 @@ export default function MandatePage() {
       {/* Policy Summary */}
       {applied && (
         <Card title="Policy Summary" subtitle="Plain-English mandate restrictions">
-          <ul className="space-y-1.5 text-xs text-gray-300 list-disc list-inside">
+          <ul className="space-y-1.5 text-xs text-ink-900 list-disc list-inside">
             <li>
               Stablecoin Lending (STBL-YIELD-01) is permitted with a maximum allocation of{' '}
-              <span className="text-white font-medium">{allocA}%</span>.
+              <span className="text-ink-900 font-medium">{allocA}%</span>.
             </li>
             <li>
               Tokenised Treasury (TRSY-YIELD-01) is permitted with a maximum allocation of{' '}
-              <span className="text-white font-medium">{allocB}%</span>.
+              <span className="text-ink-900 font-medium">{allocB}%</span>.
             </li>
             <li>
               High Yield DeFi (HIGH-DEFI-01) is{' '}
               {blockedC ? (
-                <span className="text-red-400 font-medium">blocked</span>
+                <span className="text-error-700 font-medium">blocked</span>
               ) : (
-                <span className="text-green-400 font-medium">allowed</span>
+                <span className="text-success-700 font-medium">allowed</span>
               )}
               .
             </li>
             <li>
               Transactions above{' '}
-              <span className="text-white font-medium">
+              <span className="text-ink-900 font-medium">
                 {consentThreshold.toLocaleString()} USDC
               </span>{' '}
               require explicit consent approval.
             </li>
             <li>
               A minimum idle buffer of{' '}
-              <span className="text-white font-medium">{idleBuffer}%</span> must be maintained at
+              <span className="text-ink-900 font-medium">{idleBuffer}%</span> must be maintained at
               all times.
             </li>
             <li>
               Leverage is{' '}
               {leverageAllowed ? (
-                <span className="text-yellow-400 font-medium">permitted</span>
+                <span className="text-warning-700 font-medium">permitted</span>
               ) : (
-                <span className="text-green-400 font-medium">not permitted</span>
+                <span className="text-success-700 font-medium">not permitted</span>
               )}
               .
             </li>
             <li>
               Approved destination wallets:{' '}
-              <span className="text-white font-mono text-[10px]">
+              <span className="text-ink-900 font-mono text-[10px]">
                 {wallets.filter((w) => w.trim()).join(', ')}
               </span>
             </li>
