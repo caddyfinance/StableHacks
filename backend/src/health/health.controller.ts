@@ -1,33 +1,37 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Inject } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiOkResponse } from '@nestjs/swagger';
-import {
-  HealthCheck,
-  HealthCheckService,
-  PrismaHealthIndicator,
-} from '@nestjs/terminus';
 import { PrismaService } from '../prisma/prisma.service';
 
 @ApiTags('Health')
 @Controller('health')
 export class HealthController {
-  constructor(
-    private health: HealthCheckService,
-    private prismaHealth: PrismaHealthIndicator,
-    private prisma: PrismaService,
-  ) {}
+  private prisma: PrismaService;
+
+  constructor(@Inject(PrismaService) prisma: PrismaService) {
+    this.prisma = prisma;
+  }
 
   @Get()
-  @HealthCheck()
-  @ApiOperation({ summary: 'Health check', description: 'Returns the health status of the API and its dependencies (database).' })
+  @ApiOperation({ summary: 'Health check', description: 'Returns the health status of the API and database.' })
   @ApiOkResponse({ description: 'Service is healthy' })
-  check() {
-    return this.health.check([
-      () => this.prismaHealth.pingCheck('database', this.prisma),
-    ]);
+  async check() {
+    let dbStatus = 'up';
+    try {
+      await this.prisma.$queryRawUnsafe('SELECT 1');
+    } catch {
+      dbStatus = 'down';
+    }
+
+    return {
+      status: dbStatus === 'up' ? 'ok' : 'error',
+      timestamp: new Date().toISOString(),
+      service: 'amina-vault-backend',
+      details: { database: { status: dbStatus } },
+    };
   }
 
   @Get('ready')
-  @ApiOperation({ summary: 'Readiness check', description: 'Lightweight readiness probe for load balancers and Railway.' })
+  @ApiOperation({ summary: 'Readiness check', description: 'Lightweight readiness probe.' })
   @ApiOkResponse({ description: 'Service is ready' })
   ready() {
     return {
