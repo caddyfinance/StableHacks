@@ -1,7 +1,7 @@
 import { useStore } from '../store/useStore';
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL
-  ? `${(import.meta as any).env.VITE_API_URL}/api`
+  ? `${(import.meta as any).env.VITE_API_URL.replace(/\/+$/, '')}/api`
   : '/api';
 
 function getCurrentRole(): string {
