@@ -115,7 +115,7 @@ export const useStore = create<AppState>()(
         activeVaultId: state.activeVaultId,
         adminUser: state.adminUser,
         clientInfo: state.clientInfo,
-      }),
+      }) as unknown as AppState,
     },
   ),
 );
