@@ -122,8 +122,14 @@ export default function CredentialsPage() {
 
   const handleRevoke = async (id: string) => {
     try {
-      await api.revokeCredential(id);
-      notify('success', 'Credential revoked and on-chain attestation closed');
+      const result = await api.revokeCredential(id);
+      if (result.onChainRevoked) {
+        notify('success', `Credential revoked — on-chain attestation closed (tx: ${result.revokeTxSignature?.slice(0, 12)}...)`);
+      } else if (result.attestationPda) {
+        notify('info', 'Credential revoked in database — on-chain revocation could not be confirmed');
+      } else {
+        notify('success', 'Credential revoked');
+      }
       await loadCredentials();
     } catch {
       notify('error', 'Failed to revoke credential');

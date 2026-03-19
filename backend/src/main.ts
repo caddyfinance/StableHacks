@@ -33,7 +33,7 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document, {
+  SwaggerModule.setup('docs', app, document, {
     customSiteTitle: 'AMINA Vault API — Swagger',
     customCss: '.swagger-ui .topbar { display: none }',
     swaggerOptions: {
@@ -54,7 +54,7 @@ async function bootstrap() {
   console.log('║       AMINA Vault Backend — Running          ║');
   console.log('╚══════════════════════════════════════════════╝');
   console.log(`  URL:          ${host}`);
-  console.log(`  Swagger:      ${host}/api/docs`);
+  console.log(`  Swagger:      ${host}/docs`);
   console.log(`  Health:       ${host}/api/health`);
   console.log(`  Port:         ${port}`);
   console.log(`  Environment:  ${process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV || 'development'}`);

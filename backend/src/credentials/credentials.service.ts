@@ -186,10 +186,18 @@ export class CredentialsService {
 
   async revoke(credentialId: string) {
     const credential = await this.prisma.credential.findUnique({ where: { credentialId } });
+    if (!credential) throw new Error(`Credential ${credentialId} not found`);
+    if (credential.revoked) return credential;
 
-    // Revoke on-chain attestation if it exists (graceful)
-    if (credential?.attestationPda) {
-      await this.sas.revokeAttestation(credential.attestationPda);
+    // Revoke on-chain attestation if it exists
+    let onChainRevoked = false;
+    let revokeTxSignature: string | undefined;
+    if (credential.attestationPda) {
+      const result = await this.sas.revokeAttestation(credential.attestationPda);
+      if (result?.txSignature) {
+        onChainRevoked = true;
+        revokeTxSignature = result.txSignature;
+      }
     }
 
     const updated = await this.prisma.credential.update({
@@ -197,15 +205,26 @@ export class CredentialsService {
       data: { status: 'revoked', revoked: true },
     });
 
+    const reason = credential.attestationPda
+      ? onChainRevoked
+        ? `Credential ${credentialId} revoked — on-chain attestation closed (tx: ${revokeTxSignature})`
+        : `Credential ${credentialId} revoked in database — on-chain revocation failed (attestation may still exist)`
+      : `Credential ${credentialId} revoked (no on-chain attestation)`;
+
     await this.events.emit({
       actionType: 'CREDENTIAL_REVOKED',
       actor: 'admin',
       role: 'Admin',
       result: 'success',
-      reason: `Credential ${credentialId} revoked${credential?.attestationPda ? ' — on-chain attestation closed' : ''}`,
-      onChainAddress: credential?.attestationPda || undefined,
+      reason,
+      onChainAddress: credential.attestationPda || undefined,
+      txSignature: revokeTxSignature,
     });
 
-    return updated;
+    return {
+      ...updated,
+      onChainRevoked,
+      revokeTxSignature,
+    };
   }
 }
