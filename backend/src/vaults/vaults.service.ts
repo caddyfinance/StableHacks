@@ -73,20 +73,11 @@ export class VaultsService {
     const count = await this.prisma.vault.count();
     const vaultId = `VLT-${String(count + 1).padStart(3, '0')}`;
 
-    // Create vault in DB
-    const vault = await this.prisma.vault.create({
-      data: {
-        vaultId,
-        credentialId,
-        clientReference: credential.clientReference,
-        ownerWallet: credential.walletAddress,
-        baseAsset,
-        status: 'active',
-      },
-    });
-
     // Track deployment steps for the frontend (5-step segregated deployment)
     const steps: { step: string; status: string; detail?: string; txSignature?: string; address?: string }[] = [];
+
+    // Helper: check if any step has failed so far
+    const hasFailed = () => steps.some((s) => s.status === 'failed');
 
     // ─── Step 1: Deploy Segregated Program Instance ─────────────
     let deployedProgramId: string | undefined;
@@ -108,7 +99,7 @@ export class VaultsService {
 
     // ─── Step 2: Initialize Program Instance ────────────────────
     let initResult: { configPda: string; txSignature: string } | null = null;
-    if (deployedProgramId) {
+    if (!hasFailed() && deployedProgramId) {
       try {
         initResult = await this.vaultProgram.initializeProgram(
           deployedProgramId,
@@ -124,65 +115,114 @@ export class VaultsService {
       } catch (e: any) {
         steps.push({ step: 'Initialize Program', status: 'failed', detail: e.message });
       }
+    } else if (hasFailed()) {
+      steps.push({ step: 'Initialize Program', status: 'skipped', detail: 'Skipped due to previous failure' });
     }
 
     // ─── Step 3: Register Credential On-Chain ───────────────────
     let credentialResult: { credentialPda: string; txSignature: string } | null = null;
-    try {
-      credentialResult = await this.vaultProgram.registerCredential(
-        credentialId,
-        credential.clientReference,
-        credential.jurisdiction,
-        credential.riskTier,
-        credential.productEligibility,
-        credential.walletAddress,
-        deployedProgramId,
-      );
-      steps.push({
-        step: 'Register Credential On-Chain',
-        status: credentialResult ? 'success' : 'skipped',
-        detail: credentialResult ? `Credential PDA: ${credentialResult.credentialPda}` : 'Program not configured',
-        txSignature: credentialResult?.txSignature !== 'existing' ? credentialResult?.txSignature : undefined,
-        address: credentialResult?.credentialPda,
-      });
-    } catch (e: any) {
-      steps.push({ step: 'Register Credential On-Chain', status: 'failed', detail: e.message });
+    if (!hasFailed()) {
+      try {
+        credentialResult = await this.vaultProgram.registerCredential(
+          credentialId,
+          credential.clientReference,
+          credential.jurisdiction,
+          credential.riskTier,
+          credential.productEligibility,
+          credential.walletAddress,
+          deployedProgramId,
+        );
+        steps.push({
+          step: 'Register Credential On-Chain',
+          status: credentialResult ? 'success' : 'skipped',
+          detail: credentialResult ? `Credential PDA: ${credentialResult.credentialPda}` : 'Program not configured',
+          txSignature: credentialResult?.txSignature !== 'existing' ? credentialResult?.txSignature : undefined,
+          address: credentialResult?.credentialPda,
+        });
+      } catch (e: any) {
+        steps.push({ step: 'Register Credential On-Chain', status: 'failed', detail: e.message });
+      }
+    } else {
+      steps.push({ step: 'Register Credential On-Chain', status: 'skipped', detail: 'Skipped due to previous failure' });
     }
 
     // ─── Step 4: Create Vault On-Chain ──────────────────────────
     let programResult: { vaultPda: string; txSignature: string } | null = null;
-    try {
-      programResult = await this.vaultProgram.deployVault(vaultId, credentialId, baseAsset, deployedProgramId);
-      steps.push({
-        step: 'Create Vault On-Chain',
-        status: programResult ? 'success' : 'skipped',
-        detail: programResult ? `Vault PDA: ${programResult.vaultPda}` : 'Program not configured',
-        txSignature: programResult?.txSignature,
-        address: programResult?.vaultPda,
-      });
-    } catch (e: any) {
-      steps.push({ step: 'Create Vault On-Chain', status: 'failed', detail: e.message });
+    if (!hasFailed()) {
+      try {
+        programResult = await this.vaultProgram.deployVault(vaultId, credentialId, baseAsset, deployedProgramId);
+        steps.push({
+          step: 'Create Vault On-Chain',
+          status: programResult ? 'success' : 'skipped',
+          detail: programResult ? `Vault PDA: ${programResult.vaultPda}` : 'Program not configured',
+          txSignature: programResult?.txSignature,
+          address: programResult?.vaultPda,
+        });
+      } catch (e: any) {
+        steps.push({ step: 'Create Vault On-Chain', status: 'failed', detail: e.message });
+      }
+    } else {
+      steps.push({ step: 'Create Vault On-Chain', status: 'skipped', detail: 'Skipped due to previous failure' });
     }
 
     // ─── Step 5: SAS Attestation ────────────────────────────────
     let sasResult: { pda: string; txSignature: string; onChainAddress: string } | null = null;
-    try {
-      sasResult = await this.sas.createVaultAttestation(credential.walletAddress, {
+    if (!hasFailed()) {
+      try {
+        sasResult = await this.sas.createVaultAttestation(credential.walletAddress, {
+          vaultId,
+          credentialId,
+          clientReference: credential.clientReference,
+          baseAsset,
+        });
+        steps.push({
+          step: 'Create SAS Attestation',
+          status: sasResult ? 'success' : 'skipped',
+          detail: sasResult ? `Attestation PDA: ${sasResult.pda}` : 'SAS not configured',
+          txSignature: sasResult?.txSignature !== 'existing' ? sasResult?.txSignature : undefined,
+          address: sasResult?.pda,
+        });
+      } catch (e: any) {
+        steps.push({ step: 'Create SAS Attestation', status: 'failed', detail: e.message });
+      }
+    } else {
+      steps.push({ step: 'Create SAS Attestation', status: 'skipped', detail: 'Skipped due to previous failure' });
+    }
+
+    // If any step failed, do NOT create vault in DB — return failure with steps
+    if (hasFailed()) {
+      const failedStep = steps.find((s) => s.status === 'failed');
+      await this.events.emit({
+        actionType: 'VAULT_CREATION_FAILED', actor: 'admin', role: 'Admin',
+        result: 'failure',
+        reason: `Vault ${vaultId} deployment failed at step: ${failedStep?.step} — ${failedStep?.detail}`,
+      });
+
+      return {
         vaultId,
         credentialId,
         clientReference: credential.clientReference,
+        ownerWallet: credential.walletAddress,
         baseAsset,
-      });
-      steps.push({
-        step: 'Create SAS Attestation',
-        status: sasResult ? 'success' : 'skipped',
-        detail: sasResult ? `Attestation PDA: ${sasResult.pda}` : 'SAS not configured',
-        txSignature: sasResult?.txSignature !== 'existing' ? sasResult?.txSignature : undefined,
-        address: sasResult?.pda,
-      });
-    } catch (e: any) {
-      steps.push({ step: 'Create SAS Attestation', status: 'failed', detail: e.message });
+        status: 'failed',
+        programId: deployedProgramId,
+        onChainAddress: programResult?.vaultPda,
+        deploymentSteps: steps,
+        aminaBankWallet: this.vaultProgram.getAminaBankWallet(),
+      };
     }
+
+    // All steps succeeded — create vault in DB
+    const vault = await this.prisma.vault.create({
+      data: {
+        vaultId,
+        credentialId,
+        clientReference: credential.clientReference,
+        ownerWallet: credential.walletAddress,
+        baseAsset,
+        status: 'active',
+      },
+    });
 
     // Update vault record with on-chain addresses and unique program ID
     const onChainData: Record<string, string> = {};

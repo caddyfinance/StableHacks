@@ -83,16 +83,18 @@ model Strategy {
 }
 
 model Allocation {
-  id          String   @id @default(uuid())
-  vaultId     String
-  vault       Vault    @relation(fields: [vaultId], references: [vaultId])
-  strategyId  String
-  strategy    Strategy @relation(fields: [strategyId], references: [strategyId])
-  amount      Float
-  yieldAccrued Float   @default(0)
-  status      String   @default("active")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(uuid())
+  vaultId       String
+  vault         Vault    @relation(fields: [vaultId], references: [vaultId])
+  strategyId    String
+  strategy      Strategy @relation(fields: [strategyId], references: [strategyId])
+  amount        Float
+  yieldAccrued  Float    @default(0)
+  status        String   @default("active")
+  txSignature   String?
+  onChainAddress String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model Deposit {

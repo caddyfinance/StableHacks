@@ -9,6 +9,7 @@ import { EventsModule } from './events/events.module';
 import { AdminAuthModule } from './admin-auth/admin-auth.module';
 import { SasModule } from './sas/sas.module';
 import { VaultProgramModule } from './vault-program/vault-program.module';
+import { SolsticeModule } from './solstice/solstice.module';
 import { RolesGuard } from './auth/roles.guard';
 
 @Module({
@@ -22,6 +23,7 @@ import { RolesGuard } from './auth/roles.guard';
     AdminAuthModule,
     SasModule,
     VaultProgramModule,
+    SolsticeModule,
   ],
   providers: [
     {

@@ -6,7 +6,7 @@ members = [
 
 [profile.release]
 overflow-checks = true
-lto = "fat"
-codegen-units = 1
+lto = false
+codegen-units = 16
 
 [patch.crates-io]

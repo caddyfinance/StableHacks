@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import StatusBadge from '../components/StatusBadge';
-import { ExternalLink, CheckCircle } from 'lucide-react';
+import { ExternalLink, CheckCircle, Loader2, Clock, XCircle, Shield, Key, FileCheck, Vault, Award } from 'lucide-react';
 
 interface Credential {
   credentialId: string;
@@ -56,6 +56,28 @@ const ExplorerLink = ({ type, value }: { type: 'address' | 'tx'; value: string }
   </a>
 );
 
+const DEPLOY_STEPS = [
+  { key: 'Deploy Segregated Program', label: 'Deploy Segregated Program', description: 'Deploying unique on-chain program instance via BPF loader', icon: Shield, duration: 18000 },
+  { key: 'Initialize Program', label: 'Initialize Program', description: 'Setting admin authority and binding vault owner wallet', icon: Key, duration: 8000 },
+  { key: 'Register Credential On-Chain', label: 'Register Credential', description: 'Creating credential PDA on the new program', icon: FileCheck, duration: 6000 },
+  { key: 'Create Vault On-Chain', label: 'Create Vault On-Chain', description: 'Deploying vault PDA bound to credential holder', icon: Vault, duration: 6000 },
+  { key: 'Create SAS Attestation', label: 'SAS Attestation', description: 'Creating Solana Attestation Service proof', icon: Award, duration: 6000 },
+];
+
+type LiveStepStatus = 'pending' | 'in_progress' | 'success' | 'failed' | 'skipped';
+
+interface LiveStep {
+  key: string;
+  label: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  status: LiveStepStatus;
+  detail?: string;
+  txSignature?: string;
+  address?: string;
+  elapsed?: number;
+}
+
 export default function VaultFactoryPage() {
   const { notify } = useStore();
   const [credentials, setCredentials] = useState<Credential[]>([]);
@@ -64,6 +86,9 @@ export default function VaultFactoryPage() {
   const [submitting, setSubmitting] = useState(false);
   const [selectedCredentialId, setSelectedCredentialId] = useState('');
   const [lastCreated, setLastCreated] = useState<CreatedVault | null>(null);
+  const [liveSteps, setLiveSteps] = useState<LiveStep[]>([]);
+  const [deployStartTime, setDeployStartTime] = useState<number>(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadData = async () => {
     try {
@@ -90,6 +115,66 @@ export default function VaultFactoryPage() {
     loadData();
   }, []);
 
+  // Animate steps based on estimated durations while API is in-flight
+  const startLiveProgress = () => {
+    const initial: LiveStep[] = DEPLOY_STEPS.map((s) => ({
+      ...s,
+      status: 'pending' as LiveStepStatus,
+    }));
+    initial[0].status = 'in_progress';
+    setLiveSteps(initial);
+
+    const startTime = Date.now();
+    setDeployStartTime(startTime);
+
+    // Calculate cumulative start times for each step
+    const cumulativeMs = DEPLOY_STEPS.reduce<number[]>((acc, _s, i) => {
+      acc.push(i === 0 ? 0 : acc[i - 1] + DEPLOY_STEPS[i - 1].duration);
+      return acc;
+    }, []);
+
+    timerRef.current = setInterval(() => {
+      const totalElapsed = Date.now() - startTime;
+      setLiveSteps((prev) =>
+        prev.map((step, i) => {
+          // Don't overwrite finalized steps (from API response)
+          if (step.detail && step.status !== 'in_progress') return step;
+          const stepStart = cumulativeMs[i];
+          if (totalElapsed >= stepStart + DEPLOY_STEPS[i].duration) {
+            return { ...step, status: 'success' as LiveStepStatus, elapsed: DEPLOY_STEPS[i].duration };
+          }
+          if (totalElapsed >= stepStart) {
+            return { ...step, status: 'in_progress' as LiveStepStatus, elapsed: totalElapsed - stepStart };
+          }
+          return { ...step, status: 'pending' as LiveStepStatus };
+        }),
+      );
+    }, 500);
+  };
+
+  // Replace simulated statuses with actual results from API
+  const finalizeLiveSteps = (deploymentSteps: DeploymentStep[]) => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    setLiveSteps((prev) =>
+      prev.map((step) => {
+        const match = deploymentSteps.find((d) => d.step === step.key);
+        if (match) {
+          return {
+            ...step,
+            status: match.status as LiveStepStatus,
+            detail: match.detail,
+            txSignature: match.txSignature,
+            address: match.address,
+          };
+        }
+        return { ...step, status: 'skipped' as LiveStepStatus };
+      }),
+    );
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCredentialId) {
@@ -98,16 +183,29 @@ export default function VaultFactoryPage() {
     }
     setSubmitting(true);
     setLastCreated(null);
+    startLiveProgress();
     try {
       const vault = await api.createVault({
         credentialId: selectedCredentialId,
         baseAsset: 'USDC',
       });
+      finalizeLiveSteps(vault.deploymentSteps || []);
       useStore.getState().setActiveVaultId(vault.vaultId);
       setLastCreated(vault);
       notify('success', `Segregated vault ${vault.vaultId} deployed on-chain`);
       await loadData();
     } catch {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      setLiveSteps((prev) =>
+        prev.map((s) =>
+          s.status === 'in_progress' || s.status === 'pending'
+            ? { ...s, status: 'failed' as LiveStepStatus, detail: 'Deployment failed' }
+            : s,
+        ),
+      );
       notify('error', 'Failed to create vault');
     } finally {
       setSubmitting(false);
@@ -197,67 +295,151 @@ export default function VaultFactoryPage() {
             <button
               type="submit"
               disabled={submitting || credentials.length === 0}
-              className="px-5 py-2 bg-vault-accent text-white text-sm font-semibold rounded hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-5 py-2 bg-vault-accent text-white text-sm font-semibold rounded hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              {submitting ? 'Deploying on-chain...' : 'Create Segregated Vault'}
+              {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {submitting ? 'Deploying Segregated Program...' : 'Create Segregated Vault'}
             </button>
           </div>
         </form>
       </Card>
 
-      {/* Deployment Confirmation */}
-      {lastCreated && (
-        <Card title="Vault Deployed Successfully" subtitle="On-chain contract created and attested">
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-green-400">
-              <CheckCircle className="w-5 h-5" />
-              <span className="text-sm font-medium">Vault {lastCreated.vaultId} deployed</span>
-            </div>
+      {/* Live Deployment Progress */}
+      {liveSteps.length > 0 && (
+        <Card
+          title={
+            submitting
+              ? 'Deploying Segregated Vault...'
+              : lastCreated
+                ? `Vault ${lastCreated.vaultId} Deployed`
+                : 'Deployment Complete'
+          }
+          subtitle={
+            submitting
+              ? 'Each vault gets its own on-chain program — true non-commingling'
+              : 'All deployment steps completed'
+          }
+        >
+          <div className="space-y-1">
+            {liveSteps.map((step, i) => {
+              const StepIcon = step.icon;
+              const isActive = step.status === 'in_progress';
+              const isDone = step.status === 'success';
+              const isFailed = step.status === 'failed';
+              const isSkipped = step.status === 'skipped';
+              const isPending = step.status === 'pending';
 
-            {/* Deployment Steps */}
-            {lastCreated.deploymentSteps && lastCreated.deploymentSteps.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-[10px] uppercase tracking-wider text-vault-muted font-semibold">Deployment Steps</p>
-                {lastCreated.deploymentSteps.map((s, i) => (
-                  <div key={i} className={`flex items-start gap-3 bg-vault-bg rounded-lg px-4 py-3 border-l-2 ${
-                    s.status === 'success' ? 'border-l-green-500' : s.status === 'failed' ? 'border-l-red-500' : 'border-l-yellow-500'
+              return (
+                <div key={step.key} className="relative">
+                  {/* Connector line */}
+                  {i < liveSteps.length - 1 && (
+                    <div className={`absolute left-[19px] top-[40px] w-0.5 h-[calc(100%-24px)] transition-colors duration-500 ${
+                      isDone ? 'bg-green-500/50' : isFailed ? 'bg-red-500/50' : 'bg-vault-border/30'
+                    }`} />
+                  )}
+
+                  <div className={`flex items-start gap-3 rounded-lg px-3 py-3 transition-all duration-500 ${
+                    isActive ? 'bg-vault-accent/5 ring-1 ring-vault-accent/20' :
+                    isDone ? 'bg-green-900/5' :
+                    isFailed ? 'bg-red-900/5' :
+                    ''
                   }`}>
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 flex-shrink-0 ${
-                      s.status === 'success' ? 'bg-green-500 text-white' : s.status === 'failed' ? 'bg-red-500 text-white' : 'bg-yellow-500 text-black'
+                    {/* Step icon */}
+                    <div className={`w-[38px] h-[38px] rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-500 ${
+                      isActive ? 'bg-vault-accent/20 ring-2 ring-vault-accent/40' :
+                      isDone ? 'bg-green-500/20' :
+                      isFailed ? 'bg-red-500/20' :
+                      isSkipped ? 'bg-yellow-500/10' :
+                      'bg-vault-border/20'
                     }`}>
-                      {s.status === 'success' ? '\u2713' : s.status === 'failed' ? '\u2717' : '!'}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-white font-medium">{s.step}</span>
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
-                          s.status === 'success' ? 'bg-green-900/30 text-green-400' :
-                          s.status === 'failed' ? 'bg-red-900/30 text-red-400' :
-                          'bg-yellow-900/30 text-yellow-400'
-                        }`}>{s.status}</span>
-                      </div>
-                      {s.detail && (
-                        <p className="text-[10px] text-vault-muted mt-1 truncate" title={s.detail}>{s.detail}</p>
+                      {isActive ? (
+                        <Loader2 className="w-4.5 h-4.5 text-vault-accent animate-spin" />
+                      ) : isDone ? (
+                        <CheckCircle className="w-4.5 h-4.5 text-green-400" />
+                      ) : isFailed ? (
+                        <XCircle className="w-4.5 h-4.5 text-red-400" />
+                      ) : isSkipped ? (
+                        <Clock className="w-4.5 h-4.5 text-yellow-400" />
+                      ) : (
+                        <StepIcon className="w-4.5 h-4.5 text-vault-muted/50" />
                       )}
-                      <div className="flex gap-3 mt-1.5">
-                        {s.txSignature && (
-                          <a href={`https://solscan.io/tx/${s.txSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-0.5 text-[10px] text-vault-accent hover:underline">
-                            View Tx <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
-                        )}
-                        {s.address && (
-                          <a href={`https://solscan.io/account/${s.address}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-0.5 text-[10px] text-purple-400 hover:underline">
-                            View Account <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
-                        )}
+                    </div>
+
+                    {/* Step content */}
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-medium transition-colors duration-300 ${
+                            isActive ? 'text-vault-accent' :
+                            isDone ? 'text-green-400' :
+                            isFailed ? 'text-red-400' :
+                            isPending ? 'text-vault-muted/50' :
+                            'text-yellow-400'
+                          }`}>
+                            {step.label}
+                          </span>
+                          <span className="text-[10px] text-vault-muted/40 font-mono">{i + 1}/5</span>
+                        </div>
+
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded transition-all duration-300 ${
+                          isActive ? 'bg-vault-accent/20 text-vault-accent animate-pulse' :
+                          isDone ? 'bg-green-900/30 text-green-400' :
+                          isFailed ? 'bg-red-900/30 text-red-400' :
+                          isSkipped ? 'bg-yellow-900/30 text-yellow-400' :
+                          'bg-vault-border/20 text-vault-muted/40'
+                        }`}>
+                          {isActive ? 'in progress' : step.status}
+                        </span>
                       </div>
+
+                      <p className={`text-[11px] mt-0.5 transition-colors duration-300 ${
+                        isActive ? 'text-vault-muted' :
+                        isPending ? 'text-vault-muted/30' :
+                        'text-vault-muted/60'
+                      }`}>
+                        {step.detail || step.description}
+                      </p>
+
+                      {/* Explorer links once finalized */}
+                      {(step.txSignature || step.address) && (
+                        <div className="flex gap-3 mt-1.5">
+                          {step.txSignature && (
+                            <a href={`https://solscan.io/tx/${step.txSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-0.5 text-[10px] text-vault-accent hover:underline">
+                              View Tx <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                          {step.address && (
+                            <a href={`https://solscan.io/account/${step.address}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-0.5 text-[10px] text-purple-400 hover:underline">
+                              View Account <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Progress bar for active step */}
+                      {isActive && (
+                        <div className="mt-2 h-1 bg-vault-border/20 rounded-full overflow-hidden">
+                          <div className="h-full bg-vault-accent/60 rounded-full animate-pulse" style={{ width: '60%' }} />
+                        </div>
+                      )}
                     </div>
                   </div>
-                ))}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Success summary after completion */}
+          {!submitting && lastCreated && (
+            <div className="mt-4 pt-4 border-t border-vault-border/30">
+              <div className="flex items-center gap-2 text-green-400 mb-3">
+                <CheckCircle className="w-5 h-5" />
+                <span className="text-sm font-medium">
+                  Segregated vault {lastCreated.vaultId} deployed with unique program
+                </span>
               </div>
-            )}
 
             {/* Vault Details */}
             <div className="bg-vault-bg rounded-lg p-4 space-y-2.5">
@@ -314,7 +496,7 @@ export default function VaultFactoryPage() {
             </div>
 
             {/* Explorer quick links */}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 mt-3">
               {lastCreated.programId && (
                 <a href={`https://solscan.io/account/${lastCreated.programId}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1.5 text-xs text-white hover:underline bg-vault-border/50 px-3 py-1.5 rounded">
@@ -335,10 +517,14 @@ export default function VaultFactoryPage() {
               )}
             </div>
 
-            <button onClick={() => setLastCreated(null)} className="text-xs text-vault-muted hover:text-white transition-colors">
+            <button
+              onClick={() => { setLastCreated(null); setLiveSteps([]); }}
+              className="text-xs text-vault-muted hover:text-white transition-colors mt-2"
+            >
               Dismiss
             </button>
-          </div>
+            </div>
+          )}
         </Card>
       )}
 

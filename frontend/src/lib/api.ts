@@ -77,6 +77,14 @@ export const api = {
   getConsentRequests: () => request<any[]>('/consent'),
   approveConsent: (id: string) => request<any>(`/consent/${id}/approve`, { method: 'PUT' }),
 
+  // Solstice Yield Protocol
+  solsticeLock: (vaultId: string, amount: number) => request<any>('/solstice/lock', { method: 'POST', body: JSON.stringify({ vaultId, amount }) }),
+  solsticeUnlock: (vaultId: string, amount: number) => request<any>('/solstice/unlock', { method: 'POST', body: JSON.stringify({ vaultId, amount }) }),
+  solsticeWithdraw: (vaultId: string) => request<any>('/solstice/withdraw', { method: 'POST', body: JSON.stringify({ vaultId }) }),
+  solsticePoolState: () => request<any>('/solstice/pool-state'),
+  solsticePosition: (vaultId: string) => request<any>(`/solstice/position/${vaultId}`),
+  solsticeFundFlow: (vaultId: string) => request<any[]>(`/solstice/fund-flow/${vaultId}`),
+
   // Events
   getEvents: (vaultId?: string, actionType?: string) => {
     const params = new URLSearchParams();

@@ -3,7 +3,9 @@ import { api } from '../lib/api';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import StatusBadge from '../components/StatusBadge';
-import { TrendingUp, ArrowDownToLine, ArrowUpFromLine, Pause, RefreshCw, ExternalLink } from 'lucide-react';
+import { TrendingUp, ArrowDownToLine, ArrowUpFromLine, Pause, RefreshCw, ExternalLink, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+
+const SOLSTICE_STRATEGY_ID = 'solstice-eusx-yield';
 
 type ActionTab = 'deploy' | 'pull' | 'idle';
 type OutcomeType = 'approved' | 'blocked' | 'consent_required';
@@ -34,6 +36,11 @@ export default function ExecutionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
+  // Solstice on-chain position
+  const [solsticePosition, setSolsticePosition] = useState<any>(null);
+  const [solsticePoolState, setSolsticePoolState] = useState<any>(null);
+  const [solsticeFundFlow, setSolsticeFundFlow] = useState<any[]>([]);
+
   // Load vaults list
   useEffect(() => {
     api.getVaults().then(setVaults).catch(() => {});
@@ -53,6 +60,16 @@ export default function ExecutionPage() {
       const [strats, snap] = await Promise.all([api.getStrategies(), api.getSnapshot(activeVaultId)]);
       setStrategies(strats);
       setSnapshot(snap);
+      // Load Solstice data in parallel (non-blocking)
+      Promise.all([
+        api.solsticePosition(activeVaultId).catch(() => null),
+        api.solsticePoolState().catch(() => null),
+        api.solsticeFundFlow(activeVaultId).catch(() => []),
+      ]).then(([pos, pool, flow]) => {
+        setSolsticePosition(pos);
+        setSolsticePoolState(pool);
+        setSolsticeFundFlow(flow);
+      });
     } catch (err: any) {
       notify('error', err?.message || 'Failed to load data');
     } finally {
@@ -130,29 +147,53 @@ export default function ExecutionPage() {
   const activeStrategies = strategyRows.filter(s => s.active);
   const pullableStrategies = strategyRows.filter(s => s.deployed > 0 && !s.disabled);
 
-  // Deploy handler
+  const isSolstice = selectedStrategy === SOLSTICE_STRATEGY_ID;
+
+  // Deploy handler — routes Solstice through on-chain lock, others through DB allocate
   const handleDeploy = async () => {
     const parsed = parseFloat(amount);
     if (!selectedStrategy || isNaN(parsed) || parsed <= 0) { notify('error', 'Select a strategy and enter a valid amount'); return; }
     setSubmitting(true);
     setOutcome(null);
     const strat = strategies.find((s: any) => s.strategyId === selectedStrategy);
+
     try {
-      const res = await fetch(`/api/vaults/${activeVaultId}/allocate`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-role': 'portfolio_manager' },
-        body: JSON.stringify({ strategyId: selectedStrategy, amount: parsed }),
-      });
-      const data = await res.json();
-      if (res.status === 201) {
-        setOutcome({ type: 'approved', strategyName: strat?.name || selectedStrategy, amount: parsed, reason: data.message || 'Deployed successfully', txSignature: data.allocation?.id });
-        notify('success', 'Capital deployed');
+      if (isSolstice) {
+        // On-chain Solstice lock (USX -> eUSX)
+        const res = await api.solsticeLock(activeVaultId!, parsed);
+        setOutcome({
+          type: 'approved',
+          strategyName: strat?.name || 'Solstice eUSX Yield',
+          amount: parsed,
+          reason: [
+            `Locked ${parsed} USX into Solstice eUSX yield vault on-chain.`,
+            res.onChainVerified ? 'On-chain verified.' : '',
+            res.eusxReceived ? `eUSX received: ${res.eusxReceived}.` : '',
+            `Pre: ${res.preBalanceUSX} USX / ${res.preBalanceEUSX} eUSX.`,
+            `Post: ${res.postBalanceUSX} USX / ${res.postBalanceEUSX} eUSX.`,
+          ].filter(Boolean).join(' '),
+          txSignature: res.txSignature,
+        });
+        notify('success', `Locked ${parsed} USX into Solstice — on-chain confirmed`);
         loadData();
-      } else if (res.status === 403) {
-        setOutcome({ type: 'blocked', strategyName: strat?.name || selectedStrategy, amount: parsed, reason: data.reason || 'Blocked by mandate' });
-      } else if (res.status === 202) {
-        setOutcome({ type: 'consent_required', strategyName: strat?.name || selectedStrategy, amount: parsed, reason: data.reason || 'Client consent required', consentRequestId: data.requestId });
       } else {
-        notify('error', data.message || 'Failed');
+        // DB-only allocation for other strategies
+        const res = await fetch(`/api/vaults/${activeVaultId}/allocate`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'x-role': 'portfolio_manager' },
+          body: JSON.stringify({ strategyId: selectedStrategy, amount: parsed }),
+        });
+        const data = await res.json();
+        if (res.status === 201) {
+          setOutcome({ type: 'approved', strategyName: strat?.name || selectedStrategy, amount: parsed, reason: data.message || 'Deployed successfully', txSignature: data.allocation?.id });
+          notify('success', 'Capital deployed');
+          loadData();
+        } else if (res.status === 403) {
+          setOutcome({ type: 'blocked', strategyName: strat?.name || selectedStrategy, amount: parsed, reason: data.reason || 'Blocked by mandate' });
+        } else if (res.status === 202) {
+          setOutcome({ type: 'consent_required', strategyName: strat?.name || selectedStrategy, amount: parsed, reason: data.reason || 'Client consent required', consentRequestId: data.requestId });
+        } else {
+          notify('error', data.message || 'Failed');
+        }
       }
     } catch (err: any) { notify('error', err?.message || 'Request failed'); }
     finally { setSubmitting(false); }
@@ -275,9 +316,14 @@ export default function ExecutionPage() {
                     <select value={selectedStrategy} onChange={(e) => setSelectedStrategy(e.target.value)}
                       className="w-full bg-vault-bg border border-vault-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-vault-accent">
                       <option value="">Select strategy to deploy into...</option>
-                      {strategies.filter((s: any) => !s.disabled).map((s: any) => (
-                        <option key={s.strategyId} value={s.strategyId}>{s.name} — APY {s.currentYield || 0}%</option>
-                      ))}
+                      {strategies.map((s: any) => {
+                        const isLive = s.strategyId === SOLSTICE_STRATEGY_ID;
+                        return (
+                          <option key={s.strategyId} value={s.strategyId} disabled={!isLive}>
+                            {s.name} — APY {s.currentYield || 0}%{isLive ? ' (On-Chain)' : ' (Coming Soon)'}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                   <div>
@@ -287,17 +333,44 @@ export default function ExecutionPage() {
                     <p className="text-[10px] text-vault-muted mt-1">Available idle: {fmt(snapshot?.idleBalance)} USDC</p>
                   </div>
                   {selectedStrategy && amount && (
-                    <div className="bg-vault-bg rounded p-3 text-xs space-y-1">
-                      <p className="text-vault-muted uppercase tracking-wider text-[10px] font-semibold mb-1">Mandate Validation Preview</p>
+                    <div className="bg-vault-bg rounded p-3 text-xs space-y-1.5">
+                      <p className="text-vault-muted uppercase tracking-wider text-[10px] font-semibold mb-1">
+                        {isSolstice ? 'On-Chain Deployment Preview' : 'Mandate Validation Preview'}
+                      </p>
                       <div className="flex justify-between"><span className="text-vault-muted">Strategy</span><span className="text-white">{strategies.find((s: any) => s.strategyId === selectedStrategy)?.name || '—'}</span></div>
-                      <div className="flex justify-between"><span className="text-vault-muted">Amount</span><span className="text-white">{fmt(parseFloat(amount))} USDC</span></div>
+                      <div className="flex justify-between"><span className="text-vault-muted">Amount</span><span className="text-white">{fmt(parseFloat(amount))} {isSolstice ? 'USX' : 'USDC'}</span></div>
                       <div className="flex justify-between"><span className="text-vault-muted">Post-deploy idle</span><span className="text-white">{fmt((snapshot?.idleBalance || 0) - (parseFloat(amount) || 0))} USDC</span></div>
                       <div className="flex justify-between"><span className="text-vault-muted">Mandate</span><StatusBadge status={snapshot?.mandateStatus || 'none'} /></div>
+                      {isSolstice && (
+                        <>
+                          <div className="border-t border-vault-border/30 pt-1.5 mt-1.5">
+                            <p className="text-[10px] text-vault-muted font-semibold mb-1">ON-CHAIN FUND FLOW</p>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5 text-vault-muted text-[10px]">
+                                <span className="w-1.5 h-1.5 rounded-full bg-vault-accent" />
+                                <span className="text-white">1.</span> Deposit USDC from vault <span className="text-vault-border">-&gt;</span> <span className="text-white">receive USX</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-vault-muted text-[10px]">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                                <span className="text-white">2.</span> Lock USX <span className="text-vault-border">-&gt;</span> <span className="text-white">Solstice Vault</span>
+                                <span className="text-vault-border">-&gt;</span> <span className="text-green-400">eUSX (yield-bearing)</span>
+                              </div>
+                            </div>
+                          </div>
+                          {solsticePoolState && (
+                            <div className="flex justify-between"><span className="text-vault-muted">Exchange Rate</span><span className="text-vault-accent font-mono">{solsticePoolState.exchangeRate?.toFixed(6)}</span></div>
+                          )}
+                          {solsticePosition?.eusxBalance > 0 && (
+                            <div className="flex justify-between"><span className="text-vault-muted">Current eUSX Balance</span><span className="text-green-400 font-mono">{solsticePosition.eusxBalance.toFixed(4)}</span></div>
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
                   <button onClick={handleDeploy} disabled={submitting || !selectedStrategy || !amount}
-                    className="w-full bg-vault-accent hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm font-semibold rounded py-2.5 transition-colors">
-                    {submitting ? 'Validating & Deploying...' : 'Deploy to Strategy'}
+                    className="w-full bg-vault-accent hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm font-semibold rounded py-2.5 transition-colors flex items-center justify-center gap-2">
+                    {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {submitting ? (isSolstice ? 'Executing on-chain...' : 'Validating & Deploying...') : (isSolstice ? 'Deploy to Solstice (On-Chain)' : 'Deploy to Strategy')}
                   </button>
                 </div>
               )}
@@ -386,6 +459,15 @@ export default function ExecutionPage() {
                 <span className="text-[10px] uppercase tracking-wider text-vault-muted">Reason</span>
                 <p className={`text-sm mt-1 ${outcomeColors[outcome.type].text}`}>{outcome.reason}</p>
               </div>
+              {outcome.txSignature && outcome.txSignature.length > 30 && (
+                <div className="border-t border-white/10 pt-2">
+                  <span className="text-[10px] uppercase tracking-wider text-vault-muted">On-Chain Transaction</span>
+                  <a href={`https://solscan.io/tx/${outcome.txSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-vault-accent hover:underline font-mono mt-1">
+                    {outcome.txSignature.slice(0, 24)}... <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
               {outcome.consentRequestId && (
                 <div className="border-t border-white/10 pt-2"><span className="text-[10px] uppercase tracking-wider text-vault-muted">Consent Request</span><p className="text-yellow-400 text-xs font-mono mt-1">{outcome.consentRequestId}</p></div>
               )}
@@ -409,21 +491,38 @@ export default function ExecutionPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {strategyRows.map(s => (
-                    <tr key={s.strategyId} className="border-b border-vault-border/30 hover:bg-vault-bg/50 transition-colors">
+                  {strategyRows.map(s => {
+                    const isLive = s.strategyId === SOLSTICE_STRATEGY_ID;
+                    const solsticeDeployed = isLive && solsticePosition?.usxValue ? solsticePosition.usxValue : 0;
+                    const effectiveDeployed = isLive ? (s.deployed + solsticeDeployed) : s.deployed;
+                    return (
+                    <tr key={s.strategyId} className={`border-b border-vault-border/30 transition-colors ${isLive ? 'hover:bg-vault-bg/50' : 'opacity-50'}`}>
                       <td className="py-2.5 pr-2">
-                        <p className="text-white font-medium">{s.name}</p>
-                        <p className="text-[10px] text-vault-muted">{s.riskLevel} risk</p>
+                        <div className="flex items-center gap-2">
+                          <div>
+                            <p className="text-white font-medium">{s.name}</p>
+                            <p className="text-[10px] text-vault-muted">{s.riskLevel} risk</p>
+                          </div>
+                          {isLive ? (
+                            <span className="text-[9px] px-1.5 py-0.5 bg-green-900/30 text-green-400 rounded font-semibold">LIVE</span>
+                          ) : (
+                            <span className="text-[9px] px-1.5 py-0.5 bg-vault-border/50 text-vault-muted rounded font-semibold">COMING SOON</span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-2.5 pr-2">
-                        <StatusBadge status={s.disabled ? 'disabled' : s.active ? 'active' : 'none'} />
+                        {isLive ? (
+                          <StatusBadge status={s.disabled ? 'disabled' : effectiveDeployed > 0 ? 'active' : 'none'} />
+                        ) : (
+                          <span className="text-[10px] text-vault-muted">—</span>
+                        )}
                       </td>
-                      <td className="py-2.5 pr-2 text-right font-mono text-white">{s.deployed > 0 ? fmt(s.deployed) : '—'}</td>
-                      <td className="py-2.5 pr-2 text-right font-mono text-vault-muted">{s.allocPct > 0 ? `${s.allocPct.toFixed(1)}%` : '—'}</td>
+                      <td className="py-2.5 pr-2 text-right font-mono text-white">{effectiveDeployed > 0 ? fmt(effectiveDeployed) : '—'}</td>
+                      <td className="py-2.5 pr-2 text-right font-mono text-vault-muted">{effectiveDeployed > 0 && totalNAV > 0 ? `${(effectiveDeployed / totalNAV * 100).toFixed(1)}%` : '—'}</td>
                       <td className="py-2.5 pr-2 text-right font-mono text-green-400">{s.yield > 0 ? `+${fmt(s.yield)}` : '—'}</td>
                       <td className="py-2.5 pr-2 text-right font-mono text-vault-muted">{s.currentYield > 0 ? `${s.currentYield}%` : '—'}</td>
                       <td className="py-2.5 pr-2 text-center">
-                        {s.deployed > 0 && !s.disabled ? (
+                        {isLive && effectiveDeployed > 0 ? (
                           <span className="text-green-400 text-[10px] font-medium">Yes</span>
                         ) : (
                           <span className="text-vault-muted text-[10px]">—</span>
@@ -431,18 +530,19 @@ export default function ExecutionPage() {
                       </td>
                       <td className="py-2.5 text-right">
                         <div className="flex gap-1.5 justify-end">
-                          {!s.disabled && (
+                          {isLive && !s.disabled && (
                             <button onClick={() => { setTab('deploy'); setSelectedStrategy(s.strategyId); setAmount(''); setOutcome(null); }}
                               className="text-[10px] text-vault-accent hover:underline">Deploy</button>
                           )}
-                          {s.deployed > 0 && !s.disabled && (
-                            <button onClick={() => { setTab('pull'); setSelectedStrategy(s.strategyId); setPullType('full'); setAmount(String(s.deployed)); setOutcome(null); }}
+                          {isLive && effectiveDeployed > 0 && !s.disabled && (
+                            <button onClick={() => { setTab('pull'); setSelectedStrategy(s.strategyId); setPullType('full'); setAmount(String(effectiveDeployed)); setOutcome(null); }}
                               className="text-[10px] text-amber-400 hover:underline">Pull</button>
                           )}
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -520,6 +620,71 @@ export default function ExecutionPage() {
               </div>
             )}
           </Card>
+
+          {/* Solstice On-Chain Position */}
+          {solsticePosition && (
+            <Card title="Solstice eUSX Position" subtitle="On-chain yield position">
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-vault-bg rounded p-2.5 text-center">
+                    <p className="text-sm font-bold text-white font-mono">{solsticePosition.eusxBalance?.toFixed(4) || '0'}</p>
+                    <p className="text-[10px] text-vault-muted">eUSX</p>
+                  </div>
+                  <div className="bg-vault-bg rounded p-2.5 text-center">
+                    <p className="text-sm font-bold text-green-400 font-mono">{solsticePosition.usxValue?.toFixed(4) || '0'}</p>
+                    <p className="text-[10px] text-vault-muted">USX Value</p>
+                  </div>
+                </div>
+                {solsticePoolState && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-vault-muted">Exchange Rate</span>
+                    <span className="text-vault-accent font-mono">{solsticePoolState.exchangeRate?.toFixed(6)}</span>
+                  </div>
+                )}
+                {solsticePosition.eusxAta && (
+                  <div className="flex justify-between text-[10px]">
+                    <span className="text-vault-muted">eUSX ATA</span>
+                    <a href={`https://solscan.io/account/${solsticePosition.eusxAta}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                      className="text-vault-accent hover:underline flex items-center gap-0.5 font-mono">
+                      {solsticePosition.eusxAta.slice(0, 6)}...{solsticePosition.eusxAta.slice(-4)}
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {/* Fund Flow Timeline */}
+          {solsticeFundFlow.length > 0 && (
+            <Card title="Fund Flow" subtitle="On-chain activity log">
+              <div className="space-y-1 max-h-[240px] overflow-y-auto">
+                {solsticeFundFlow.slice(0, 15).map((e: any) => (
+                  <div key={e.eventId} className={`bg-vault-bg rounded px-3 py-2 border-l-2 ${
+                    e.result === 'success' ? 'border-l-green-500' : e.result === 'pending' ? 'border-l-yellow-500' : 'border-l-red-500'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-white font-medium">
+                        {e.actionType.replace('SOLSTICE_', '').replaceAll('_', ' ')}
+                      </span>
+                      <span className="text-[9px] text-vault-muted">
+                        {new Date(e.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    {e.amount != null && (
+                      <span className="text-[10px] text-vault-accent font-mono">{e.amount} {e.asset}</span>
+                    )}
+                    {e.txSignature && (
+                      <a href={`https://solscan.io/tx/${e.txSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                        className="text-[9px] text-vault-accent hover:underline flex items-center gap-0.5 mt-0.5">
+                        {e.txSignature.slice(0, 16)}... <ExternalLink className="w-2 h-2" />
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
       </div>
     </div>
