@@ -28,11 +28,12 @@ import ActivityPage from './pages/client/ActivityPage';
 import RequestCredentialPage from './pages/client/RequestCredentialPage';
 import MyVaultsPage from './pages/client/MyVaultsPage';
 import VaultDetailPage from './pages/client/VaultDetailPage';
+import ClientMandatePage from './pages/client/ClientMandatePage';
 
 // Role → allowed routes
 const roleAccess: Record<Role, string[]> = {
   admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance', '/amina/audit-log'],
-  portfolio_manager: ['/amina', '/amina/execution', '/amina/compliance'],
+  portfolio_manager: ['/amina', '/amina/mandate', '/amina/execution', '/amina/compliance'],
   compliance_officer: ['/amina', '/amina/compliance'],
   emergency_admin: ['/amina', '/amina/emergency', '/amina/compliance'],
   client_representative: [],
@@ -68,12 +69,13 @@ function AccessDenied({ role, route }: { role: Role; route: string }) {
     admin: [
       { label: 'Credentials', path: '/amina/credentials' },
       { label: 'Vault Factory', path: '/amina/vault-factory' },
-      { label: 'Mandate Config', path: '/amina/mandate' },
+      { label: 'Mandate Details', path: '/amina/mandate' },
       { label: 'Vault Funding', path: '/amina/funding' },
       { label: 'Compliance', path: '/amina/compliance' },
       { label: 'Audit Log', path: '/amina/audit-log' },
     ],
     portfolio_manager: [
+      { label: 'Mandate Details', path: '/amina/mandate' },
       { label: 'Execution', path: '/amina/execution' },
       { label: 'Compliance', path: '/amina/compliance' },
     ],
@@ -165,6 +167,7 @@ export default function App() {
         <Route path="vaults" element={<MyVaultsPage />} />
         <Route path="vaults/:id" element={<VaultDetailPage />} />
         <Route path="request-credential" element={<RequestCredentialPage />} />
+        <Route path="mandate" element={<ClientMandatePage />} />
         <Route path="consent" element={<ConsentPage />} />
         <Route path="ramp" element={<RampPage />} />
         <Route path="activity" element={<ActivityPage />} />

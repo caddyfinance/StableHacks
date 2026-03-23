@@ -7,7 +7,7 @@ import StatusBadge from '../../components/StatusBadge';
 import {
   Shield, Building2, TrendingUp, ClipboardCheck, ArrowRight, Wallet,
   AlertTriangle, ShieldCheck, Pause, Play, Activity, FileCheck,
-  ArrowDownToLine, ArrowUpFromLine, Eye, Banknote,
+  ArrowDownToLine, ArrowUpFromLine, Eye, Banknote, UserCheck,
 } from 'lucide-react';
 
 // ─── Shared data loader ──────────────────────────────────────────
@@ -73,10 +73,11 @@ function AdminDashboard({ data }: { data: ReturnType<typeof useDashboardData> })
   const totalDeposited = vaults.reduce((s: number, v: any) => s + (v.totalDeposited || 0), 0);
   const activeCreds = credentials.filter((c: any) => c.status === 'active');
   const revokedCreds = credentials.filter((c: any) => c.status === 'revoked');
+  const clientsWithActiveVaults = new Set(activeVaults.map((v: any) => v.clientReference).filter(Boolean)).size;
 
   const statCards = [
     { label: 'Credentials Issued', value: credentials.length, sub: `${activeCreds.length} active, ${revokedCreds.length} revoked`, icon: Shield, color: 'text-teal-700' },
-    { label: 'Active Vaults', value: activeVaults.length, sub: `${fmt(totalNAV)} USDC total NAV`, icon: Building2, color: 'text-teal-600' },
+    { label: 'Clients with Active Vaults', value: clientsWithActiveVaults, sub: `${activeVaults.length} vault${activeVaults.length !== 1 ? 's' : ''} — ${fmt(totalNAV)} USDC total NAV`, icon: Building2, color: 'text-teal-600' },
     { label: 'Total Deposited', value: fmt(totalDeposited), sub: 'Across all vaults', icon: Banknote, color: 'text-success-700' },
     { label: 'Compliance Events', value: events.length, sub: `${events.filter((e: any) => e.result === 'failure').length} blocked`, icon: ClipboardCheck, color: 'text-warning-700' },
   ];
@@ -189,19 +190,32 @@ function AdminDashboard({ data }: { data: ReturnType<typeof useDashboardData> })
 function PortfolioManagerDashboard({ data }: { data: ReturnType<typeof useDashboardData> }) {
   const navigate = useNavigate();
   const { vaults, strategies, snapshots, events } = data;
+  // Get unique clients from vaults
+  const clients = [...new Set(vaults.map((v: any) => v.clientReference).filter(Boolean))];
+  const [selectedClient, setSelectedClient] = useState<string>(clients[0] || '');
 
-  const totalNAV = vaults.reduce((s: number, v: any) => s + (v.totalNAV || 0), 0);
-  const totalIdle = vaults.reduce((s: number, v: any) => s + (v.idleBalance || 0), 0);
+  // Auto-select first client when data loads
+  useEffect(() => {
+    if (!selectedClient && clients.length > 0) setSelectedClient(clients[0]);
+  }, [clients.length]);
+
+  // Filter vaults and events by selected client
+  const filteredVaults = selectedClient ? vaults.filter((v: any) => v.clientReference === selectedClient) : vaults;
+  const filteredVaultIds = new Set(filteredVaults.map((v: any) => v.vaultId));
+  const filteredEvents = selectedClient ? events.filter((e: any) => !e.vaultId || filteredVaultIds.has(e.vaultId)) : events;
+
+  const totalNAV = filteredVaults.reduce((s: number, v: any) => s + (v.totalNAV || 0), 0);
+  const totalIdle = filteredVaults.reduce((s: number, v: any) => s + (v.idleBalance || 0), 0);
   const totalDeployed = totalNAV - totalIdle;
   const deployedPct = totalNAV > 0 ? (totalDeployed / totalNAV * 100) : 0;
 
   const activeStrategies = strategies.filter((s: any) => !s.disabled);
-  const allocationEvents = events.filter((e: any) => e.actionType === 'ALLOCATION_EXECUTED');
-  const blockedEvents = events.filter((e: any) => e.actionType === 'ALLOCATION_BLOCKED');
-  const consentEvents = events.filter((e: any) => e.actionType === 'CONSENT_REQUESTED');
+  const allocationEvents = filteredEvents.filter((e: any) => e.actionType === 'ALLOCATION_EXECUTED');
+  const blockedEvents = filteredEvents.filter((e: any) => e.actionType === 'ALLOCATION_BLOCKED');
+  const consentEvents = filteredEvents.filter((e: any) => e.actionType === 'CONSENT_REQUESTED');
 
   const statCards = [
-    { label: 'Total NAV', value: fmt(totalNAV), sub: 'Across all vaults', icon: Banknote, color: 'text-teal-700' },
+    { label: 'Total NAV', value: fmt(totalNAV), sub: selectedClient ? `Client: ${selectedClient}` : 'No client selected', icon: Banknote, color: 'text-teal-700' },
     { label: 'Deployed', value: fmt(totalDeployed), sub: `${deployedPct.toFixed(1)}% of NAV`, icon: TrendingUp, color: 'text-success-700' },
     { label: 'Idle Capital', value: fmt(totalIdle), sub: 'Available for deployment', icon: Wallet, color: 'text-warning-700' },
     { label: 'Active Strategies', value: activeStrategies.length, sub: `${strategies.length} total configured`, icon: Activity, color: 'text-teal-600' },
@@ -209,6 +223,32 @@ function PortfolioManagerDashboard({ data }: { data: ReturnType<typeof useDashbo
 
   return (
     <>
+      {/* Client Selector */}
+      <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg p-4 shadow-1">
+        <div className="flex items-center gap-3">
+          <UserCheck className="w-5 h-5 text-teal-700" />
+          <div>
+            <p className="text-xs text-slate-500">Viewing portfolio for</p>
+            <p className="text-sm font-medium text-ink-900">{selectedClient === 'ALL' ? 'All Clients' : selectedClient}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {clients.map((client) => (
+            <button
+              key={client}
+              onClick={() => setSelectedClient(client)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-all ease-amina duration-150 ${
+                selectedClient === client
+                  ? 'bg-teal-50 border-teal-700 text-teal-700'
+                  : 'bg-white border-slate-200 text-slate-500 hover:text-ink-900'
+              }`}
+            >
+              {client}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map(({ label, value, sub, icon: Icon, color }) => (
           <div key={label} className="bg-white border border-slate-200 rounded-lg p-5 shadow-1">
@@ -221,7 +261,7 @@ function PortfolioManagerDashboard({ data }: { data: ReturnType<typeof useDashbo
       </div>
 
       {/* Capital Allocation Bar */}
-      <Card title="Capital Allocation" subtitle="Deployment overview across all vaults">
+      <Card title="Capital Allocation" subtitle={`Deployment for ${selectedClient || 'client'}`}>
         <div className="space-y-4">
           <div className="h-4 rounded-full bg-slate-100 overflow-hidden flex">
             <div className="h-full bg-teal-700 transition-all" style={{ width: `${deployedPct}%` }} title="Deployed" />
@@ -251,7 +291,7 @@ function PortfolioManagerDashboard({ data }: { data: ReturnType<typeof useDashbo
         </Card>
 
         {/* Execution Activity */}
-        <Card title="Execution Activity" subtitle="Recent allocation and consent events">
+        <Card title="Execution Activity" subtitle={`Client: ${selectedClient || '—'}`}>
           <div className="space-y-3">
             <div className="grid grid-cols-3 gap-2">
               <div className="bg-success-100 rounded-md p-3 text-center">
@@ -276,8 +316,8 @@ function PortfolioManagerDashboard({ data }: { data: ReturnType<typeof useDashbo
       </div>
 
       {/* Per-Vault Positions */}
-      {vaults.length > 0 && (
-        <Card title="Vault Positions" subtitle="Capital status per vault">
+      {filteredVaults.length > 0 && (
+        <Card title="Vault Positions" subtitle={`Vaults for ${selectedClient || 'client'}`}>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
@@ -291,7 +331,7 @@ function PortfolioManagerDashboard({ data }: { data: ReturnType<typeof useDashbo
                 </tr>
               </thead>
               <tbody>
-                {vaults.map((v: any) => {
+                {filteredVaults.map((v: any) => {
                   const snap = snapshots[v.vaultId];
                   const idle = v.idleBalance || 0;
                   const nav = v.totalNAV || 0;

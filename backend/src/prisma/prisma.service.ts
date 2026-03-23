@@ -34,9 +34,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       if (strategyCount === 0) {
         await this.strategy.createMany({
           data: [
-            { strategyId: 'STBL-YIELD-01', name: 'Stablecoin Lending Adapter', description: 'Low-risk stablecoin lending via approved institutional protocols', riskLevel: 'low', active: true, currentYield: 4.2 },
-            { strategyId: 'TRSY-YIELD-01', name: 'Tokenised Treasury Adapter', description: 'Ultra-conservative tokenised US Treasury yield', riskLevel: 'low', active: true, currentYield: 3.8 },
-            { strategyId: 'HIGH-DEFI-01', name: 'High Yield DeFi Adapter', description: 'Higher-risk DeFi yield farming — not permitted for conservative mandates', riskLevel: 'high', active: true, currentYield: 12.5 },
+            { strategyId: 'solstice-eusx-yield', name: 'Solstice eUSX Yield', description: 'On-chain yield via Solstice eUSX vault — deposit USDC, receive yield-bearing eUSX', riskLevel: 'low', active: true, currentYield: 8.5 },
           ],
         });
         this.logger.log('Seeded strategies');

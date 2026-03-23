@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   UserCheck,
@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   Vault,
   ArrowLeftRight,
+  FileCheck,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
@@ -16,6 +17,7 @@ const navItems = [
   { path: '/client/ramp', label: 'On/Off Ramp', icon: ArrowLeftRight, end: false },
   { path: '/client/vaults', label: 'My Vaults', icon: Vault, end: false },
   { path: '/client/request-credential', label: 'Credential Access', icon: ShieldCheck, end: false },
+  { path: '/client/mandate', label: 'Mandate Policy', icon: FileCheck, end: false },
   { path: '/client/consent', label: 'Consent Requests', icon: UserCheck, end: false },
   { path: '/client/activity', label: 'Activity Log', icon: ClipboardCheck, end: false },
 ];
@@ -28,6 +30,12 @@ export default function ClientLayout() {
     logout();
     navigate('/');
   };
+
+  // Auto-logout if no wallet connected (session expired or demo wallet cleared)
+  if (!clientInfo?.walletAddress) {
+    logout();
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div className="flex h-screen bg-amina-client-bg text-ink-900">

@@ -442,22 +442,6 @@ export default function RampPage() {
                   </div>
                 </div>
 
-                {/* Compliance Verification */}
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Compliance Verification</p>
-                  <div className="bg-slate-100 rounded-[18px] p-3 space-y-2">
-                    {bankChecks.map((c, i) => (
-                      <div key={i} className="flex items-center justify-between">
-                        <span className={c.status === 'pass' ? 'text-ink-900' : 'text-slate-500'}>{c.label}</span>
-                        {c.status === 'pass'
-                          ? <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-success-100 text-success-700">Passed</span>
-                          : <Loader2 className="w-3 h-3 text-slate-500 animate-spin" />
-                        }
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
                 {/* Notice */}
                 <div className="bg-warning-100 border border-warning-700/20 rounded-[18px] p-3">
                   <p className="text-[10px] text-warning-700">

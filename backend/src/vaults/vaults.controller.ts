@@ -51,7 +51,7 @@ export class VaultsController {
   }
 
   @Post(':id/mandate')
-  @Roles('admin')
+  @Roles('admin', 'portfolio_manager', 'client_representative')
   @ApiOperation({ summary: 'Attach investment mandate to vault', description: 'Define the investment mandate for a vault, specifying allowed/blocked strategies, allocation limits, liquidity buffers, consent thresholds, and approved destinations.' })
   @ApiParam({ name: 'id', description: 'Vault identifier' })
   @ApiCreatedResponse({ description: 'Mandate successfully attached to vault.' })
@@ -80,9 +80,20 @@ export class VaultsController {
     return this.service.getDeposits(id);
   }
 
+  @Post(':id/activate')
+  @Roles('client_representative')
+  @ApiOperation({ summary: 'Activate vault', description: 'Client approves the mandate and activates the vault. Changes status from initiated to active. Required before deposits.' })
+  @ApiParam({ name: 'id', description: 'Vault identifier' })
+  @ApiCreatedResponse({ description: 'Vault activated successfully.' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions. Client representative role required.' })
+  activate(@Param('id') id: string, @Req() req: Request) {
+    const callerWallet = req.headers['x-wallet'] as string | undefined;
+    return this.service.activateVault(id, callerWallet);
+  }
+
   @Post(':id/deposit')
   @Roles('admin', 'portfolio_manager', 'client_representative')
-  @ApiOperation({ summary: 'Deposit funds into vault', description: 'Deposit funds into an institutional yield vault with full audit trail.' })
+  @ApiOperation({ summary: 'Deposit funds into vault', description: 'Deposit funds into an institutional yield vault. Vault must be active.' })
   @ApiParam({ name: 'id', description: 'Vault identifier' })
   @ApiCreatedResponse({ description: 'Deposit successfully recorded.' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions.' })

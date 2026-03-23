@@ -229,7 +229,24 @@ export default function VaultDetailPage() {
   const handleDeposit = async () => {
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) { notify('error', 'Enter a valid amount'); return; }
-    if (!publicKey) { notify('error', 'Connect your wallet'); return; }
+
+    // Demo mode: no wallet connected — record deposit directly via API
+    if (!publicKey) {
+      setTxStep('recording');
+      setTxError(null);
+      try {
+        await api.deposit(vault.vaultId, { amount: amt, sourceWallet: clientInfo?.walletAddress || 'demo', sourceReference: `DEMO-${Date.now()}`, sourceType: 'Demo Deposit' });
+        setTxStep('done');
+        notify('success', `${fmt(amt)} USDC deposited (demo mode)`);
+        await loadData();
+      } catch (e: any) {
+        setTxError(e?.message || 'Deposit failed');
+        setTxStep('error');
+        notify('error', e?.message || 'Failed');
+      }
+      return;
+    }
+
     if (!vault?.onChainAddress) { notify('error', 'Vault has no on-chain address'); return; }
 
     setTxStep('building');
@@ -281,12 +298,12 @@ export default function VaultDetailPage() {
   const handleWithdraw = async () => {
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) { notify('error', 'Enter a valid amount'); return; }
-    if (!publicKey) { notify('error', 'Connect your wallet'); return; }
+    const destWalletAddr = publicKey?.toBase58() || clientInfo?.walletAddress || 'demo-wallet';
 
     setTxStep('recording');
     setTxError(null);
     try {
-      await api.redeem(vault.vaultId, { amount: amt, destinationWallet: publicKey.toBase58() });
+      await api.redeem(vault.vaultId, { amount: amt, destinationWallet: destWalletAddr });
       setTxStep('done');
       notify('success', `Withdrawal request for ${fmt(amt)} USDC submitted`);
       await loadData();
@@ -346,10 +363,24 @@ export default function VaultDetailPage() {
         </div>
       </div>
 
-      {/* Actions: Deposit / Withdraw */}
+      {/* Vault Status Banner for initiated vaults */}
+      {vault.status === 'initiated' && (
+        <div className="bg-warning-100 border border-warning-700/20 rounded-lg p-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-warning-700">Vault Pending Activation</p>
+            <p className="text-[10px] text-warning-700/80">Review and approve the mandate to activate this vault and enable deposits.</p>
+          </div>
+          <button onClick={() => { resetTx(); setShowMandateModal(true); }}
+            className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-[12px] transition-colors shadow-1">
+            Review Mandate & Activate
+          </button>
+        </div>
+      )}
+
+      {/* Actions: Deposit / Withdraw — only for active vaults */}
       {vault.status === 'active' && !vault.paused && (
         <div className="flex gap-3">
-          <button onClick={() => { resetTx(); setShowMandateModal(true); }}
+          <button onClick={() => { resetTx(); setMode('deposit'); }}
             className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-[12px] border transition-colors shadow-1 ${mode === 'deposit' ? 'bg-success-700 text-white border-success-700' : 'bg-white text-teal-700 border-teal-300/40 hover:bg-teal-100'}`}>
             <ArrowDownToLine className="w-3.5 h-3.5" /> Deposit USDC
           </button>
@@ -429,10 +460,7 @@ export default function VaultDetailPage() {
                         </div>
                       ))
                     : (
-                      <>
-                        <p>Stablecoin Lending Adapter (low risk)</p>
-                        <p>Tokenised Treasury Adapter (low risk)</p>
-                      </>
+                      <p>Solstice eUSX Yield (low risk)</p>
                     )}
                   </div>
                   {vault.mandate?.blockedStrategies?.length > 0 && (
@@ -486,10 +514,24 @@ export default function VaultDetailPage() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => { setShowMandateModal(false); setHasScrolledToEnd(false); setMode('deposit'); }}
+                  onClick={async () => {
+                    if (vault.status === 'initiated') {
+                      try {
+                        await api.activateVault(vault.vaultId);
+                        notify('success', 'Mandate approved — vault is now active');
+                        await loadData();
+                      } catch (e: any) {
+                        notify('error', e?.message || 'Failed to activate vault');
+                      }
+                    }
+                    setShowMandateModal(false);
+                    setHasScrolledToEnd(false);
+                    if (vault.status === 'active') setMode('deposit');
+                  }}
                   disabled={!hasScrolledToEnd}
                   className={`px-5 py-2 text-xs font-semibold rounded-[12px] flex items-center gap-1.5 transition-colors shadow-1 ${hasScrolledToEnd ? 'bg-success-700 text-white hover:bg-teal-800' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`}>
-                  <ArrowDownToLine className="w-3.5 h-3.5" /> Accept & Proceed to Deposit
+                  <ArrowDownToLine className="w-3.5 h-3.5" />
+                  {vault.status === 'initiated' ? 'Approve Mandate & Activate Vault' : 'Accept & Proceed to Deposit'}
                 </button>
               </div>
             </div>
@@ -511,9 +553,8 @@ export default function VaultDetailPage() {
               )}
               <div className="flex items-center gap-2">
                 <button onClick={mode === 'deposit' ? handleDeposit : handleWithdraw}
-                  disabled={!publicKey}
-                  className={`px-4 py-2 text-xs font-semibold rounded-[12px] flex items-center gap-1.5 shadow-1 ${mode === 'deposit' ? 'bg-success-700 hover:bg-teal-800 text-white' : 'bg-warning-700 hover:bg-warning-700 text-white'} disabled:opacity-50`}>
-                  {mode === 'deposit' ? <><ArrowDownToLine className="w-3.5 h-3.5" /> Transfer On-Chain</> : <><ArrowUpFromLine className="w-3.5 h-3.5" /> Submit Request</>}
+                  className={`px-4 py-2 text-xs font-semibold rounded-[12px] flex items-center gap-1.5 shadow-1 ${mode === 'deposit' ? 'bg-success-700 hover:bg-teal-800 text-white' : 'bg-warning-700 hover:bg-warning-700 text-white'}`}>
+                  {mode === 'deposit' ? <><ArrowDownToLine className="w-3.5 h-3.5" /> {publicKey ? 'Transfer On-Chain' : 'Record Deposit'}</> : <><ArrowUpFromLine className="w-3.5 h-3.5" /> Submit Request</>}
                 </button>
                 <button onClick={resetTx} className="text-xs text-slate-500 hover:text-ink-900 px-3 py-2">Cancel</button>
               </div>

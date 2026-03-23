@@ -343,16 +343,6 @@ export default function LoginPage() {
                   {credentialFound ? 'Enter Client Portal' : 'Enter Portal & Request Access'}
                 </button>
               )}
-
-              <div className="flex items-center gap-3">
-                <div className="flex-1 border-t border-slate-200" />
-                <span className="text-xs text-slate-400">or</span>
-                <div className="flex-1 border-t border-slate-200" />
-              </div>
-
-              <button onClick={handleDemoLogin} className="w-full bg-white border border-slate-200 hover:border-teal-300 text-ink-900 font-semibold py-3.5 rounded-[12px] transition-all ease-amina duration-150 text-sm shadow-1">
-                Enter Demo Mode (INST-2048)
-              </button>
             </div>
           </>
         )}

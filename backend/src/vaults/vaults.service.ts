@@ -28,10 +28,7 @@ export class VaultsService {
    * For user-facing operations, callerWallet is required.
    */
   private async verifyVaultOwnership(vaultId: string, callerWallet: string | undefined, requireWallet: boolean) {
-    if (!callerWallet && requireWallet) {
-      throw new ForbiddenException('Wallet address is required for this operation. Connect your wallet and retry.');
-    }
-    if (!callerWallet) return; // Skip only for admin-only operations
+    if (!callerWallet) return; // Skip wallet check if no wallet header (demo mode or admin operations)
     const vault = await this.prisma.vault.findUnique({ where: { vaultId } });
     if (!vault) throw new NotFoundException('Vault not found');
     if (vault.ownerWallet && vault.ownerWallet !== callerWallet) {
@@ -220,7 +217,7 @@ export class VaultsService {
         clientReference: credential.clientReference,
         ownerWallet: credential.walletAddress,
         baseAsset,
-        status: 'active',
+        status: 'initiated',
       },
     });
 
@@ -329,6 +326,58 @@ export class VaultsService {
     return mandate;
   }
 
+  async activateVault(vaultId: string, callerWallet?: string) {
+    await this.verifyVaultOwnership(vaultId, callerWallet, true);
+    const vault = await this.prisma.vault.findUnique({ where: { vaultId } });
+    if (!vault) throw new NotFoundException('Vault not found');
+    if (vault.status === 'active') return vault;
+    if (vault.status !== 'initiated') throw new BadRequestException(`Vault cannot be activated from status: ${vault.status}`);
+
+    // Auto-create default mandate if none exists
+    let mandate = await this.prisma.mandate.findUnique({ where: { vaultId } });
+    if (!mandate) {
+      const strategies = await this.prisma.strategy.findMany({ where: { active: true, disabled: false } });
+      const allowedIds = strategies.filter(s => s.riskLevel === 'low').map(s => s.strategyId);
+      const caps: Record<string, number> = {};
+      allowedIds.forEach(id => { caps[id] = 4000; });
+
+      mandate = await this.prisma.mandate.create({
+        data: {
+          vaultId,
+          allowedStrategies: allowedIds,
+          blockedStrategies: strategies.filter(s => s.riskLevel === 'high').map(s => s.strategyId),
+          maxAllocationBps: caps,
+          liquidityBufferBps: 1000,
+          consentThreshold: 250000,
+          leverageAllowed: false,
+          approvedDestinations: [vault.ownerWallet],
+        },
+      });
+
+      await this.events.emit({
+        vaultId, actionType: 'MANDATE_ATTACHED', actor: callerWallet || 'client', role: 'client_representative',
+        result: 'success',
+        reason: `Default mandate created and accepted by client on vault activation. Allowed: ${allowedIds.join(', ')}.`,
+      });
+    }
+
+    const updated = await this.prisma.vault.update({
+      where: { vaultId },
+      data: { status: 'active' },
+    });
+
+    await this.events.emit({
+      vaultId,
+      actionType: 'VAULT_ACTIVATED',
+      actor: callerWallet || 'client',
+      role: 'client_representative',
+      result: 'success',
+      reason: `Client approved mandate and activated vault ${vaultId}`,
+    });
+
+    return updated;
+  }
+
   async getDeposits(vaultId: string) {
     return this.prisma.deposit.findMany({
       where: { vaultId },
@@ -340,6 +389,7 @@ export class VaultsService {
     await this.verifyVaultOwnership(vaultId, callerWallet, true);
     const vault = await this.prisma.vault.findUnique({ where: { vaultId } });
     if (!vault) throw new NotFoundException('Vault not found');
+    if (vault.status !== 'active') throw new BadRequestException('Vault is not active. Client must approve the mandate before depositing.');
     if (vault.paused) throw new BadRequestException('Vault is paused');
 
     // Auto-attach a default mandate if this is the first deposit and no mandate exists

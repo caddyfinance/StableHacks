@@ -10,6 +10,7 @@ const colorMap: Record<string, string> = {
   compliant: 'bg-success-100 text-success-700',
   completed: 'bg-success-100 text-success-700',
   settled: 'bg-success-100 text-success-700',
+  initiated: 'bg-info-100 text-info-700',
   pending: 'bg-warning-100 text-warning-700',
   consent_required: 'bg-warning-100 text-warning-700',
   cooldown: 'bg-warning-100 text-warning-700',

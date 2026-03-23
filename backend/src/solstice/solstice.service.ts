@@ -165,8 +165,11 @@ export class SolsticeService {
       body: JSON.stringify({ type, data }),
     });
 
+
+
     if (!res.ok) {
       const body = await res.text();
+          console.log(body)
       throw new Error(`USX API error (${res.status}): ${body}`);
     }
 

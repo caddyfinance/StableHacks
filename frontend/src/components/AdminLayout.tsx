@@ -18,7 +18,7 @@ const navItems = [
   { path: '/amina', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { path: '/amina/credentials', label: 'Credentials', icon: Shield, end: false },
   { path: '/amina/vault-factory', label: 'Vault Factory', icon: Building2, end: false },
-  { path: '/amina/mandate', label: 'Mandate Config', icon: FileCheck, end: false },
+  { path: '/amina/mandate', label: 'Mandate Details', icon: FileCheck, end: false },
   { path: '/amina/funding', label: 'Vault Funding', icon: Wallet, end: false },
   { path: '/amina/execution', label: 'Execution', icon: TrendingUp, end: false },
   { path: '/amina/compliance', label: 'Compliance', icon: ClipboardCheck, end: false },
@@ -28,7 +28,7 @@ const navItems = [
 
 const roleAccess: Record<Role, string[]> = {
   admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance', '/amina/audit-log'],
-  portfolio_manager: ['/amina', '/amina/execution', '/amina/compliance'],
+  portfolio_manager: ['/amina', '/amina/mandate', '/amina/execution', '/amina/compliance'],
   compliance_officer: ['/amina', '/amina/compliance'],
   emergency_admin: ['/amina', '/amina/emergency', '/amina/compliance'],
   client_representative: [],

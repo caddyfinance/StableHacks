@@ -48,41 +48,19 @@ async function main() {
 
   console.log('Created admin users');
 
-  // Create strategies
-  const strategyA = await prisma.strategy.create({
+  // Create strategy
+  const strategy = await prisma.strategy.create({
     data: {
-      strategyId: 'STBL-YIELD-01',
-      name: 'Stablecoin Lending Adapter',
-      description: 'Low-risk stablecoin lending exposure via approved institutional protocols',
+      strategyId: 'solstice-eusx-yield',
+      name: 'Solstice eUSX Yield',
+      description: 'On-chain yield via Solstice eUSX vault — deposit USDC, receive yield-bearing eUSX',
       riskLevel: 'low',
       active: true,
-      currentYield: 4.2,
+      currentYield: 8.5,
     },
   });
 
-  const strategyB = await prisma.strategy.create({
-    data: {
-      strategyId: 'TRSY-YIELD-01',
-      name: 'Tokenised Treasury Adapter',
-      description: 'Ultra-conservative tokenised US Treasury yield exposure',
-      riskLevel: 'low',
-      active: true,
-      currentYield: 3.8,
-    },
-  });
-
-  const strategyC = await prisma.strategy.create({
-    data: {
-      strategyId: 'HIGH-DEFI-01',
-      name: 'High Yield DeFi Adapter',
-      description: 'Higher-risk DeFi yield farming strategy — not permitted for conservative mandates',
-      riskLevel: 'high',
-      active: true,
-      currentYield: 12.5,
-    },
-  });
-
-  console.log('Created strategies:', strategyA.name, strategyB.name, strategyC.name);
+  console.log('Created strategy:', strategy.name);
 
   // Create credential
   const credential = await prisma.credential.create({
@@ -120,12 +98,10 @@ async function main() {
   const mandate = await prisma.mandate.create({
     data: {
       vaultId: vault.vaultId,
-      allowedStrategies: ['STBL-YIELD-01', 'TRSY-YIELD-01'],
-      blockedStrategies: ['HIGH-DEFI-01'],
+      allowedStrategies: ['solstice-eusx-yield'],
+      blockedStrategies: [],
       maxAllocationBps: {
-        'STBL-YIELD-01': 6000,
-        'TRSY-YIELD-01': 4000,
-        'HIGH-DEFI-01': 0,
+        'solstice-eusx-yield': 10000,
       },
       liquidityBufferBps: 1000,
       consentThreshold: 250000,

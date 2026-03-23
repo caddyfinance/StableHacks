@@ -1,16 +1,30 @@
 import { useState, useEffect } from 'react';
-import { api } from '../lib/api';
-import { useStore } from '../store/useStore';
-import Card from '../components/Card';
-import StatusBadge from '../components/StatusBadge';
-import { Eye, FileCheck } from 'lucide-react';
+import { api } from '../../lib/api';
+import { useStore } from '../../store/useStore';
+import Card from '../../components/Card';
+import StatusBadge from '../../components/StatusBadge';
+import NotVerified from '../../components/NotVerified';
+import { FileCheck, Eye } from 'lucide-react';
 
-export default function MandatePage() {
-  const { activeVaultId } = useStore();
+export default function ClientMandatePage() {
+  const { activeVaultId, setActiveVaultId, clientInfo } = useStore();
+
+  if (!clientInfo?.credentialId) return <NotVerified />;
+
   const [loading, setLoading] = useState(true);
   const [mandate, setMandate] = useState<any>(null);
   const [strategies, setStrategies] = useState<any[]>([]);
 
+  // Auto-select vault
+  useEffect(() => {
+    if (!activeVaultId) {
+      api.getVaults().then((vaults) => {
+        if (vaults.length > 0) setActiveVaultId(vaults[0].vaultId);
+      }).catch(() => {});
+    }
+  }, [activeVaultId, setActiveVaultId]);
+
+  // Load mandate + strategies
   useEffect(() => {
     if (!activeVaultId) return;
     setLoading(true);
@@ -18,9 +32,9 @@ export default function MandatePage() {
       api.getMandate(activeVaultId).catch(() => null),
       api.getStrategies().catch(() => []),
     ])
-      .then(([mandateData, strategiesData]) => {
+      .then(([mandateData, stratData]) => {
         if (mandateData && mandateData.status) setMandate(mandateData);
-        setStrategies(strategiesData || []);
+        setStrategies(stratData || []);
       })
       .finally(() => setLoading(false));
   }, [activeVaultId]);
@@ -28,10 +42,7 @@ export default function MandatePage() {
   if (!activeVaultId) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <p className="text-slate-500 text-sm">No vault selected.</p>
-          <p className="text-slate-500 text-xs mt-1">Select an active vault from the dashboard to view its mandate.</p>
-        </div>
+        <p className="text-slate-500 text-sm">Loading your vault...</p>
       </div>
     );
   }
@@ -48,42 +59,43 @@ export default function MandatePage() {
             <FileCheck className="w-5 h-5 text-slate-500" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-ink-900">Mandate Details</h1>
+            <h1 className="text-xl font-bold font-display text-ink-900">Investment Mandate</h1>
             <p className="text-xs text-slate-500 mt-0.5">Vault {activeVaultId}</p>
           </div>
         </div>
         <div className="bg-warning-100 border border-warning-700/20 rounded-lg p-4">
-          <p className="text-sm text-warning-700 font-medium">No mandate configured</p>
-          <p className="text-xs text-warning-700/80 mt-1">The client has not set an investment mandate for this vault yet. The mandate is configured by the client from the Client Portal.</p>
+          <p className="text-sm text-warning-700 font-medium">No mandate configured yet</p>
+          <p className="text-xs text-warning-700/80 mt-1">
+            A mandate will be created automatically when the vault is activated. Once active, your investment rules and controls will appear here.
+          </p>
         </div>
       </div>
     );
   }
 
-  const strategyMap = new Map(strategies.map((s: any) => [s.id, s]));
   const maxAlloc = mandate.maxAllocationBps || {};
-  const allowedStrategies: string[] = mandate.allowedStrategies || [];
   const blockedStrategies: string[] = mandate.blockedStrategies || [];
+  const allowedStrategies: string[] = mandate.allowedStrategies || [];
   const idleBuffer = Math.round((mandate.liquidityBufferBps || 0) / 100);
 
-  // Build allocation rows from maxAllocationBps keys merged with strategies list
-  const allocationRows = Object.entries(maxAlloc).map(([stratId, bps]) => {
-    const strat = strategyMap.get(stratId);
-    const name = strat?.name || stratId;
-    const allocPct = Math.round((bps as number) / 100);
-    const isBlocked = blockedStrategies.includes(stratId);
-    return { id: stratId, name, alloc: allocPct, status: isBlocked ? 'blocked' : 'approved' };
+  // Build strategy rows by matching API strategies to mandate allocations
+  const strategyRows = strategies.map((s) => {
+    const id = s.strategyId || s.id;
+    const allocBps = maxAlloc[id] ?? 0;
+    const allocPct = Math.round(allocBps / 100);
+    const isBlocked = blockedStrategies.includes(id);
+    const isAllowed = allowedStrategies.includes(id);
+    const status = isBlocked ? 'blocked' : isAllowed ? 'approved' : 'inactive';
+    return { name: s.name || id, id, allocPct, status };
   });
 
-  // Also include any strategies that appear only in blocked/allowed but not in maxAlloc
-  const allocKeys = new Set(Object.keys(maxAlloc));
-  [...blockedStrategies, ...allowedStrategies].forEach((stratId) => {
-    if (!allocKeys.has(stratId)) {
-      const strat = strategyMap.get(stratId);
-      const name = strat?.name || stratId;
-      const isBlocked = blockedStrategies.includes(stratId);
-      allocationRows.push({ id: stratId, name, alloc: 0, status: isBlocked ? 'blocked' : 'approved' });
-      allocKeys.add(stratId);
+  // If there are allocation keys not in the strategies list, show them too
+  Object.keys(maxAlloc).forEach((key) => {
+    if (!strategyRows.find((r) => r.id === key)) {
+      const allocPct = Math.round((maxAlloc[key] || 0) / 100);
+      const isBlocked = blockedStrategies.includes(key);
+      const status = isBlocked ? 'blocked' : 'approved';
+      strategyRows.push({ name: key, id: key, allocPct, status });
     }
   });
 
@@ -96,39 +108,37 @@ export default function MandatePage() {
             <FileCheck className="w-5 h-5 text-teal-700" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-ink-900">Mandate Details</h1>
+            <h1 className="text-xl font-bold font-display text-ink-900">Investment Mandate</h1>
             <p className="text-xs text-slate-500 mt-0.5">Vault {activeVaultId}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={mandate.status} size="md" />
           <span className="flex items-center gap-1.5 text-[10px] font-medium px-2.5 py-1 rounded-md bg-slate-100 text-slate-500 border border-slate-200">
-            <Eye className="w-3 h-3" /> View Only — Set by Client
+            <Eye className="w-3 h-3" /> Read Only
           </span>
         </div>
       </div>
 
       {/* Strategy Allocations */}
-      <Card title="Strategy Allocation Limits" subtitle="Maximum allocation per strategy as set by the client">
-        {allocationRows.length > 0 ? (
+      <Card title="Strategy Allocation Limits" subtitle="Maximum allocation per strategy as defined in your mandate">
+        {strategyRows.length > 0 ? (
           <div className="space-y-3">
-            {allocationRows.map((s) => (
+            {strategyRows.map((s) => (
               <div key={s.id} className="flex items-center justify-between bg-slate-100 rounded-md px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <div>
-                    <p className="text-xs text-ink-900 font-medium">{s.name}</p>
-                    <p className="text-[10px] text-slate-500 font-mono">{s.id}</p>
-                  </div>
+                <div>
+                  <p className="text-xs text-ink-900 font-medium">{s.name}</p>
+                  <p className="text-[10px] text-slate-500 font-mono">{s.id}</p>
                 </div>
                 <div className="flex items-center gap-4">
                   <StatusBadge status={s.status} />
-                  <span className="text-sm font-mono text-ink-900 font-semibold w-12 text-right">{s.alloc}%</span>
+                  <span className="text-sm font-mono text-ink-900 font-semibold w-12 text-right">{s.allocPct}%</span>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-xs text-slate-500">No strategy allocations configured.</p>
+          <p className="text-xs text-slate-500">No strategies configured</p>
         )}
       </Card>
 
@@ -136,9 +146,9 @@ export default function MandatePage() {
       <Card title="Policy Controls" subtitle="Consent thresholds and risk limits">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {[
-            { label: 'Consent Threshold', value: `${(mandate.consentThreshold || 0).toLocaleString()} USDC`, desc: 'Actions above this require client approval' },
-            { label: 'Min Idle Buffer', value: `${idleBuffer}%`, desc: 'Minimum capital kept undeployed' },
-            { label: 'Leverage', value: mandate.leverageAllowed ? 'Permitted' : 'Not Permitted', desc: mandate.leverageAllowed ? 'Leveraged positions allowed' : 'No leveraged positions' },
+            { label: 'Consent Threshold', value: `${(mandate.consentThreshold || 0).toLocaleString()} USDC`, desc: 'Actions above this amount require your explicit approval' },
+            { label: 'Min Idle Buffer', value: `${idleBuffer}%`, desc: 'Minimum capital that must stay undeployed' },
+            { label: 'Leverage', value: mandate.leverageAllowed ? 'Permitted' : 'Not Permitted', desc: mandate.leverageAllowed ? 'Leveraged positions are allowed' : 'No leveraged positions' },
             { label: 'Status', value: mandate.status?.toUpperCase() || '—', desc: 'Current mandate state' },
           ].map(({ label, value, desc }) => (
             <div key={label} className="bg-slate-100 rounded-md px-4 py-3">
@@ -150,8 +160,8 @@ export default function MandatePage() {
         </div>
       </Card>
 
-      {/* Approved Destinations */}
-      <Card title="Approved Destination Wallets" subtitle="Wallets authorized for withdrawals">
+      {/* Approved Destination Wallets */}
+      <Card title="Approved Destination Wallets" subtitle="Wallets authorized for withdrawals from your vault">
         {mandate.approvedDestinations?.length > 0 ? (
           <div className="space-y-1.5">
             {mandate.approvedDestinations.map((w: string, i: number) => (
@@ -169,17 +179,14 @@ export default function MandatePage() {
       {/* Policy Summary */}
       <Card title="Policy Summary" subtitle="Plain-English mandate restrictions">
         <ul className="space-y-1.5 text-xs text-ink-900 list-disc list-inside">
-          {allocationRows.map((s) => (
+          {strategyRows.map((s) => (
             <li key={s.id}>
               {s.name} is{' '}
               {s.status === 'blocked' ? (
                 <span className="text-error-700 font-medium">blocked</span>
               ) : (
                 <>
-                  <span className="text-success-700 font-medium">permitted</span>
-                  {s.alloc > 0 && (
-                    <> with a maximum allocation of <span className="font-medium">{s.alloc}%</span></>
-                  )}
+                  <span className="text-success-700 font-medium">permitted</span> with a maximum allocation of <span className="font-medium">{s.allocPct}%</span>
                 </>
               )}
               .

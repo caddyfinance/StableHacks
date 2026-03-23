@@ -7,7 +7,7 @@ import { TrendingUp, ArrowDownToLine, ArrowUpFromLine, Pause, RefreshCw, Externa
 
 const SOLSTICE_STRATEGY_ID = 'solstice-eusx-yield';
 
-type ActionTab = 'deploy' | 'pull' | 'idle';
+type ActionTab = 'deploy' | 'withdraw' | 'idle';
 type OutcomeType = 'approved' | 'blocked' | 'consent_required';
 
 interface Outcome {
@@ -225,7 +225,7 @@ export default function ExecutionPage() {
 
   const tabs: { id: ActionTab; label: string; icon: typeof TrendingUp }[] = [
     { id: 'deploy', label: 'Deploy Capital', icon: ArrowDownToLine },
-    { id: 'pull', label: 'Pull Capital', icon: ArrowUpFromLine },
+    { id: 'withdraw', label: 'Withdraw Capital', icon: ArrowUpFromLine },
     { id: 'idle', label: 'Keep Idle', icon: Pause },
   ];
 
@@ -376,7 +376,7 @@ export default function ExecutionPage() {
               )}
 
               {/* Pull Tab */}
-              {tab === 'pull' && (
+              {tab === 'withdraw' && (
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1.5">Strategy (active positions only)</label>
@@ -535,7 +535,7 @@ export default function ExecutionPage() {
                               className="text-[10px] text-teal-700 hover:underline">Deploy</button>
                           )}
                           {isLive && effectiveDeployed > 0 && !s.disabled && (
-                            <button onClick={() => { setTab('pull'); setSelectedStrategy(s.strategyId); setPullType('full'); setAmount(String(effectiveDeployed)); setOutcome(null); }}
+                            <button onClick={() => { setTab('withdraw'); setSelectedStrategy(s.strategyId); setPullType('full'); setAmount(String(effectiveDeployed)); setOutcome(null); }}
                               className="text-[10px] text-amber-400 hover:underline">Pull</button>
                           )}
                         </div>

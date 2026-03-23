@@ -15,7 +15,7 @@ export class StrategiesService {
   }
 
   async findAll() {
-    return this.prisma.strategy.findMany({ orderBy: { createdAt: 'asc' } });
+    return this.prisma.strategy.findMany({ where: { active: true }, orderBy: { createdAt: 'asc' } });
   }
 
   async toggleDisable(strategyId: string, disabled: boolean) {
