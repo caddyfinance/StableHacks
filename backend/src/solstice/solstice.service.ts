@@ -506,18 +506,29 @@ export class SolsticeService {
     }
 
     // ─── Step 3: Lock USX -> eUSX via USX Instructions API ───
+    // Use actual on-chain USX balance for Lock (minting may deduct a small fee)
+    const actualUsxBalance = await this.getTokenBalance(connection, userUsxAta);
+    const lockAmount = Math.min(amount, actualUsxBalance);
+    const lockAmountLamports = Math.round(lockAmount * 1e6);
+
+    if (lockAmountLamports <= 0) {
+      throw new Error(`No USX balance available to lock. Expected ~${amount}, actual: ${actualUsxBalance}`);
+    }
+
+    this.logger.log(`[LOCK] Actual USX balance: ${actualUsxBalance}, locking: ${lockAmount} USX (${lockAmountLamports} lamports)`);
+
     await this.events.emit({
       vaultId, actionType: 'SOLSTICE_LOCK_INITIATED',
       actor: 'portfolio_manager', role: 'Portfolio Manager',
-      asset: 'USX', amount, strategy: STRATEGY_ID,
+      asset: 'USX', amount: lockAmount, strategy: STRATEGY_ID,
       result: 'pending',
-      reason: `Step 3/4: Locking ${amount} USX into Solstice eUSX yield vault. Pre-balance: ${preBalanceUSX} USX, ${preBalanceEUSX} eUSX. Source wallet: ${user.toBase58()}`,
+      reason: `Step 3/4: Locking ${lockAmount} USX into Solstice eUSX yield vault. Pre-balance: ${preBalanceUSX} USX, ${preBalanceEUSX} eUSX. Source wallet: ${user.toBase58()}`,
       onChainAddress: userUsxAta.toBase58(),
     });
 
-    // Fetch Lock instruction from USX API
+    // Fetch Lock instruction from USX API using actual balance
     const lockIx = await this.fetchUsxInstruction('Lock', {
-      amount: Math.round(amount * 1e6),
+      amount: lockAmountLamports,
       user: user.toBase58(),
     });
 
@@ -544,16 +555,18 @@ export class SolsticeService {
     const postBalanceUSX = await this.getTokenBalance(connection, userUsxAta);
     const postBalanceEUSX = await this.getTokenBalance(connection, userEusxAta);
     const eusxReceived = postBalanceEUSX - preBalanceEUSX;
-    const usxSpent = preBalanceUSX - postBalanceUSX;
-    const onChainVerified = usxSpent > 0 && eusxReceived > 0;
+    const onChainVerified = eusxReceived > 0;
 
-    this.logger.log(`[LOCK] Post-balance: ${postBalanceUSX} USX, ${postBalanceEUSX} eUSX. eUSX received: ${eusxReceived}, USX spent: ${usxSpent}, verified: ${onChainVerified}`);
+    // Use the actual lockAmount (derived from on-chain balance) as the deployed amount
+    const deployedAmount = lockAmount;
+
+    this.logger.log(`[LOCK] Post-balance: ${postBalanceUSX} USX, ${postBalanceEUSX} eUSX. eUSX received: ${eusxReceived}, deployed: ${deployedAmount}, verified: ${onChainVerified}`);
 
     // ─── Create Allocation record in DB ──────────────────────
     const allocation = await this.prisma.allocation.create({
       data: {
         vaultId, strategyId: STRATEGY_ID,
-        amount: usxSpent > 0 ? usxSpent : amount,
+        amount: deployedAmount,
         status: 'active',
         txSignature,
         onChainAddress: SOLSTICE_PROGRAM_ID.toBase58(),
@@ -570,10 +583,10 @@ export class SolsticeService {
     await this.events.emit({
       vaultId, actionType: 'SOLSTICE_LOCK',
       actor: 'portfolio_manager', role: 'Portfolio Manager',
-      asset: 'USX', amount: usxSpent > 0 ? usxSpent : amount,
+      asset: 'USX', amount: deployedAmount,
       strategy: STRATEGY_ID, result: 'success',
       reason: [
-        `Locked ${usxSpent > 0 ? usxSpent : amount} USX into Solstice eUSX yield vault.`,
+        `Locked ${deployedAmount} USX into Solstice eUSX yield vault.`,
         `Fund flow: ${user.toBase58()} USX ATA (${userUsxAta.toBase58()}) -> Solstice Asset Vault (${ASSET_VAULT_PDA.toBase58()}).`,
         `eUSX received: ${eusxReceived} to ATA ${userEusxAta.toBase58()}.`,
         `Pre: ${preBalanceUSX} USX / ${preBalanceEUSX} eUSX. Post: ${postBalanceUSX} USX / ${postBalanceEUSX} eUSX.`,
@@ -625,9 +638,20 @@ export class SolsticeService {
       onChainAddress: cooldownEscrow.toBase58(),
     });
 
-    // Fetch Unlock instruction from USX API
+    // Use actual on-chain eUSX balance for Unlock (exchange rate may cause slight differences)
+    const actualEusxBalance = await this.getTokenBalance(connection, userEusxAta);
+    const unlockAmount = Math.min(amount, actualEusxBalance);
+    const unlockAmountLamports = Math.round(unlockAmount * 1e6);
+
+    if (unlockAmountLamports <= 0) {
+      throw new Error(`No eUSX balance available to unlock. Expected ~${amount}, actual: ${actualEusxBalance}`);
+    }
+
+    this.logger.log(`[UNLOCK] Actual eUSX balance: ${actualEusxBalance}, unlocking: ${unlockAmount} eUSX (${unlockAmountLamports} lamports)`);
+
+    // Fetch Unlock instruction from USX API using actual balance
     const unlockIx = await this.fetchUsxInstruction('Unlock', {
-      amount: Math.round(amount * 1e6),
+      amount: unlockAmountLamports,
       user: user.toBase58(),
     });
 
@@ -709,8 +733,20 @@ export class SolsticeService {
       onChainAddress: cooldownEscrow.toBase58(),
     });
 
+    // Read cooldown escrow vault balance to determine withdraw amount
+    const escrowVaultAta = await getAssociatedTokenAddress(USX_MINT, cooldownEscrowVault, true);
+    const escrowBalance = await this.getTokenBalance(connection, escrowVaultAta);
+    const withdrawAmountLamports = Math.round(escrowBalance * 1e6);
+
+    this.logger.log(`[WITHDRAW] Cooldown escrow balance: ${escrowBalance} USX (${withdrawAmountLamports} lamports)`);
+
+    if (withdrawAmountLamports <= 0) {
+      throw new Error(`No USX in cooldown escrow. Balance: ${escrowBalance}. Cooldown period may not be over yet.`);
+    }
+
     // Fetch Withdraw instruction from USX API
     const withdrawIx = await this.fetchUsxInstruction('Withdraw', {
+      amount: withdrawAmountLamports,
       user: user.toBase58(),
     });
 
@@ -900,6 +936,7 @@ export class SolsticeService {
             'SOLSTICE_UNLOCK_INITIATED', 'SOLSTICE_UNLOCK',
             'SOLSTICE_WITHDRAW_INITIATED', 'SOLSTICE_WITHDRAW',
             'SOLSTICE_REDEEM_COLLATERAL',
+            'SOLSTICE_COOLDOWN_REQUESTED', 'UNWIND_EXECUTED',
           ],
         },
       },

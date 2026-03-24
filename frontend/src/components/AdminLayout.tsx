@@ -11,6 +11,7 @@ import {
   LogOut,
   ChevronDown,
   ScrollText,
+  Eye,
 } from 'lucide-react';
 import { useStore, Role, ROLE_LABELS, AMINA_ROLES, Portal } from '../store/useStore';
 
@@ -23,11 +24,12 @@ const navItems = [
   { path: '/amina/execution', label: 'Execution', icon: TrendingUp, end: false },
   { path: '/amina/compliance', label: 'Compliance', icon: ClipboardCheck, end: false },
   { path: '/amina/audit-log', label: 'Audit Log', icon: ScrollText, end: false },
+  { path: '/amina/transparency', label: 'Transparency', icon: Eye, end: false },
   { path: '/amina/emergency', label: 'Emergency Controls', icon: AlertTriangle, end: false },
 ];
 
 const roleAccess: Record<Role, string[]> = {
-  admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance', '/amina/audit-log'],
+  admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance', '/amina/audit-log', '/amina/transparency'],
   portfolio_manager: ['/amina', '/amina/mandate', '/amina/execution', '/amina/compliance'],
   compliance_officer: ['/amina', '/amina/compliance'],
   emergency_admin: ['/amina', '/amina/emergency', '/amina/compliance'],

@@ -54,6 +54,7 @@ export const api = {
   bindWallet: (credentialId: string, walletAddress: string) => request<any>('/credentials/bind-wallet', { method: 'PUT', body: JSON.stringify({ credentialId, walletAddress }) }),
 
   // Vaults
+  getTransparency: () => request<any>('/vaults/transparency'),
   getVaults: () => request<any[]>('/vaults'),
   getVaultsByWallet: (wallet: string) => request<any[]>(`/vaults/by-wallet/${wallet}`),
   createVault: (data: any) => request<any>('/vaults', { method: 'POST', body: JSON.stringify(data) }),

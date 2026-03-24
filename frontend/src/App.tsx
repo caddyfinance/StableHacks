@@ -19,6 +19,7 @@ import ExecutionPage from './pages/ExecutionPage';
 import CompliancePage from './pages/CompliancePage';
 import EmergencyPage from './pages/EmergencyPage';
 import AuditLogPage from './pages/admin/AuditLogPage';
+import TransparencyPage from './pages/admin/TransparencyPage';
 
 // Client pages
 import VaultOverviewPage from './pages/client/VaultOverviewPage';
@@ -32,7 +33,7 @@ import ClientMandatePage from './pages/client/ClientMandatePage';
 
 // Role → allowed routes
 const roleAccess: Record<Role, string[]> = {
-  admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance', '/amina/audit-log'],
+  admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance', '/amina/audit-log', '/amina/transparency'],
   portfolio_manager: ['/amina', '/amina/mandate', '/amina/execution', '/amina/compliance'],
   compliance_officer: ['/amina', '/amina/compliance'],
   emergency_admin: ['/amina', '/amina/emergency', '/amina/compliance'],
@@ -73,6 +74,7 @@ function AccessDenied({ role, route }: { role: Role; route: string }) {
       { label: 'Vault Funding', path: '/amina/funding' },
       { label: 'Compliance', path: '/amina/compliance' },
       { label: 'Audit Log', path: '/amina/audit-log' },
+      { label: 'Transparency', path: '/amina/transparency' },
     ],
     portfolio_manager: [
       { label: 'Mandate Details', path: '/amina/mandate' },
@@ -152,6 +154,7 @@ export default function App() {
         <Route path="compliance" element={<RequireRole route="/amina/compliance"><CompliancePage /></RequireRole>} />
         <Route path="emergency" element={<RequireRole route="/amina/emergency"><EmergencyPage /></RequireRole>} />
         <Route path="audit-log" element={<RequireRole route="/amina/audit-log"><AuditLogPage /></RequireRole>} />
+        <Route path="transparency" element={<RequireRole route="/amina/transparency"><TransparencyPage /></RequireRole>} />
       </Route>
 
       {/* Client routes */}

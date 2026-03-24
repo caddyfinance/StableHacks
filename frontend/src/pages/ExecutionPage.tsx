@@ -1,14 +1,32 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Connection, PublicKey } from '@solana/web3.js';
+import { getAssociatedTokenAddress } from '@solana/spl-token';
 import { api } from '../lib/api';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import StatusBadge from '../components/StatusBadge';
-import { TrendingUp, ArrowDownToLine, ArrowUpFromLine, Pause, RefreshCw, ExternalLink, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { TrendingUp, ArrowDownToLine, ArrowUpFromLine, Pause, RefreshCw, ExternalLink, CheckCircle, XCircle, Loader2, Wallet } from 'lucide-react';
+
+const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
+const DEVNET_RPC = (import.meta as any).env?.VITE_SOLANA_RPC_URL || 'https://api.devnet.solana.com';
+
+/** Read on-chain USDC balance for a given address (PDA or wallet) */
+async function fetchOnChainUsdcBalance(address: string): Promise<number> {
+  try {
+    const conn = new Connection(DEVNET_RPC, 'confirmed');
+    const pubkey = new PublicKey(address);
+    const ata = await getAssociatedTokenAddress(USDC_MINT, pubkey, true);
+    const info = await conn.getTokenAccountBalance(ata);
+    return Number(info.value.uiAmount || 0);
+  } catch {
+    return 0;
+  }
+}
 
 const SOLSTICE_STRATEGY_ID = 'solstice-eusx-yield';
 
 type ActionTab = 'deploy' | 'withdraw' | 'idle';
-type OutcomeType = 'approved' | 'blocked' | 'consent_required';
+type OutcomeType = 'approved' | 'blocked' | 'consent_required' | 'cooldown';
 
 interface Outcome {
   type: OutcomeType;
@@ -36,6 +54,10 @@ export default function ExecutionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
+  // On-chain vault balance
+  const [onChainBalance, setOnChainBalance] = useState<number | null>(null);
+  const [vaultOnChainAddress, setVaultOnChainAddress] = useState<string | null>(null);
+
   // Solstice on-chain position
   const [solsticePosition, setSolsticePosition] = useState<any>(null);
   const [solsticePoolState, setSolsticePoolState] = useState<any>(null);
@@ -60,6 +82,21 @@ export default function ExecutionPage() {
       const [strats, snap] = await Promise.all([api.getStrategies(), api.getSnapshot(activeVaultId)]);
       setStrategies(strats);
       setSnapshot(snap);
+
+      // Fetch on-chain USDC balance from the vault's deployed address
+      const vault = vaults.find((v: any) => v.vaultId === activeVaultId);
+      const vaultAddr = vault?.onChainAddress;
+      setVaultOnChainAddress(vaultAddr || null);
+      if (vaultAddr) {
+        fetchOnChainUsdcBalance(vaultAddr).then(setOnChainBalance).catch(() => setOnChainBalance(0));
+      } else {
+        // Fallback: try AMINA bank wallet
+        api.getAminaWallet().then(({ wallet }) => {
+          setVaultOnChainAddress(wallet);
+          return fetchOnChainUsdcBalance(wallet);
+        }).then(setOnChainBalance).catch(() => setOnChainBalance(0));
+      }
+
       // Load Solstice data in parallel (non-blocking)
       Promise.all([
         api.solsticePosition(activeVaultId).catch(() => null),
@@ -75,7 +112,7 @@ export default function ExecutionPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeVaultId, notify]);
+  }, [activeVaultId, vaults, notify]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -117,11 +154,18 @@ export default function ExecutionPage() {
     return Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  // Parse snapshot exposures (object → array)
+  // Parse snapshot exposures (object → array), override Solstice with on-chain data
   const exposuresObj = snapshot?.strategyExposures || {};
-  const positions = Object.entries(exposuresObj).map(([name, val]: [string, any]) => ({
-    name, amount: val?.amount || 0, yield: val?.yield || 0, strategyId: val?.strategyId || name,
-  }));
+  const positions = Object.entries(exposuresObj).map(([name, val]: [string, any]) => {
+    const isSolsticePos = val?.strategyId === SOLSTICE_STRATEGY_ID || name === 'Solstice eUSX Yield';
+    // For Solstice, prefer live on-chain position over snapshot
+    const amount = isSolsticePos && solsticePosition?.usxValue != null ? solsticePosition.usxValue : (val?.amount || 0);
+    return { name, amount, yield: val?.yield || 0, strategyId: val?.strategyId || name };
+  });
+  // Also add Solstice position if it exists on-chain but not in snapshot exposures
+  if (solsticePosition?.eusxBalance > 0 && !positions.some(p => p.strategyId === SOLSTICE_STRATEGY_ID)) {
+    positions.push({ name: 'Solstice eUSX Yield', amount: solsticePosition.usxValue, yield: 0, strategyId: SOLSTICE_STRATEGY_ID });
+  }
   const totalDeployed = positions.reduce((s, p) => s + p.amount, 0);
   const totalYield = positions.reduce((s, p) => s + p.yield, 0);
   const totalNAV = (snapshot?.idleBalance || 0) + totalDeployed + totalYield;
@@ -199,7 +243,7 @@ export default function ExecutionPage() {
     finally { setSubmitting(false); }
   };
 
-  // Pull handler
+  // Pull handler — routes Solstice through on-chain unlock+withdraw, others through DB unwind
   const handlePull = async () => {
     if (!selectedStrategy) { notify('error', 'Select a strategy to pull from'); return; }
     const strat = strategyRows.find(s => s.strategyId === selectedStrategy);
@@ -209,8 +253,16 @@ export default function ExecutionPage() {
     setOutcome(null);
     try {
       const res = await api.unwind(activeVaultId!, { strategyId: selectedStrategy });
-      setOutcome({ type: 'approved', strategyName: strat?.name || selectedStrategy, amount: pullAmount, reason: `Pulled ${fmt(pullAmount)} USDC back to idle balance` });
-      notify('success', 'Capital pulled from strategy');
+      if (res.status === 'cooldown') {
+        setOutcome({ type: 'cooldown', strategyName: strat?.name || selectedStrategy, amount: pullAmount, reason: `eUSX unlocked on-chain (tx: ${res.unlockTx?.slice(0, 16)}...). Protocol cooldown in progress — funds will be available for withdrawal shortly.`, txSignature: res.unlockTx });
+        notify('success', 'eUSX unlocked — cooldown in progress');
+      } else {
+        const reason = res.onChainVerified
+          ? `On-chain unwind complete. Unlock tx: ${res.unlockTx?.slice(0, 16)}... Withdraw tx: ${res.withdrawTx?.slice(0, 16)}... Returned ${fmt(res.totalUnwind)} USDC to idle balance.`
+          : `Pulled ${fmt(res.totalUnwind || pullAmount)} USDC back to idle balance`;
+        setOutcome({ type: 'approved', strategyName: strat?.name || selectedStrategy, amount: res.totalUnwind || pullAmount, reason, txSignature: res.withdrawTx || res.unlockTx });
+        notify('success', 'Capital pulled from strategy');
+      }
       loadData();
     } catch (err: any) {
       notify('error', err?.message || 'Pull failed');
@@ -221,6 +273,7 @@ export default function ExecutionPage() {
     approved: { border: 'border-success-700', bg: 'bg-success-100', text: 'text-success-700' },
     blocked: { border: 'border-error-700', bg: 'bg-error-100', text: 'text-error-700' },
     consent_required: { border: 'border-warning-700', bg: 'bg-warning-100', text: 'text-warning-700' },
+    cooldown: { border: 'border-info-700', bg: 'bg-info-100', text: 'text-info-700' },
   };
 
   const tabs: { id: ActionTab; label: string; icon: typeof TrendingUp }[] = [
@@ -311,10 +364,34 @@ export default function ExecutionPage() {
               {/* Deploy Tab */}
               {tab === 'deploy' && (
                 <div className="space-y-4">
+                  {/* On-chain vault balance card */}
+                  <div className="bg-teal-50 border border-teal-200/50 rounded-[12px] p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Wallet className="w-4 h-4 text-teal-700" />
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Vault On-Chain Balance</p>
+                          <p className="text-lg font-bold font-mono text-ink-900">{onChainBalance !== null ? fmt(onChainBalance) : '—'} <span className="text-xs text-slate-500">USDC</span></p>
+                        </div>
+                      </div>
+                      {vaultOnChainAddress && (
+                        <a href={`https://solscan.io/account/${vaultOnChainAddress}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                          className="text-[10px] text-teal-700 hover:underline font-mono flex items-center gap-1">
+                          {vaultOnChainAddress.slice(0, 6)}...{vaultOnChainAddress.slice(-4)} <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  {(onChainBalance ?? 0) <= 0 && (snapshot?.idleBalance || 0) <= 0 && (
+                    <div className="bg-slate-50 border border-slate-200 rounded-[12px] p-3 text-center">
+                      <p className="text-xs text-slate-500">No balance available to deploy. Deposit USDC into the vault first.</p>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1.5">Strategy</label>
                     <select value={selectedStrategy} onChange={(e) => setSelectedStrategy(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-[12px] px-3 py-2 text-sm text-ink-900 focus:outline-none focus:ring-teal-600/20 focus:border-teal-600">
+                      className="w-full bg-white border border-slate-200 rounded-[12px] px-3 py-2 text-sm text-ink-900 focus:outline-none focus:ring-teal-600/20 focus:border-teal-600 disabled:bg-slate-100 disabled:text-slate-400">
                       <option value="">Select strategy to deploy into...</option>
                       {strategies.map((s: any) => {
                         const isLive = s.strategyId === SOLSTICE_STRATEGY_ID;
@@ -326,11 +403,26 @@ export default function ExecutionPage() {
                       })}
                     </select>
                   </div>
+
+                  {/* Show balance info once strategy is selected */}
+                  {selectedStrategy && (
+                    <div className="bg-slate-50 border border-slate-200 rounded-[12px] p-3 text-xs space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">On-chain USDC available</span>
+                        <span className="text-ink-900 font-mono font-semibold">{onChainBalance !== null ? fmt(onChainBalance) : '—'} USDC</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">DB idle balance</span>
+                        <span className="text-slate-700 font-mono">{fmt(snapshot?.idleBalance)} USDC</span>
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1.5">Amount (USDC)</label>
                     <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 250,000"
-                      className="w-full bg-white border border-slate-200 rounded-[12px] px-3 py-2 text-sm text-ink-900 focus:outline-none focus:ring-teal-600/20 focus:border-teal-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                    <p className="text-[10px] text-slate-700 mt-1">Available idle: {fmt(snapshot?.idleBalance)} USDC</p>
+                      className="w-full bg-white border border-slate-200 rounded-[12px] px-3 py-2 text-sm text-ink-900 focus:outline-none focus:ring-teal-600/20 focus:border-teal-600 disabled:bg-slate-100 disabled:text-slate-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                    <p className="text-[10px] text-slate-700 mt-1">Available on-chain: {onChainBalance !== null ? fmt(onChainBalance) : '—'} USDC</p>
                   </div>
                   {selectedStrategy && amount && (
                     <div className="bg-teal-50 rounded-[12px] p-3 text-xs space-y-1.5">
@@ -367,7 +459,7 @@ export default function ExecutionPage() {
                       )}
                     </div>
                   )}
-                  <button onClick={handleDeploy} disabled={submitting || !selectedStrategy || !amount}
+                  <button onClick={handleDeploy} disabled={submitting || !selectedStrategy || !amount || (snapshot?.idleBalance || 0) <= 0}
                     className="w-full bg-teal-700 hover:bg-teal-800 disabled:bg-slate-200 disabled:text-slate-500 text-white text-sm font-semibold rounded-[12px] py-2.5 transition-colors flex items-center justify-center gap-2">
                     {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                     {submitting ? (isSolstice ? 'Executing on-chain...' : 'Validating & Deploying...') : (isSolstice ? 'Deploy to Solstice (On-Chain)' : 'Deploy to Strategy')}
@@ -425,8 +517,16 @@ export default function ExecutionPage() {
               {tab === 'idle' && (
                 <div className="space-y-4">
                   <div className="bg-teal-50 rounded-[18px] p-4 text-center space-y-2">
-                    <p className="text-2xl font-bold text-ink-900 font-mono">{fmt(snapshot?.idleBalance)} USDC</p>
-                    <p className="text-xs text-slate-700">Current idle balance</p>
+                    <p className="text-2xl font-bold text-ink-900 font-mono">{onChainBalance !== null ? fmt(onChainBalance) : fmt(snapshot?.idleBalance)} USDC</p>
+                    <p className="text-xs text-slate-700">
+                      {onChainBalance !== null ? 'On-chain vault balance' : 'Current idle balance'}
+                      {vaultOnChainAddress && (
+                        <a href={`https://solscan.io/account/${vaultOnChainAddress}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                          className="ml-1.5 text-teal-700 hover:underline inline-flex items-center gap-0.5 text-[10px]">
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      )}
+                    </p>
                     <p className="text-xs text-slate-700">{idlePct.toFixed(1)}% of total vault NAV</p>
                   </div>
                   <div className="bg-teal-50 rounded-[12px] p-3 text-xs text-slate-700">
@@ -447,7 +547,7 @@ export default function ExecutionPage() {
             <div className={`rounded-[18px] border ${outcomeColors[outcome.type].border} ${outcomeColors[outcome.type].bg} p-5 space-y-3`}>
               <div className="flex items-center justify-between">
                 <h3 className={`text-sm font-semibold ${outcomeColors[outcome.type].text}`}>
-                  {outcome.type === 'approved' ? 'Approved & Executed' : outcome.type === 'blocked' ? 'Blocked by Compliance' : 'Pending Client Consent'}
+                  {outcome.type === 'approved' ? 'Approved & Executed' : outcome.type === 'blocked' ? 'Blocked by Compliance' : outcome.type === 'cooldown' ? 'Cooldown In Progress' : 'Pending Client Consent'}
                 </h3>
                 <StatusBadge status={outcome.type === 'approved' ? 'success' : outcome.type} size="md" />
               </div>
@@ -493,8 +593,8 @@ export default function ExecutionPage() {
                 <tbody>
                   {strategyRows.map(s => {
                     const isLive = s.strategyId === SOLSTICE_STRATEGY_ID;
-                    const solsticeDeployed = isLive && solsticePosition?.usxValue ? solsticePosition.usxValue : 0;
-                    const effectiveDeployed = isLive ? (s.deployed + solsticeDeployed) : s.deployed;
+                    // For Solstice, use on-chain eUSX position as source of truth
+                    const effectiveDeployed = isLive && solsticePosition?.usxValue != null ? solsticePosition.usxValue : s.deployed;
                     return (
                     <tr key={s.strategyId} className={`border-b border-slate-200/30 transition-colors ${isLive ? 'hover:bg-teal-50/50' : 'opacity-50'}`}>
                       <td className="py-2.5 pr-2">
@@ -623,35 +723,60 @@ export default function ExecutionPage() {
 
           {/* Solstice On-Chain Position */}
           {solsticePosition && (
-            <Card title="Solstice eUSX Position" subtitle="On-chain yield position">
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-teal-50 rounded-[12px] p-2.5 text-center">
-                    <p className="text-sm font-bold text-ink-900 font-mono">{solsticePosition.eusxBalance?.toFixed(4) || '0'}</p>
-                    <p className="text-[10px] text-slate-700">eUSX</p>
+            <Card title="Yield Position" subtitle="Solstice on-chain" className='mt-5'>
+              {(() => {
+                const eusx = solsticePosition.eusxBalance || 0;
+                const usx = solsticePosition.usxValue || 0;
+                const rate = solsticePoolState?.exchangeRate || 1;
+                const yieldEarned = usx - eusx;
+                const hasPosition = eusx > 0;
+                const poolApy = strategies.find((s: any) => s.strategyId === SOLSTICE_STRATEGY_ID)?.currentYield || 0;
+
+                return (
+                  <div className="space-y-3">
+                    {/* Main value */}
+                    <div className="text-center py-2">
+                      <p className="text-2xl font-bold font-mono text-ink-900">{fmt(usx)}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">USDC value locked</p>
+                    </div>
+
+                    {/* Key metrics */}
+                    <div className="space-y-1.5 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Tokens held</span>
+                        <span className="text-ink-900 font-mono">{eusx.toFixed(2)} eUSX</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Current APY</span>
+                        <span className="text-success-700 font-semibold">{poolApy}%</span>
+                      </div>
+                      {yieldEarned > 0.001 && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Yield earned</span>
+                          <span className="text-success-700 font-mono">+{yieldEarned.toFixed(4)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Exchange rate</span>
+                        <span className="text-slate-700 font-mono">1 eUSX = {rate.toFixed(4)} USX</span>
+                      </div>
+                    </div>
+
+                    {/* Status */}
+                    <div className={`rounded-[8px] px-3 py-2 text-center text-[10px] font-medium ${hasPosition ? 'bg-success-100 text-success-700' : 'bg-slate-100 text-slate-500'}`}>
+                      {hasPosition ? 'Earning yield' : 'No active position'}
+                    </div>
+
+                    {/* On-chain link */}
+                    {solsticePosition.eusxAta && (
+                      <a href={`https://solscan.io/account/${solsticePosition.eusxAta}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-1 text-[10px] text-teal-700 hover:underline font-mono">
+                        View on Solscan <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    )}
                   </div>
-                  <div className="bg-teal-50 rounded-[12px] p-2.5 text-center">
-                    <p className="text-sm font-bold text-success-700 font-mono">{solsticePosition.usxValue?.toFixed(4) || '0'}</p>
-                    <p className="text-[10px] text-slate-700">USX Value</p>
-                  </div>
-                </div>
-                {solsticePoolState && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-700">Exchange Rate</span>
-                    <span className="text-teal-700 font-mono">{solsticePoolState.exchangeRate?.toFixed(6)}</span>
-                  </div>
-                )}
-                {solsticePosition.eusxAta && (
-                  <div className="flex justify-between text-[10px]">
-                    <span className="text-slate-700">eUSX ATA</span>
-                    <a href={`https://solscan.io/account/${solsticePosition.eusxAta}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                      className="text-teal-700 hover:underline flex items-center gap-0.5 font-mono">
-                      {solsticePosition.eusxAta.slice(0, 6)}...{solsticePosition.eusxAta.slice(-4)}
-                      <ExternalLink className="w-2.5 h-2.5" />
-                    </a>
-                  </div>
-                )}
-              </div>
+                );
+              })()}
             </Card>
           )}
 

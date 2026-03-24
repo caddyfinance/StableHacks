@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EventsService } from '../events/events.service';
 import { SasService } from '../sas/sas.service';
 import { VaultProgramService } from '../vault-program/vault-program.service';
+import { SolsticeService } from '../solstice/solstice.service';
 
 @Injectable()
 export class VaultsService {
@@ -10,16 +11,19 @@ export class VaultsService {
   private events: EventsService;
   private sas: SasService;
   private vaultProgram: VaultProgramService;
+  private solstice: SolsticeService;
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
     @Inject(EventsService) events: EventsService,
     @Inject(SasService) sas: SasService,
     @Inject(VaultProgramService) vaultProgram: VaultProgramService,
+    @Inject(SolsticeService) solstice: SolsticeService,
   ) {
     this.prisma = prisma;
     this.events = events;
     this.sas = sas;
     this.vaultProgram = vaultProgram;
+    this.solstice = solstice;
   }
 
   /**
@@ -54,6 +58,91 @@ export class VaultsService {
       include: { mandate: true, credential: true, allocations: { include: { strategy: true } } },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /**
+   * Returns a transparency view of all vaults with full fund-flow data
+   * to prove non-commingling / segregation of client assets.
+   */
+  async getTransparency() {
+    const aminaWallet = this.vaultProgram.getAminaBankWallet();
+
+    const vaults = await this.prisma.vault.findMany({
+      include: {
+        credential: true,
+        deposits: { orderBy: { createdAt: 'desc' } },
+        allocations: { include: { strategy: true }, orderBy: { createdAt: 'desc' } },
+        events: { orderBy: { timestamp: 'desc' }, take: 50 },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Group vaults by the AMINA wallet that created them (ownerWallet comes from credential)
+    const byOwner: Record<string, typeof vaults> = {};
+    for (const v of vaults) {
+      const key = v.ownerWallet || 'unknown';
+      if (!byOwner[key]) byOwner[key] = [];
+      byOwner[key].push(v);
+    }
+
+    return {
+      aminaWallet,
+      totalVaults: vaults.length,
+      totalDeposited: vaults.reduce((s, v) => s + (v.totalDeposited || 0), 0),
+      totalNAV: vaults.reduce((s, v) => s + (v.totalNAV || 0), 0),
+      vaultsByOwner: Object.entries(byOwner).map(([wallet, walletVaults]) => ({
+        ownerWallet: wallet,
+        vaultCount: walletVaults.length,
+        totalDeposited: walletVaults.reduce((s, v) => s + (v.totalDeposited || 0), 0),
+        totalNAV: walletVaults.reduce((s, v) => s + (v.totalNAV || 0), 0),
+        vaults: walletVaults.map((v) => ({
+          vaultId: v.vaultId,
+          clientReference: v.clientReference,
+          baseAsset: v.baseAsset,
+          status: v.status,
+          paused: v.paused,
+          idleBalance: v.idleBalance,
+          totalDeposited: v.totalDeposited,
+          totalNAV: v.totalNAV,
+          onChainAddress: v.onChainAddress,
+          programId: v.programId,
+          createdAt: v.createdAt,
+          credential: {
+            credentialId: v.credential.credentialId,
+            clientReference: v.credential.clientReference,
+            jurisdiction: v.credential.jurisdiction,
+            riskTier: v.credential.riskTier,
+          },
+          deposits: v.deposits.map((d) => ({
+            amount: d.amount,
+            sourceWallet: d.sourceWallet,
+            sourceReference: d.sourceReference,
+            sourceType: d.sourceType,
+            screeningStatus: d.screeningStatus,
+            jurisdictionTag: d.jurisdictionTag,
+            createdAt: d.createdAt,
+          })),
+          allocations: v.allocations.map((a) => ({
+            strategyName: a.strategy?.name || a.strategyId,
+            strategyId: a.strategyId,
+            amount: a.amount,
+            yieldAccrued: a.yieldAccrued,
+            status: a.status,
+            txSignature: a.txSignature,
+            onChainAddress: a.onChainAddress,
+            createdAt: a.createdAt,
+          })),
+          recentEvents: v.events.slice(0, 20).map((e) => ({
+            eventId: e.eventId,
+            actionType: e.actionType,
+            amount: e.amount,
+            result: e.result,
+            txSignature: e.txSignature,
+            timestamp: e.timestamp,
+          })),
+        })),
+      })),
+    };
   }
 
   async create(credentialId: string, baseAsset = 'USDC') {
@@ -277,16 +366,37 @@ export class VaultsService {
     if (!vault) throw new NotFoundException('Vault not found');
 
     const activeAllocations = vault.allocations.filter((a) => a.status === 'active');
-    const totalDeployed = activeAllocations.reduce((s, a) => s + a.amount, 0);
     const totalYield = activeAllocations.reduce((s, a) => s + a.yieldAccrued, 0);
 
     const strategyExposures: Record<string, { amount: number; yield: number; strategyId: string }> = {};
+
+    // For Solstice strategy, always read deployed amount from on-chain (eUSX balance * exchange rate)
+    // This ensures the position shows even if DB allocations are out of sync
+    try {
+      const position = await this.solstice.getPositionForVault(vaultId);
+      if (position.eusxBalance > 0) {
+        strategyExposures['Solstice eUSX Yield'] = {
+          amount: position.usxValue,
+          yield: activeAllocations.filter((a) => a.strategyId === 'solstice-eusx-yield').reduce((s, a) => s + a.yieldAccrued, 0),
+          strategyId: 'solstice-eusx-yield',
+        };
+      }
+    } catch { /* on-chain read failed, fall through to DB */ }
+
+    // All strategies (including Solstice fallback) from DB
     activeAllocations.forEach((a) => {
       const key = a.strategy.name;
-      if (!strategyExposures[key]) strategyExposures[key] = { amount: 0, yield: 0, strategyId: a.strategyId };
-      strategyExposures[key].amount += a.amount;
-      strategyExposures[key].yield += a.yieldAccrued;
+      if (!strategyExposures[key]) {
+        strategyExposures[key] = { amount: 0, yield: 0, strategyId: a.strategyId };
+      }
+      // Only add DB amounts for non-Solstice (Solstice uses on-chain above)
+      if (a.strategyId !== 'solstice-eusx-yield') {
+        strategyExposures[key].amount += a.amount;
+        strategyExposures[key].yield += a.yieldAccrued;
+      }
     });
+
+    const totalDeployed = Object.values(strategyExposures).reduce((s, e) => s + e.amount, 0);
 
     return {
       vaultId: vault.vaultId, status: vault.status, paused: vault.paused, baseAsset: vault.baseAsset,
@@ -624,20 +734,84 @@ export class VaultsService {
   async unwind(vaultId: string, strategyId: string) {
     const vault = await this.prisma.vault.findUnique({
       where: { vaultId },
-      include: { allocations: { where: { strategyId, status: 'active' } } },
+      include: { allocations: { where: { strategyId, status: { in: ['active', 'cooldown'] } } } },
     });
     if (!vault) throw new NotFoundException('Vault not found');
-    if (!vault.allocations.length) throw new BadRequestException('No active allocations for this strategy');
 
-    const totalUnwind = vault.allocations.reduce((s, a) => s + a.amount + a.yieldAccrued, 0);
-    const yieldTotal = vault.allocations.reduce((s, a) => s + a.yieldAccrued, 0);
+    const dbAllocations = vault.allocations;
+    const totalUnwindDb = dbAllocations.reduce((s, a) => s + a.amount + a.yieldAccrued, 0);
+    const yieldTotal = dbAllocations.reduce((s, a) => s + a.yieldAccrued, 0);
 
-    await this.prisma.allocation.updateMany({ where: { vaultId, strategyId, status: 'active' }, data: { status: 'unwound' } });
-    await this.prisma.vault.update({ where: { vaultId }, data: { idleBalance: { increment: totalUnwind }, totalNAV: { increment: yieldTotal } } });
+    // ─── Solstice: use on-chain eUSX balance as source of truth ──
+    let unlockResult: any = null;
+    let withdrawResult: any = null;
+    if (strategyId === 'solstice-eusx-yield') {
+      // Read on-chain position to determine actual deployed amount
+      const position = await this.solstice.getPositionForVault(vaultId);
+      if (position.eusxBalance <= 0) {
+        throw new BadRequestException('No on-chain eUSX position to unwind');
+      }
 
-    await this.events.emit({ vaultId, actionType: 'UNWIND_EXECUTED', actor: 'emergency_admin', role: 'Emergency Admin', asset: vault.baseAsset, amount: totalUnwind, strategy: strategyId, result: 'success', reason: `Unwound ${totalUnwind.toLocaleString()} ${vault.baseAsset} from strategy back to idle balance` });
+      const onChainAmount = position.usxValue;
 
-    return { message: `Unwound ${totalUnwind.toLocaleString()} ${vault.baseAsset}`, totalUnwind };
+      // Step 1: Unlock eUSX → USX goes to cooldown escrow
+      unlockResult = await this.solstice.unlockEUSX(vaultId, onChainAmount);
+
+      // Step 2: Withdraw USX from cooldown escrow + redeem to collateral
+      try {
+        withdrawResult = await this.solstice.withdrawUSX(vaultId);
+      } catch (e: any) {
+        // Withdraw may fail if cooldown period not elapsed — mark as cooldown
+        await this.prisma.allocation.updateMany({ where: { vaultId, strategyId, status: 'active' }, data: { status: 'cooldown' } });
+        await this.events.emit({
+          vaultId, actionType: 'SOLSTICE_COOLDOWN_REQUESTED', actor: 'portfolio_manager', role: 'Portfolio Manager',
+          asset: vault.baseAsset, amount: onChainAmount, strategy: strategyId, result: 'pending',
+          reason: `eUSX unlocked on-chain (tx: ${unlockResult.txSignature}). Protocol cooldown in progress — funds pending withdrawal.`,
+          txSignature: unlockResult.txSignature,
+        });
+        return {
+          message: `eUSX unlocked on-chain. Withdrawal pending cooldown period.`,
+          status: 'cooldown',
+          unlockTx: unlockResult.txSignature,
+          totalUnwind: onChainAmount,
+        };
+      }
+
+      // ─── Update DB: mark all allocations as unwound ──────────
+      await this.prisma.allocation.updateMany({ where: { vaultId, strategyId, status: { in: ['active', 'cooldown'] } }, data: { status: 'unwound' } });
+
+      const returnAmount = withdrawResult?.usxReceived > 0 ? withdrawResult.usxReceived : onChainAmount;
+      await this.prisma.vault.update({ where: { vaultId }, data: { idleBalance: { increment: returnAmount } } });
+
+      await this.events.emit({
+        vaultId, actionType: 'UNWIND_EXECUTED', actor: 'portfolio_manager', role: 'Portfolio Manager',
+        asset: vault.baseAsset, amount: returnAmount, strategy: strategyId, result: 'success',
+        reason: `On-chain unwind: unlocked ${position.eusxBalance.toFixed(4)} eUSX (tx: ${unlockResult?.txSignature}), withdrew + redeemed USX to collateral (tx: ${withdrawResult?.txSignature}). Returned ${returnAmount} ${vault.baseAsset} to idle balance.`,
+        txSignature: withdrawResult?.txSignature || unlockResult?.txSignature,
+      });
+
+      return {
+        message: `Unwound ${returnAmount} ${vault.baseAsset}`,
+        totalUnwind: returnAmount,
+        unlockTx: unlockResult?.txSignature,
+        withdrawTx: withdrawResult?.txSignature,
+        onChainVerified: withdrawResult?.onChainVerified || unlockResult?.onChainVerified || false,
+      };
+    }
+
+    // ─── Non-Solstice strategies: DB-only unwind ──────────────
+    if (!dbAllocations.length) throw new BadRequestException('No active allocations for this strategy');
+
+    await this.prisma.allocation.updateMany({ where: { vaultId, strategyId, status: { in: ['active', 'cooldown'] } }, data: { status: 'unwound' } });
+    await this.prisma.vault.update({ where: { vaultId }, data: { idleBalance: { increment: totalUnwindDb }, totalNAV: { increment: yieldTotal } } });
+
+    await this.events.emit({
+      vaultId, actionType: 'UNWIND_EXECUTED', actor: 'portfolio_manager', role: 'Portfolio Manager',
+      asset: vault.baseAsset, amount: totalUnwindDb, strategy: strategyId, result: 'success',
+      reason: `Unwound ${totalUnwindDb.toLocaleString()} ${vault.baseAsset} from strategy back to idle balance`,
+    });
+
+    return { message: `Unwound ${totalUnwindDb.toLocaleString()} ${vault.baseAsset}`, totalUnwind: totalUnwindDb };
   }
 
   async accrueYield(vaultId: string) {
@@ -732,4 +906,5 @@ export class VaultsService {
 
     return { message: `Off-ramp of ${amount.toLocaleString()} USDC completed`, status: 'success', aminaWallet, txSignature };
   }
+
 }

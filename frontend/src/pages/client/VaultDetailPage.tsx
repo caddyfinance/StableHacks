@@ -230,20 +230,8 @@ export default function VaultDetailPage() {
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) { notify('error', 'Enter a valid amount'); return; }
 
-    // Demo mode: no wallet connected — record deposit directly via API
     if (!publicKey) {
-      setTxStep('recording');
-      setTxError(null);
-      try {
-        await api.deposit(vault.vaultId, { amount: amt, sourceWallet: clientInfo?.walletAddress || 'demo', sourceReference: `DEMO-${Date.now()}`, sourceType: 'Demo Deposit' });
-        setTxStep('done');
-        notify('success', `${fmt(amt)} USDC deposited (demo mode)`);
-        await loadData();
-      } catch (e: any) {
-        setTxError(e?.message || 'Deposit failed');
-        setTxStep('error');
-        notify('error', e?.message || 'Failed');
-      }
+      notify('error', 'Connect your wallet to deposit USDC');
       return;
     }
 
@@ -298,7 +286,8 @@ export default function VaultDetailPage() {
   const handleWithdraw = async () => {
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) { notify('error', 'Enter a valid amount'); return; }
-    const destWalletAddr = publicKey?.toBase58() || clientInfo?.walletAddress || 'demo-wallet';
+    if (!publicKey) { notify('error', 'Connect your wallet to request withdrawal'); return; }
+    const destWalletAddr = publicKey.toBase58();
 
     setTxStep('recording');
     setTxError(null);

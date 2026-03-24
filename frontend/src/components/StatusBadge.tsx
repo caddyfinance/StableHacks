@@ -13,7 +13,7 @@ const colorMap: Record<string, string> = {
   initiated: 'bg-info-100 text-info-700',
   pending: 'bg-warning-100 text-warning-700',
   consent_required: 'bg-warning-100 text-warning-700',
-  cooldown: 'bg-warning-100 text-warning-700',
+  cooldown: 'bg-info-100 text-info-700',
   blocked: 'bg-error-100 text-error-700',
   failure: 'bg-error-100 text-error-700',
   failed: 'bg-error-100 text-error-700',

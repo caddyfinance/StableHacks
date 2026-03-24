@@ -25,6 +25,15 @@ export class VaultsController {
     return this.service.findAll();
   }
 
+  @Get('transparency')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Get transparency / fund segregation view', description: 'Returns all vaults with full deposit, allocation, and event data to prove non-commingling of client assets. Admin only.' })
+  @ApiOkResponse({ description: 'Returns transparency data grouped by owner wallet.' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions. Admin role required.' })
+  getTransparency() {
+    return this.service.getTransparency();
+  }
+
   @Get('by-wallet/:wallet')
   @ApiOperation({ summary: 'Get vaults by wallet address', description: 'Retrieve all vaults associated with a specific Solana wallet address. Used by clients to view their own vault positions.' })
   @ApiParam({ name: 'wallet', description: 'Solana wallet address of the vault owner' })
@@ -178,8 +187,8 @@ export class VaultsController {
   }
 
   @Post(':id/unwind')
-  @Roles('emergency_admin')
-  @ApiOperation({ summary: 'Emergency unwind strategy position', description: 'Emergency action to fully exit a strategy position. Returns funds to idle balance.' })
+  @Roles('emergency_admin', 'portfolio_manager')
+  @ApiOperation({ summary: 'Unwind strategy position', description: 'Exit a strategy position and return funds to idle balance.' })
   @ApiParam({ name: 'id', description: 'Vault identifier' })
   @ApiCreatedResponse({ description: 'Strategy position successfully unwound.' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions. Emergency admin role required.' })
@@ -204,4 +213,5 @@ export class VaultsController {
   accrueYield(@Param('id') id: string) {
     return this.service.accrueYield(id);
   }
+
 }
