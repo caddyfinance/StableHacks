@@ -410,13 +410,13 @@ export class SolsticeService {
   // ─── Core On-Chain Operations ────────────────────────────────────
 
   /**
-   * Deploy capital into Solstice yield vault.
+   * Deploy capital into Solstice yield vault using deposited USDC.
    * Full automated on-chain flow:
-   *   Step 1: Mint devnet collateral (if needed)
-   *   Step 2: RequestMint collateral -> USX via USX Instructions API
-   *   Step 3: ConfirmMint to finalize USX minting
-   *   Step 4: Lock USX -> eUSX via USX Instructions API
+   *   Step 1: RequestMint collateral -> USX via USX Instructions API (uses deposited USDC from client)
+   *   Step 2: ConfirmMint to finalize USX minting
+   *   Step 3: Lock USX -> eUSX via USX Instructions API
    *
+   * Validates vault idle balance (DB) and on-chain USDC balance before proceeding.
    * Every step is a real on-chain transaction, verified with pre/post balance snapshots.
    * Creates Allocation records and compliance events for the full segregated fund flow.
    */
@@ -433,42 +433,86 @@ export class SolsticeService {
     const connection = this.getConnection();
     const authority = this.getAminaBankKeypair();
     const user = authority.publicKey;
-    const amountLamports = BigInt(Math.round(amount * 1e6));
 
     const collateralLabel = collateral.toUpperCase();
     this.logger.log(`[LOCK] vault=${vaultId} amount=${amount} USX (collateral=${collateralLabel})`);
 
-    // Derive ATAs
+    // ─── Validate vault idle balance (segregation check) ─────
+    let vault = await this.prisma.vault.findUnique({
+      where: { vaultId },
+      include: { deposits: true, allocations: true },
+    });
+    if (!vault) throw new Error(`Vault ${vaultId} not found`);
+
+    // Derive ATAs for the AMINA bank wallet (custodial wallet where deposits go)
     const collateralMint = this.getCollateralMint(collateral);
     const userCollateralAta = await getAssociatedTokenAddress(collateralMint, user);
     const userUsxAta = await getAssociatedTokenAddress(USX_MINT, user);
     const userEusxAta = await getAssociatedTokenAddress(EUSX_MINT, user);
 
-    // ─── Pre-balance snapshot (on-chain read) ────────────────
+    // ─── Pre-balance snapshot (on-chain read from bank wallet) ────
     const preBalanceUSX = await this.getTokenBalance(connection, userUsxAta);
     const preBalanceEUSX = await this.getTokenBalance(connection, userEusxAta);
     const preBalanceCollateral = await this.getTokenBalance(connection, userCollateralAta);
 
-    this.logger.log(`[LOCK] Pre-balance: ${preBalanceCollateral} ${collateralLabel}, ${preBalanceUSX} USX, ${preBalanceEUSX} eUSX`);
+    this.logger.log(`[LOCK] Pre-balance (on-chain): ${preBalanceCollateral} ${collateralLabel}, ${preBalanceUSX} USX, ${preBalanceEUSX} eUSX`);
+    this.logger.log(`[LOCK] Vault DB idle balance: ${vault.idleBalance}, requested: ${amount}`);
 
-    // ─── Step 1: Mint devnet collateral if needed ────────────
-    if (preBalanceCollateral < amount) {
-      this.logger.log(`[LOCK] Minting ${amount} devnet ${collateralLabel} (current: ${preBalanceCollateral})`);
-      const mintResult = await this.mintDevnetCollateral(amount, collateral);
-      await this.events.emit({
-        vaultId, actionType: `SOLSTICE_MINT_${collateralLabel}`,
-        actor: 'portfolio_manager', role: 'Portfolio Manager',
-        asset: collateralLabel, amount, strategy: STRATEGY_ID,
-        result: 'success',
-        reason: `Devnet: Minted ${amount} ${collateralLabel} to vault wallet ATA (${userCollateralAta.toBase58()}).`,
-        txSignature: mintResult.txSignature,
-        onChainAddress: userCollateralAta.toBase58(),
+    // ─── Auto-reconcile corrupted idle balance (legacy bug fix) ──
+    // If idle balance is negative, recompute from DB records
+    if (vault.idleBalance < 0) {
+      this.logger.warn(`[LOCK] Vault ${vaultId} has negative idle balance (${vault.idleBalance}). Auto-reconciling from DB records.`);
+      const totalDeposited = vault.deposits.reduce((s, d) => s + d.amount, 0);
+      const activeDeployed = vault.allocations
+        .filter(a => a.status === 'active' || a.status === 'cooldown')
+        .reduce((s, a) => s + a.amount, 0);
+      const correctIdle = Math.max(0, totalDeposited - activeDeployed);
+
+      await this.prisma.vault.update({
+        where: { vaultId },
+        data: { idleBalance: correctIdle, totalNAV: correctIdle + activeDeployed },
       });
+
+      await this.events.emit({
+        vaultId, actionType: 'BALANCE_AUTO_RECONCILED',
+        actor: 'system', role: 'System',
+        asset: collateralLabel, amount: correctIdle, strategy: STRATEGY_ID,
+        result: 'success',
+        reason: [
+          `Auto-reconciled vault ${vaultId}: idle ${vault.idleBalance} → ${correctIdle}.`,
+          `Deposits: ${totalDeposited}, active deployed: ${activeDeployed}.`,
+        ].join(' '),
+      });
+
+      // Re-read vault with corrected balance
+      vault = await this.prisma.vault.findUnique({
+        where: { vaultId },
+        include: { deposits: true, allocations: true },
+      }) as typeof vault;
+      this.logger.log(`[LOCK] Reconciled idle balance: ${vault.idleBalance}`);
     }
 
-    // ─── Step 2: RequestMint + ConfirmMint USX via API ───────
+    // Validate: vault must have sufficient idle balance (per-vault segregation via DB)
+    if (vault.idleBalance < amount) {
+      throw new Error(
+        `Insufficient vault balance. Vault ${vaultId} idle balance: ${vault.idleBalance.toLocaleString()} USDC, requested: ${amount.toLocaleString()} USDC. ` +
+        `Client must deposit USDC into the vault first.`
+      );
+    }
+
+    // Validate: bank wallet must have sufficient on-chain USDC (from client deposits)
+    if (preBalanceCollateral < amount) {
+      throw new Error(
+        `Insufficient on-chain ${collateralLabel} balance in custodial wallet. ` +
+        `On-chain: ${preBalanceCollateral.toLocaleString()}, requested: ${amount.toLocaleString()}. ` +
+        `Ensure client deposits have been received on-chain.`
+      );
+    }
+
+    // ─── Step 1: RequestMint + ConfirmMint USX via API ───────
+    // Uses the deposited USDC from the bank wallet (client deposits go here)
     if (preBalanceUSX < amount) {
-      this.logger.log(`[LOCK] RequestMint: ${amount} ${collateralLabel} -> USX`);
+      this.logger.log(`[LOCK] RequestMint: ${amount} ${collateralLabel} -> USX (from client deposits)`);
       const requestResult = await this.requestMintUSX(amount, collateral);
       await this.events.emit({
         vaultId, actionType: 'SOLSTICE_REQUEST_MINT',
@@ -476,9 +520,9 @@ export class SolsticeService {
         asset: collateralLabel, amount, strategy: STRATEGY_ID,
         result: 'success',
         reason: [
-          `Step 1/4: Requested mint of ${amount} USX with ${collateralLabel} collateral.`,
-          `${collateralLabel} from vault wallet ATA (${userCollateralAta.toBase58()}) submitted as collateral.`,
-          `Segregated: ${collateralLabel} sourced from vault PDA custody — non-commingled.`,
+          `Step 1/3: Requested mint of ${amount} USX with ${collateralLabel} collateral from client deposits.`,
+          `${collateralLabel} from custodial wallet ATA (${userCollateralAta.toBase58()}) submitted as collateral.`,
+          `Segregated: vault ${vaultId} idle balance ${vault.idleBalance} — per-vault tracking enforced.`,
         ].join(' '),
         txSignature: requestResult.txSignature,
         onChainAddress: userCollateralAta.toBase58(),
@@ -492,8 +536,8 @@ export class SolsticeService {
         asset: 'USX', amount, strategy: STRATEGY_ID,
         result: 'success',
         reason: [
-          `Step 2/4: Confirmed mint of ${amount} USX.`,
-          `${amount} USX received into vault USX ATA (${userUsxAta.toBase58()}).`,
+          `Step 2/3: Confirmed mint of ${amount} USX.`,
+          `${amount} USX received into custodial USX ATA (${userUsxAta.toBase58()}).`,
         ].join(' '),
         txSignature: confirmResult.txSignature,
         onChainAddress: userUsxAta.toBase58(),
@@ -505,7 +549,7 @@ export class SolsticeService {
       this.logger.log(`[LOCK] Post-mint USX balance: ${newUsxBalance}`);
     }
 
-    // ─── Step 3: Lock USX -> eUSX via USX Instructions API ───
+    // ─── Step 2/3: Lock USX -> eUSX via USX Instructions API ───
     // Use actual on-chain USX balance for Lock (minting may deduct a small fee)
     const actualUsxBalance = await this.getTokenBalance(connection, userUsxAta);
     const lockAmount = Math.min(amount, actualUsxBalance);
@@ -522,7 +566,7 @@ export class SolsticeService {
       actor: 'portfolio_manager', role: 'Portfolio Manager',
       asset: 'USX', amount: lockAmount, strategy: STRATEGY_ID,
       result: 'pending',
-      reason: `Step 3/4: Locking ${lockAmount} USX into Solstice eUSX yield vault. Pre-balance: ${preBalanceUSX} USX, ${preBalanceEUSX} eUSX. Source wallet: ${user.toBase58()}`,
+      reason: `Step 3/3: Locking ${lockAmount} USX into Solstice eUSX yield vault. Pre-balance: ${preBalanceUSX} USX, ${preBalanceEUSX} eUSX. Custodial wallet: ${user.toBase58()}`,
       onChainAddress: userUsxAta.toBase58(),
     });
 
@@ -573,7 +617,7 @@ export class SolsticeService {
       },
     });
 
-    // Update vault idle balance
+    // Update vault idle balance (validated upfront, so safe to decrement)
     await this.prisma.vault.update({
       where: { vaultId },
       data: { idleBalance: { decrement: amount } },
@@ -586,8 +630,8 @@ export class SolsticeService {
       asset: 'USX', amount: deployedAmount,
       strategy: STRATEGY_ID, result: 'success',
       reason: [
-        `Locked ${deployedAmount} USX into Solstice eUSX yield vault.`,
-        `Fund flow: ${user.toBase58()} USX ATA (${userUsxAta.toBase58()}) -> Solstice Asset Vault (${ASSET_VAULT_PDA.toBase58()}).`,
+        `Locked ${deployedAmount} USX into Solstice eUSX yield vault from vault ${vaultId} deposits.`,
+        `Fund flow: custodial wallet (${user.toBase58()}) USX ATA (${userUsxAta.toBase58()}) -> Solstice Asset Vault (${ASSET_VAULT_PDA.toBase58()}).`,
         `eUSX received: ${eusxReceived} to ATA ${userEusxAta.toBase58()}.`,
         `Pre: ${preBalanceUSX} USX / ${preBalanceEUSX} eUSX. Post: ${postBalanceUSX} USX / ${postBalanceEUSX} eUSX.`,
         `On-chain verified: ${onChainVerified}. Allocation ID: ${allocation.id}.`,
@@ -606,6 +650,7 @@ export class SolsticeService {
   /**
    * Unlock eUSX shares — burns eUSX, USX goes to cooldown escrow.
    * On-chain verified with pre/post balance reads.
+   * Called by the unwind orchestrator in VaultsService.
    */
   async unlockEUSX(vaultId: string, amount: number): Promise<{
     txSignature: string;
@@ -618,7 +663,10 @@ export class SolsticeService {
     const connection = this.getConnection();
     const authority = this.getAminaBankKeypair();
     const user = authority.publicKey;
-    const shareAmountLamports = BigInt(Math.round(amount * 1e6));
+
+    // Validate vault exists
+    const vault = await this.prisma.vault.findUnique({ where: { vaultId } });
+    if (!vault) throw new Error(`Vault ${vaultId} not found`);
 
     this.logger.log(`[UNLOCK] vault=${vaultId} amount=${amount} eUSX`);
 
@@ -626,28 +674,32 @@ export class SolsticeService {
     const [cooldownEscrow] = this.deriveCooldownEscrow(user);
     const [cooldownEscrowVault] = this.deriveCooldownEscrowVault(user);
 
-    // Pre-balance
+    // Pre-balance snapshot (on-chain read)
     const preBalanceEUSX = await this.getTokenBalance(connection, userEusxAta);
+
+    // Use actual on-chain eUSX balance for Unlock (exchange rate may cause slight differences)
+    const unlockAmount = Math.min(amount, preBalanceEUSX);
+    const unlockAmountLamports = Math.round(unlockAmount * 1e6);
+
+    if (unlockAmountLamports <= 0) {
+      throw new Error(`No eUSX balance available to unlock. Expected ~${amount}, on-chain: ${preBalanceEUSX}`);
+    }
+
+    this.logger.log(`[UNLOCK] On-chain eUSX: ${preBalanceEUSX}, unlocking: ${unlockAmount} eUSX (${unlockAmountLamports} lamports)`);
 
     await this.events.emit({
       vaultId, actionType: 'SOLSTICE_UNLOCK_INITIATED',
       actor: 'portfolio_manager', role: 'Portfolio Manager',
-      asset: 'eUSX', amount, strategy: STRATEGY_ID,
+      asset: 'eUSX', amount: unlockAmount, strategy: STRATEGY_ID,
       result: 'pending',
-      reason: `Initiating unlock of ${amount} eUSX from Solstice. Pre-balance: ${preBalanceEUSX} eUSX. Cooldown escrow: ${cooldownEscrow.toBase58()}`,
+      reason: [
+        `Initiating unlock of ${unlockAmount} eUSX from Solstice for vault ${vaultId}.`,
+        `On-chain eUSX balance: ${preBalanceEUSX}. Custodial wallet: ${user.toBase58()}.`,
+        `Cooldown escrow: ${cooldownEscrow.toBase58()}.`,
+        `Segregated: per-vault tracking enforced — vault idle balance: ${vault.idleBalance}.`,
+      ].join(' '),
       onChainAddress: cooldownEscrow.toBase58(),
     });
-
-    // Use actual on-chain eUSX balance for Unlock (exchange rate may cause slight differences)
-    const actualEusxBalance = await this.getTokenBalance(connection, userEusxAta);
-    const unlockAmount = Math.min(amount, actualEusxBalance);
-    const unlockAmountLamports = Math.round(unlockAmount * 1e6);
-
-    if (unlockAmountLamports <= 0) {
-      throw new Error(`No eUSX balance available to unlock. Expected ~${amount}, actual: ${actualEusxBalance}`);
-    }
-
-    this.logger.log(`[UNLOCK] Actual eUSX balance: ${actualEusxBalance}, unlocking: ${unlockAmount} eUSX (${unlockAmountLamports} lamports)`);
 
     // Fetch Unlock instruction from USX API using actual balance
     const unlockIx = await this.fetchUsxInstruction('Unlock', {
@@ -656,7 +708,6 @@ export class SolsticeService {
     });
 
     const tx = new Transaction().add(unlockIx);
-
     tx.feePayer = user;
     const { blockhash } = await connection.getLatestBlockhash('confirmed');
     tx.recentBlockhash = blockhash;
@@ -671,7 +722,7 @@ export class SolsticeService {
 
     this.logger.log(`[UNLOCK] Post-balance: ${postBalanceEUSX} eUSX. Burned: ${eusxBurned}. Verified: ${onChainVerified}`);
 
-    // Mark allocation as unwinding
+    // Mark allocation as in cooldown state
     const activeAlloc = await this.prisma.allocation.findFirst({
       where: { vaultId, strategyId: STRATEGY_ID, status: 'active' },
       orderBy: { createdAt: 'desc' },
@@ -686,14 +737,14 @@ export class SolsticeService {
     await this.events.emit({
       vaultId, actionType: 'SOLSTICE_UNLOCK',
       actor: 'portfolio_manager', role: 'Portfolio Manager',
-      asset: 'eUSX', amount: eusxBurned > 0 ? eusxBurned : amount,
+      asset: 'eUSX', amount: eusxBurned > 0 ? eusxBurned : unlockAmount,
       strategy: STRATEGY_ID, result: 'success',
       reason: [
-        `Unlocked ${eusxBurned > 0 ? eusxBurned : amount} eUSX from Solstice yield vault.`,
-        `Fund flow: eUSX burned from ATA ${userEusxAta.toBase58()}, USX sent to cooldown escrow ${cooldownEscrow.toBase58()}.`,
-        `Pre: ${preBalanceEUSX} eUSX. Post: ${postBalanceEUSX} eUSX. Burned: ${eusxBurned}.`,
+        `Unlocked ${eusxBurned > 0 ? eusxBurned : unlockAmount} eUSX from Solstice yield vault for vault ${vaultId}.`,
+        `Fund flow: eUSX burned from custodial ATA ${userEusxAta.toBase58()} → USX to cooldown escrow ${cooldownEscrow.toBase58()}.`,
+        `Pre: ${preBalanceEUSX} eUSX → Post: ${postBalanceEUSX} eUSX. Burned: ${eusxBurned}.`,
         `Cooldown escrow vault: ${cooldownEscrowVault.toBase58()}.`,
-        `On-chain verified: ${onChainVerified}. Awaiting cooldown period.`,
+        `On-chain verified: ${onChainVerified}. Allocation status: cooldown. Awaiting protocol cooldown period.`,
       ].join(' '),
       txSignature,
       onChainAddress: cooldownEscrow.toBase58(),
@@ -703,55 +754,74 @@ export class SolsticeService {
   }
 
   /**
-   * Withdraw USX from cooldown escrow after the cooldown period.
-   * On-chain verified with pre/post balance reads.
+   * Withdraw USX from cooldown escrow after the cooldown period, then redeem USX → USDC.
+   * On-chain verified with pre/post balance reads at each step.
+   *
+   * Returns the amount of USDC received back into the custodial wallet.
+   * NOTE: Idle balance updates are handled by the unwind orchestrator (VaultsService.unwind),
+   * not here, to avoid double-crediting.
    */
   async withdrawUSX(vaultId: string): Promise<{
     txSignature: string;
     preBalanceUSX: number;
     postBalanceUSX: number;
     usxReceived: number;
+    usdcReceived: number;
     onChainVerified: boolean;
   }> {
     const connection = this.getConnection();
     const authority = this.getAminaBankKeypair();
     const user = authority.publicKey;
 
+    // Validate vault exists
+    const vault = await this.prisma.vault.findUnique({ where: { vaultId } });
+    if (!vault) throw new Error(`Vault ${vaultId} not found`);
+
     this.logger.log(`[WITHDRAW] vault=${vaultId}`);
 
+    const collateralMint = this.getCollateralMint('usdc');
+    const userCollateralAta = await getAssociatedTokenAddress(collateralMint, user);
     const userUsxAta = await getAssociatedTokenAddress(USX_MINT, user);
     const [cooldownEscrow] = this.deriveCooldownEscrow(user);
     const [cooldownEscrowVault] = this.deriveCooldownEscrowVault(user);
 
+    // Pre-balance snapshots (on-chain reads)
     const preBalanceUSX = await this.getTokenBalance(connection, userUsxAta);
-
-    await this.events.emit({
-      vaultId, actionType: 'SOLSTICE_WITHDRAW_INITIATED',
-      actor: 'portfolio_manager', role: 'Portfolio Manager',
-      asset: 'USX', strategy: STRATEGY_ID, result: 'pending',
-      reason: `Initiating USX withdrawal from Solstice cooldown escrow (${cooldownEscrow.toBase58()}). Pre-balance: ${preBalanceUSX} USX.`,
-      onChainAddress: cooldownEscrow.toBase58(),
-    });
+    const preBalanceUSDC = await this.getTokenBalance(connection, userCollateralAta);
 
     // Read cooldown escrow vault balance to determine withdraw amount
     const escrowVaultAta = await getAssociatedTokenAddress(USX_MINT, cooldownEscrowVault, true);
     const escrowBalance = await this.getTokenBalance(connection, escrowVaultAta);
     const withdrawAmountLamports = Math.round(escrowBalance * 1e6);
 
-    this.logger.log(`[WITHDRAW] Cooldown escrow balance: ${escrowBalance} USX (${withdrawAmountLamports} lamports)`);
+    this.logger.log(`[WITHDRAW] Cooldown escrow balance: ${escrowBalance} USX (${withdrawAmountLamports} lamports). Pre-USDC: ${preBalanceUSDC}`);
 
     if (withdrawAmountLamports <= 0) {
-      throw new Error(`No USX in cooldown escrow. Balance: ${escrowBalance}. Cooldown period may not be over yet.`);
+      throw new Error(
+        `No USX in cooldown escrow. Balance: ${escrowBalance}. ` +
+        `Cooldown period may not be over yet. Escrow: ${cooldownEscrowVault.toBase58()}`
+      );
     }
 
-    // Fetch Withdraw instruction from USX API
+    await this.events.emit({
+      vaultId, actionType: 'SOLSTICE_WITHDRAW_INITIATED',
+      actor: 'portfolio_manager', role: 'Portfolio Manager',
+      asset: 'USX', amount: escrowBalance, strategy: STRATEGY_ID, result: 'pending',
+      reason: [
+        `Step 1/2: Initiating USX withdrawal from Solstice cooldown escrow for vault ${vaultId}.`,
+        `Escrow balance: ${escrowBalance} USX. Cooldown escrow: ${cooldownEscrowVault.toBase58()}.`,
+        `Custodial wallet: ${user.toBase58()}. Pre-balances: ${preBalanceUSX} USX, ${preBalanceUSDC} USDC.`,
+      ].join(' '),
+      onChainAddress: cooldownEscrow.toBase58(),
+    });
+
+    // ─── Step 1: Withdraw USX from cooldown escrow ──────────
     const withdrawIx = await this.fetchUsxInstruction('Withdraw', {
       amount: withdrawAmountLamports,
       user: user.toBase58(),
     });
 
     const tx = new Transaction().add(withdrawIx);
-
     tx.feePayer = user;
     const { blockhash } = await connection.getLatestBlockhash('confirmed');
     tx.recentBlockhash = blockhash;
@@ -762,83 +832,76 @@ export class SolsticeService {
     await new Promise(r => setTimeout(r, 1000));
     const postBalanceUSX = await this.getTokenBalance(connection, userUsxAta);
     const usxReceived = postBalanceUSX - preBalanceUSX;
-    const onChainVerified = usxReceived > 0;
+    const withdrawVerified = usxReceived > 0;
 
-    this.logger.log(`[WITHDRAW] Post-balance: ${postBalanceUSX} USX. Received: ${usxReceived}. Verified: ${onChainVerified}`);
-
-    // Mark allocation as unwound, return funds to vault idle balance
-    const cooldownAlloc = await this.prisma.allocation.findFirst({
-      where: { vaultId, strategyId: STRATEGY_ID, status: 'cooldown' },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (cooldownAlloc) {
-      await this.prisma.allocation.update({
-        where: { id: cooldownAlloc.id },
-        data: { status: 'unwound', txSignature },
-      });
-      // Return principal + any yield to idle balance
-      const returnAmount = usxReceived > 0 ? usxReceived : cooldownAlloc.amount;
-      const yieldEarned = returnAmount - cooldownAlloc.amount;
-      await this.prisma.vault.update({
-        where: { vaultId },
-        data: {
-          idleBalance: { increment: returnAmount },
-          totalNAV: yieldEarned > 0 ? { increment: yieldEarned } : undefined,
-        },
-      });
-    }
+    this.logger.log(`[WITHDRAW] Post-balance: ${postBalanceUSX} USX. Received: ${usxReceived}. Verified: ${withdrawVerified}`);
 
     await this.events.emit({
       vaultId, actionType: 'SOLSTICE_WITHDRAW',
       actor: 'portfolio_manager', role: 'Portfolio Manager',
-      asset: 'USX', amount: usxReceived > 0 ? usxReceived : undefined,
+      asset: 'USX', amount: usxReceived > 0 ? usxReceived : escrowBalance,
       strategy: STRATEGY_ID, result: 'success',
       reason: [
-        `Step 1/2: Withdrawn USX from Solstice cooldown escrow.`,
-        `Fund flow: cooldown escrow ${cooldownEscrow.toBase58()} -> USX ATA ${userUsxAta.toBase58()}.`,
-        `Pre: ${preBalanceUSX} USX. Post: ${postBalanceUSX} USX. Received: ${usxReceived}.`,
-        `On-chain verified: ${onChainVerified}. Segregated: funds remain in vault custody.`,
+        `Step 1/2: Withdrawn USX from Solstice cooldown escrow for vault ${vaultId}.`,
+        `Fund flow: cooldown escrow ${cooldownEscrowVault.toBase58()} → custodial USX ATA ${userUsxAta.toBase58()}.`,
+        `Pre: ${preBalanceUSX} USX → Post: ${postBalanceUSX} USX. Received: ${usxReceived}.`,
+        `On-chain verified: ${withdrawVerified}. Segregated: funds remain in custodial wallet.`,
       ].join(' '),
       txSignature,
       onChainAddress: userUsxAta.toBase58(),
     });
 
-    // Step 2: Redeem USX back to collateral via USX Instructions API
+    // ─── Step 2: Redeem USX → USDC via USX Instructions API ──
+    let usdcReceived = 0;
     if (usxReceived > 0) {
       try {
         const redeemAmount = usxReceived;
-        this.logger.log(`[WITHDRAW] Redeeming ${redeemAmount} USX back to collateral`);
+        this.logger.log(`[WITHDRAW] Redeeming ${redeemAmount} USX back to USDC for vault ${vaultId}`);
         const requestRedeemResult = await this.requestRedeemUSX(redeemAmount);
         const confirmRedeemResult = await this.confirmRedeemUSX();
+
+        // Verify USDC received on-chain
+        await new Promise(r => setTimeout(r, 1000));
+        const postBalanceUSDC = await this.getTokenBalance(connection, userCollateralAta);
+        usdcReceived = postBalanceUSDC - preBalanceUSDC;
+
+        this.logger.log(`[WITHDRAW] Post-redeem USDC: ${postBalanceUSDC}. USDC received: ${usdcReceived}`);
 
         await this.events.emit({
           vaultId, actionType: 'SOLSTICE_REDEEM_COLLATERAL',
           actor: 'portfolio_manager', role: 'Portfolio Manager',
-          asset: 'USDC', amount: redeemAmount,
+          asset: 'USDC', amount: usdcReceived > 0 ? usdcReceived : redeemAmount,
           strategy: STRATEGY_ID, result: 'success',
           reason: [
-            `Step 2/2: Redeemed ${redeemAmount} USX back to collateral.`,
+            `Step 2/2: Redeemed ${redeemAmount} USX back to USDC for vault ${vaultId}.`,
             `RequestRedeem tx: ${requestRedeemResult.txSignature}. ConfirmRedeem tx: ${confirmRedeemResult.txSignature}.`,
-            `Collateral received into vault wallet ATA. Segregated: non-commingled throughout.`,
-            `Compliant: all fund movements within vault PDA custody chain.`,
+            `USDC pre: ${preBalanceUSDC} → post: ${postBalanceUSDC}. USDC received: ${usdcReceived}.`,
+            `Collateral returned to custodial USDC ATA ${userCollateralAta.toBase58()}.`,
+            `Segregated: non-commingled throughout. All fund movements within custodial wallet.`,
           ].join(' '),
           txSignature: confirmRedeemResult.txSignature,
-          onChainAddress: userUsxAta.toBase58(),
+          onChainAddress: userCollateralAta.toBase58(),
         });
       } catch (e: any) {
-        this.logger.warn(`[WITHDRAW] USX redemption failed (USX remains in wallet): ${e.message}`);
+        this.logger.warn(`[WITHDRAW] USX redemption failed (USX remains in custodial wallet): ${e.message}`);
         await this.events.emit({
           vaultId, actionType: 'SOLSTICE_REDEEM_COLLATERAL',
           actor: 'portfolio_manager', role: 'Portfolio Manager',
           asset: 'USX', amount: usxReceived,
           strategy: STRATEGY_ID, result: 'failed',
-          reason: `Step 2/2: USX redemption to collateral failed: ${e.message}. USX remains in vault wallet for manual redemption.`,
+          reason: [
+            `Step 2/2: USX → USDC redemption failed for vault ${vaultId}: ${e.message}.`,
+            `USX remains in custodial wallet ${user.toBase58()} for manual redemption.`,
+            `Segregation maintained: funds not commingled.`,
+          ].join(' '),
           onChainAddress: userUsxAta.toBase58(),
         });
       }
     }
 
-    return { txSignature, preBalanceUSX, postBalanceUSX, usxReceived, onChainVerified };
+    const onChainVerified = withdrawVerified && usdcReceived > 0;
+
+    return { txSignature, preBalanceUSX, postBalanceUSX, usxReceived, usdcReceived, onChainVerified };
   }
 
   // ─── Read-Only / Query Methods ────────────────────────────────

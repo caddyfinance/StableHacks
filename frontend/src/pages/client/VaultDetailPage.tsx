@@ -235,7 +235,9 @@ export default function VaultDetailPage() {
       return;
     }
 
-    if (!vault?.onChainAddress) { notify('error', 'Vault has no on-chain address'); return; }
+    // AMINA bank wallet is the custodial deposit target (bank holds assets on behalf of clients)
+    const depositTarget = vault?.aminaBankWallet || vault?.onChainAddress;
+    if (!depositTarget) { notify('error', 'Vault has no deposit address'); return; }
 
     setTxStep('building');
     setTxSig(null);
@@ -243,14 +245,14 @@ export default function VaultDetailPage() {
 
     try {
       const connection = new Connection(DEVNET_RPC, 'confirmed');
-      const vaultPda = new PublicKey(vault.onChainAddress);
+      const custodianPubkey = new PublicKey(depositTarget);
       const amountLamports = BigInt(Math.round(amt * 10 ** USDC_DECIMALS));
       const userAta = await getAssociatedTokenAddress(USDC_MINT, publicKey);
-      const vaultAta = await getAssociatedTokenAddress(USDC_MINT, vaultPda, true);
+      const custodianAta = await getAssociatedTokenAddress(USDC_MINT, custodianPubkey);
 
       const tx = new Transaction();
-      tx.add(createAssociatedTokenAccountIdempotentInstruction(publicKey, vaultAta, vaultPda, USDC_MINT));
-      tx.add(createTransferInstruction(userAta, vaultAta, publicKey, amountLamports));
+      tx.add(createAssociatedTokenAccountIdempotentInstruction(publicKey, custodianAta, custodianPubkey, USDC_MINT));
+      tx.add(createTransferInstruction(userAta, custodianAta, publicKey, amountLamports));
       const { blockhash } = await connection.getLatestBlockhash('confirmed');
       tx.recentBlockhash = blockhash;
       tx.feePayer = publicKey;

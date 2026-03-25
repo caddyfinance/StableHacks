@@ -5,7 +5,7 @@ import { api } from '../lib/api';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import StatusBadge from '../components/StatusBadge';
-import { TrendingUp, ArrowDownToLine, ArrowUpFromLine, Pause, RefreshCw, ExternalLink, CheckCircle, XCircle, Loader2, Wallet } from 'lucide-react';
+import { TrendingUp, ArrowDownToLine, ArrowUpFromLine, Pause, RefreshCw, ExternalLink, CheckCircle, XCircle, Loader2, Wallet, Timer, ArrowRight } from 'lucide-react';
 
 const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
 const DEVNET_RPC = (import.meta as any).env?.VITE_SOLANA_RPC_URL || 'https://api.devnet.solana.com';
@@ -83,14 +83,14 @@ export default function ExecutionPage() {
       setStrategies(strats);
       setSnapshot(snap);
 
-      // Fetch on-chain USDC balance from the vault's deployed address
+      // Fetch on-chain USDC balance from the AMINA bank wallet (custodial wallet where client deposits go)
       const vault = vaults.find((v: any) => v.vaultId === activeVaultId);
-      const vaultAddr = vault?.onChainAddress;
-      setVaultOnChainAddress(vaultAddr || null);
-      if (vaultAddr) {
-        fetchOnChainUsdcBalance(vaultAddr).then(setOnChainBalance).catch(() => setOnChainBalance(0));
+      const bankWallet = vault?.aminaBankWallet;
+      if (bankWallet) {
+        setVaultOnChainAddress(bankWallet);
+        fetchOnChainUsdcBalance(bankWallet).then(setOnChainBalance).catch(() => setOnChainBalance(0));
       } else {
-        // Fallback: try AMINA bank wallet
+        // Fallback: fetch bank wallet from API
         api.getAminaWallet().then(({ wallet }) => {
           setVaultOnChainAddress(wallet);
           return fetchOnChainUsdcBalance(wallet);
@@ -364,26 +364,33 @@ export default function ExecutionPage() {
               {/* Deploy Tab */}
               {tab === 'deploy' && (
                 <div className="space-y-4">
-                  {/* On-chain vault balance card */}
+                  {/* Vault segregated balance card */}
                   <div className="bg-teal-50 border border-teal-200/50 rounded-[12px] p-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Wallet className="w-4 h-4 text-teal-700" />
                         <div>
-                          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Vault On-Chain Balance</p>
-                          <p className="text-lg font-bold font-mono text-ink-900">{onChainBalance !== null ? fmt(onChainBalance) : '—'} <span className="text-xs text-slate-500">USDC</span></p>
+                          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Vault Available Balance</p>
+                          <p className="text-lg font-bold font-mono text-ink-900">{fmt(snapshot?.idleBalance)} <span className="text-xs text-slate-500">USDC</span></p>
                         </div>
                       </div>
-                      {vaultOnChainAddress && (
-                        <a href={`https://solscan.io/account/${vaultOnChainAddress}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                          className="text-[10px] text-teal-700 hover:underline font-mono flex items-center gap-1">
-                          {vaultOnChainAddress.slice(0, 6)}...{vaultOnChainAddress.slice(-4)} <ExternalLink className="w-2.5 h-2.5" />
-                        </a>
-                      )}
+                      {(() => {
+                        const vault = vaults.find((v: any) => v.vaultId === activeVaultId);
+                        const vaultAddr = vault?.onChainAddress;
+                        return vaultAddr ? (
+                          <div className="text-right">
+                            <p className="text-[10px] text-slate-500">Vault {activeVaultId}</p>
+                            <a href={`https://solscan.io/account/${vaultAddr}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                              className="text-[10px] text-teal-700 hover:underline font-mono flex items-center gap-1 justify-end">
+                              {vaultAddr.slice(0, 6)}...{vaultAddr.slice(-4)} <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          </div>
+                        ) : null;
+                      })()}
                     </div>
                   </div>
 
-                  {(onChainBalance ?? 0) <= 0 && (snapshot?.idleBalance || 0) <= 0 && (
+                  {(snapshot?.idleBalance || 0) <= 0 && (
                     <div className="bg-slate-50 border border-slate-200 rounded-[12px] p-3 text-center">
                       <p className="text-xs text-slate-500">No balance available to deploy. Deposit USDC into the vault first.</p>
                     </div>
@@ -404,25 +411,11 @@ export default function ExecutionPage() {
                     </select>
                   </div>
 
-                  {/* Show balance info once strategy is selected */}
-                  {selectedStrategy && (
-                    <div className="bg-slate-50 border border-slate-200 rounded-[12px] p-3 text-xs space-y-1">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">On-chain USDC available</span>
-                        <span className="text-ink-900 font-mono font-semibold">{onChainBalance !== null ? fmt(onChainBalance) : '—'} USDC</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">DB idle balance</span>
-                        <span className="text-slate-700 font-mono">{fmt(snapshot?.idleBalance)} USDC</span>
-                      </div>
-                    </div>
-                  )}
-
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1.5">Amount (USDC)</label>
                     <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 250,000"
                       className="w-full bg-white border border-slate-200 rounded-[12px] px-3 py-2 text-sm text-ink-900 focus:outline-none focus:ring-teal-600/20 focus:border-teal-600 disabled:bg-slate-100 disabled:text-slate-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                    <p className="text-[10px] text-slate-700 mt-1">Available on-chain: {onChainBalance !== null ? fmt(onChainBalance) : '—'} USDC</p>
+                    <p className="text-[10px] text-slate-700 mt-1">Available: {fmt(snapshot?.idleBalance)} USDC (vault segregated balance)</p>
                   </div>
                   {selectedStrategy && amount && (
                     <div className="bg-teal-50 rounded-[12px] p-3 text-xs space-y-1.5">
@@ -517,9 +510,9 @@ export default function ExecutionPage() {
               {tab === 'idle' && (
                 <div className="space-y-4">
                   <div className="bg-teal-50 rounded-[18px] p-4 text-center space-y-2">
-                    <p className="text-2xl font-bold text-ink-900 font-mono">{onChainBalance !== null ? fmt(onChainBalance) : fmt(snapshot?.idleBalance)} USDC</p>
+                    <p className="text-2xl font-bold text-ink-900 font-mono">{fmt(snapshot?.idleBalance)} USDC</p>
                     <p className="text-xs text-slate-700">
-                      {onChainBalance !== null ? 'On-chain vault balance' : 'Current idle balance'}
+                      Vault idle balance (segregated)
                       {vaultOnChainAddress && (
                         <a href={`https://solscan.io/account/${vaultOnChainAddress}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
                           className="ml-1.5 text-teal-700 hover:underline inline-flex items-center gap-0.5 text-[10px]">
@@ -570,6 +563,97 @@ export default function ExecutionPage() {
               )}
               {outcome.consentRequestId && (
                 <div className="border-t border-slate-200 pt-2"><span className="text-[10px] uppercase tracking-wider text-slate-700">Consent Request</span><p className="text-warning-700 text-xs font-mono mt-1">{outcome.consentRequestId}</p></div>
+              )}
+            </div>
+          )}
+
+          {/* Cooldown & Pending Withdrawals */}
+          {((snapshot?.cooldownAllocations?.length || 0) > 0 || (snapshot?.pendingWithdrawals?.length || 0) > 0) && (
+            <div className="bg-warning-100/50 border border-warning-700/20 rounded-[18px] p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Timer className="w-4.5 h-4.5 text-warning-700" />
+                <div>
+                  <h3 className="text-sm font-semibold text-warning-700">Assets In Cooldown / Pending Withdrawal</h3>
+                  <p className="text-[11px] text-warning-700/70">These assets are being unwound from strategies or awaiting admin approval for withdrawal.</p>
+                </div>
+              </div>
+
+              {/* Cooldown Allocations */}
+              {(snapshot?.cooldownAllocations?.length || 0) > 0 && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-warning-700/80 font-semibold mb-2">Strategy Cooldown</p>
+                  <div className="space-y-2">
+                    {snapshot.cooldownAllocations.map((a: any, i: number) => (
+                      <div key={i} className="bg-white/80 border border-warning-700/10 rounded-[12px] px-4 py-3 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-warning-100 border border-warning-700/20 flex items-center justify-center">
+                            <Timer className="w-4 h-4 text-warning-700" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-ink-900">{a.strategyName}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] px-1.5 py-0.5 bg-warning-100 text-warning-700 rounded font-semibold">COOLDOWN</span>
+                              <span className="text-[10px] text-slate-500">Awaiting protocol cooldown period</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold font-mono text-warning-700">{fmt(a.amount)} <span className="text-xs text-slate-500">USDC</span></p>
+                          {a.yieldAccrued > 0 && <p className="text-[10px] font-mono text-success-700">+{fmt(a.yieldAccrued)} yield</p>}
+                          {a.txSignature && (
+                            <a href={`https://solscan.io/tx/${a.txSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                              className="text-[10px] text-teal-700 hover:underline font-mono flex items-center gap-1 justify-end mt-0.5">
+                              {a.txSignature.slice(0, 12)}... <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 bg-white/60 rounded-[10px] px-3 py-2 flex items-center justify-between">
+                    <span className="text-[10px] text-warning-700/80">Total in cooldown</span>
+                    <span className="text-sm font-bold font-mono text-warning-700">{fmt(snapshot.totalCooldown)} USDC</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Pending Withdrawal Requests */}
+              {(snapshot?.pendingWithdrawals?.length || 0) > 0 && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-warning-700/80 font-semibold mb-2">Pending Withdrawal Requests</p>
+                  <div className="space-y-2">
+                    {snapshot.pendingWithdrawals.map((w: any, i: number) => (
+                      <div key={i} className="bg-white/80 border border-warning-700/10 rounded-[12px] px-4 py-3 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-warning-100 border border-warning-700/20 flex items-center justify-center">
+                            <ArrowUpFromLine className="w-4 h-4 text-warning-700" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-ink-900">Withdrawal Request</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] px-1.5 py-0.5 bg-warning-100 text-warning-700 rounded font-semibold">PENDING</span>
+                              <span className="text-[10px] font-mono text-slate-500">{w.requestId}</span>
+                              {w.destinationWallet && (
+                                <>
+                                  <ArrowRight className="w-2.5 h-2.5 text-slate-400" />
+                                  <span className="text-[10px] font-mono text-slate-500">{w.destinationWallet.slice(0, 6)}...{w.destinationWallet.slice(-4)}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold font-mono text-warning-700">{fmt(w.amount)} <span className="text-xs text-slate-500">USDC</span></p>
+                          <p className="text-[10px] text-slate-500">Awaiting admin approval</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 bg-white/60 rounded-[10px] px-3 py-2 flex items-center justify-between">
+                    <span className="text-[10px] text-warning-700/80">Total pending withdrawal</span>
+                    <span className="text-sm font-bold font-mono text-warning-700">{fmt(snapshot.totalPendingWithdrawal)} USDC</span>
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -782,7 +866,7 @@ export default function ExecutionPage() {
 
           {/* Fund Flow Timeline */}
           {solsticeFundFlow.length > 0 && (
-            <Card title="Fund Flow" subtitle="On-chain activity log">
+            <Card title="Fund Flow" subtitle="On-chain activity log" className='mt-5'>
               <div className="space-y-1 max-h-[240px] overflow-y-auto">
                 {solsticeFundFlow.slice(0, 15).map((e: any) => (
                   <div key={e.eventId} className={`bg-teal-50 rounded-[12px] px-3 py-2 border-l-2 ${

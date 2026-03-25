@@ -214,4 +214,14 @@ export class VaultsController {
     return this.service.accrueYield(id);
   }
 
+  @Post(':id/reconcile')
+  @Roles('admin', 'portfolio_manager')
+  @ApiOperation({ summary: 'Reconcile vault balance', description: 'Recompute vault idle balance from DB records (deposits - deployments - withdrawals). Fixes corrupted balances.' })
+  @ApiParam({ name: 'id', description: 'Vault identifier' })
+  @ApiCreatedResponse({ description: 'Vault balance reconciled successfully.' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions.' })
+  reconcile(@Param('id') id: string) {
+    return this.service.reconcileBalance(id);
+  }
+
 }
