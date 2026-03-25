@@ -196,6 +196,7 @@ export default function VaultDetailPage() {
   const [hasScrolledToEnd, setHasScrolledToEnd] = useState(false);
 
   const [strategies, setStrategies] = useState<any[]>([]);
+  const [walletUsdcBalance, setWalletUsdcBalance] = useState<number | null>(null);
 
   const loadData = async () => {
     if (!id) return;
@@ -216,6 +217,19 @@ export default function VaultDetailPage() {
   };
 
   useEffect(() => { loadData(); }, [id]);
+
+  // Fetch wallet USDC balance when wallet connects or mode changes
+  useEffect(() => {
+    if (!publicKey) { setWalletUsdcBalance(null); return; }
+    (async () => {
+      try {
+        const connection = new Connection(DEVNET_RPC, 'confirmed');
+        const ata = await getAssociatedTokenAddress(USDC_MINT, publicKey);
+        const bal = await connection.getTokenAccountBalance(ata);
+        setWalletUsdcBalance(Number(bal.value.uiAmount || 0));
+      } catch { setWalletUsdcBalance(0); }
+    })();
+  }, [publicKey, mode, txStep]);
 
   const resetTx = () => {
     setMode('none');
@@ -533,9 +547,41 @@ export default function VaultDetailPage() {
         <Card title={mode === 'deposit' ? 'Deposit USDC On-Chain' : 'Request Withdrawal'} subtitle={mode === 'deposit' ? 'USDC transfers from your wallet to the vault on Solana' : 'Submit a withdrawal request. Amina Bank will process and transfer funds to your wallet.'}>
           {txStep === 'idle' && (
             <div className="space-y-3">
+              {/* Balance info */}
+              {mode === 'deposit' && (
+                <div className="bg-teal-50 rounded-[12px] p-3 flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500">Your wallet balance</span>
+                  <span className="text-xs font-mono font-semibold text-ink-900">
+                    {walletUsdcBalance != null ? `${fmt(walletUsdcBalance)} USDC` : publicKey ? 'Loading...' : 'Connect wallet'}
+                  </span>
+                </div>
+              )}
+              {mode === 'withdraw' && (
+                <div className="bg-warning-100/50 rounded-[12px] p-3 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-slate-500">Available to withdraw (idle)</span>
+                    <span className="text-xs font-mono font-semibold text-ink-900">{fmt(snapshot?.idleBalance || 0)} USDC</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-slate-500">Deployed in strategies</span>
+                    <span className="text-xs font-mono text-slate-500">{fmt(deployed)} USDC</span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-warning-700/10 pt-1.5">
+                    <span className="text-[10px] text-slate-500">Total NAV</span>
+                    <span className="text-xs font-mono font-semibold text-ink-900">{fmt(snapshot?.totalNAV || vault.totalNAV || 0)} USDC</span>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-3">
                 <input type="number" placeholder="Amount (USDC)" value={amount} onChange={e => setAmount(e.target.value)}
+                  max={mode === 'deposit' ? walletUsdcBalance || undefined : snapshot?.idleBalance || undefined}
                   className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-[12px] text-sm text-ink-900 font-mono focus:outline-none focus:ring-teal-600/20 focus:border-teal-600" />
+                {mode === 'deposit' && walletUsdcBalance != null && walletUsdcBalance > 0 && (
+                  <button onClick={() => setAmount(String(walletUsdcBalance))} className="text-[10px] text-teal-700 hover:underline font-medium whitespace-nowrap">Max</button>
+                )}
+                {mode === 'withdraw' && (snapshot?.idleBalance || 0) > 0 && (
+                  <button onClick={() => setAmount(String(snapshot.idleBalance))} className="text-[10px] text-warning-700 hover:underline font-medium whitespace-nowrap">Max</button>
+                )}
               </div>
               {mode === 'withdraw' && publicKey && (
                 <p className="text-[10px] text-slate-500">Funds will be redeemed to your wallet: <span className="font-mono text-ink-900">{publicKey.toBase58().slice(0, 8)}...{publicKey.toBase58().slice(-6)}</span></p>

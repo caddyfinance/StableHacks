@@ -5,8 +5,8 @@ import Card from '../../components/Card';
 import StatusBadge from '../../components/StatusBadge';
 import {
   RefreshCw, ExternalLink, Search, Eye, ChevronDown, ChevronUp,
-  ShieldCheck, Wallet, ArrowRight, ArrowDownToLine, TrendingUp,
-  Building2, Lock, CheckCircle, Copy,
+  ShieldCheck, Wallet, ArrowRight, ArrowDownToLine, ArrowUpFromLine, TrendingUp,
+  Building2, Lock, CheckCircle, Copy, ArrowLeft,
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -40,6 +40,17 @@ interface EventEntry {
   timestamp: string;
 }
 
+interface WithdrawalEntry {
+  requestId: string;
+  amount: number;
+  status: string;
+  destinationWallet: string;
+  initiator: string;
+  consentedBy?: string;
+  consentedAt?: string;
+  createdAt: string;
+}
+
 interface VaultEntry {
   vaultId: string;
   clientReference: string;
@@ -47,11 +58,18 @@ interface VaultEntry {
   status: string;
   paused: boolean;
   idleBalance: number;
+  totalDeployed: number;
   totalDeposited: number;
   totalNAV: number;
   onChainAddress?: string;
   programId?: string;
   createdAt: string;
+  onChain: {
+    usdcBalance: number;
+    eusxBalance: number;
+    usxValue: number;
+    exchangeRate: number;
+  };
   credential: {
     credentialId: string;
     clientReference: string;
@@ -60,6 +78,7 @@ interface VaultEntry {
   };
   deposits: DepositEntry[];
   allocations: AllocationEntry[];
+  withdrawals: WithdrawalEntry[];
   recentEvents: EventEntry[];
 }
 
@@ -98,9 +117,9 @@ const fmtTime = (iso: string) => {
 const actionLabel = (at: string) =>
   at?.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || '—';
 
-const EXPLORER_BASE = 'https://explorer.solana.com';
+const EXPLORER_BASE = 'https://solscan.io';
 const explorerLink = (sig: string) => `${EXPLORER_BASE}/tx/${sig}?cluster=devnet`;
-const addrLink = (addr: string) => `${EXPLORER_BASE}/address/${addr}?cluster=devnet`;
+const addrLink = (addr: string) => `${EXPLORER_BASE}/account/${addr}?cluster=devnet`;
 
 // ─── Sub-components ──────────────────────────────────────────────
 
@@ -166,11 +185,49 @@ function FlowConnector({ label, amount }: { label?: string; amount?: string }) {
   );
 }
 
+function FlowReverseConnector({ label, amount }: { label?: string; amount?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center px-1">
+      <div className="flex items-center gap-1">
+        <div className="w-8 h-px bg-warning-700/30" />
+        <ArrowRight className="w-3.5 h-3.5 text-warning-700/60" />
+        <div className="w-8 h-px bg-warning-700/30" />
+      </div>
+      {(label || amount) && (
+        <div className="text-center mt-0.5">
+          {amount && <p className="text-[10px] font-mono font-semibold text-warning-700">{amount}</p>}
+          {label && <p className="text-[9px] text-warning-700/60">{label}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: string }) {
   const [expanded, setExpanded] = useState(false);
-  const totalAllocated = vault.allocations.reduce((s, a) => s + (a.amount || 0), 0);
+  // Use on-chain data as source of truth
+  const totalAllocated = vault.onChain?.usxValue || vault.totalDeployed || 0;
   const totalYield = vault.allocations.reduce((s, a) => s + (a.yieldAccrued || 0), 0);
   const uniqueSourceWallets = [...new Set(vault.deposits.map(d => d.sourceWallet))];
+  const pendingWithdrawals = vault.withdrawals?.filter(w => w.status === 'pending') || [];
+  const approvedWithdrawals = vault.withdrawals?.filter(w => w.status === 'approved') || [];
+  const uniqueDestWallets = [...new Set(vault.withdrawals?.map(w => w.destinationWallet).filter(Boolean) || [])];
+
+  // On-chain withdrawal events (the real fund movements)
+  const redeemEvents = vault.recentEvents.filter(e => e.actionType === 'SOLSTICE_REDEEM_COLLATERAL' && e.result === 'success');
+  const withdrawEvents = vault.recentEvents.filter(e => e.actionType === 'SOLSTICE_WITHDRAW' && e.result === 'success');
+  const unlockEvents = vault.recentEvents.filter(e => e.actionType === 'SOLSTICE_UNLOCK' && e.result === 'success');
+  const cooldownEvents = vault.recentEvents.filter(e => e.actionType === 'SOLSTICE_COOLDOWN_REQUESTED');
+  const unwindEvents = vault.recentEvents.filter(e => e.actionType === 'UNWIND_EXECUTED' && e.result === 'success');
+
+  // Total redeemed on-chain (USDC returned from strategy)
+  const totalRedeemedOnChain = redeemEvents.reduce((s, e) => s + (e.amount || 0), 0);
+  // Total formal withdrawals (USDC sent to client wallet)
+  const totalFormalWithdrawn = approvedWithdrawals.reduce((s, w) => s + (w.amount || 0), 0);
+  // Total out = on-chain redemptions + formal withdrawals (whichever is larger to avoid double-counting)
+  const totalWithdrawn = Math.max(totalRedeemedOnChain, totalFormalWithdrawn);
+
+  const hasWithdrawalActivity = vault.withdrawals?.length > 0 || redeemEvents.length > 0 || unlockEvents.length > 0 || unwindEvents.length > 0 || cooldownEvents.length > 0;
 
   return (
     <div className="border border-slate-200 rounded-[14px] bg-white overflow-hidden">
@@ -244,13 +301,16 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
                   <>
                     <FlowConnector label="Allocate" amount={totalAllocated > 0 ? `$${fmt(totalAllocated)}` : undefined} />
 
-                    {/* Strategy nodes */}
+                    {/* Strategy nodes — use on-chain data for Solstice */}
                     <div className="flex flex-col gap-2 shrink-0">
-                      {vault.allocations.map((a, i) => (
+                      {vault.allocations.map((a, i) => {
+                        const isSolstice = a.strategyId === 'solstice-eusx-yield';
+                        const deployedAmount = isSolstice && a.status === 'active' && vault.onChain?.usxValue ? vault.onChain.usxValue : a.amount;
+                        return (
                         <div key={i} className="flex items-center gap-2">
                           <FlowNode icon={TrendingUp} label={a.strategyName.length > 20 ? a.strategyName.slice(0, 18) + '...' : a.strategyName}
-                            sublabel={`$${fmt(a.amount)}${a.yieldAccrued > 0 ? ` (+${fmt(a.yieldAccrued)})` : ''}`}
-                            color={a.status === 'active' ? 'blue' : 'orange'}
+                            sublabel={`$${fmt(deployedAmount)}${isSolstice && vault.onChain?.eusxBalance ? ` (${vault.onChain.eusxBalance.toFixed(2)} eUSX)` : ''}${a.yieldAccrued > 0 ? ` +${fmt(a.yieldAccrued)}` : ''}`}
+                            color={a.status === 'active' ? 'blue' : a.status === 'cooldown' ? 'orange' : 'slate'}
                             address={a.onChainAddress || undefined} href={a.onChainAddress ? addrLink(a.onChainAddress) : undefined} />
                           {a.txSignature && (
                             <a href={explorerLink(a.txSignature)} target="_blank" rel="noreferrer"
@@ -259,16 +319,109 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
                             </a>
                           )}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </>
                 )}
               </div>
+
+              {/* ─── Withdrawal Flow (reverse direction) ──────── */}
+              {hasWithdrawalActivity && (
+                <div className="mt-4 pt-4 border-t border-dashed border-warning-700/20">
+                  <p className="text-[10px] uppercase tracking-wider text-warning-700/60 font-semibold mb-3">Withdrawal Flow</p>
+                  <div className="flex items-center gap-1 min-w-[800px]">
+
+                    {/* Step 1: Strategy → Unlock eUSX */}
+                    {(unlockEvents.length > 0 || vault.allocations.some(a => a.status === 'unwound' || a.status === 'cooldown')) && (
+                      <>
+                        <div className="flex flex-col gap-2 shrink-0">
+                          {vault.allocations.filter(a => a.status === 'unwound' || a.status === 'cooldown').map((a, i) => (
+                            <div key={i} className="flex items-center gap-1">
+                              <FlowNode icon={TrendingUp}
+                                label={a.strategyName.length > 18 ? a.strategyName.slice(0, 16) + '...' : a.strategyName}
+                                sublabel={a.status}
+                                color={a.status === 'cooldown' ? 'orange' : 'slate'} />
+                              {a.txSignature && (
+                                <a href={explorerLink(a.txSignature)} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-teal-700 shrink-0">
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        <FlowReverseConnector label="Unlock eUSX"
+                          amount={unlockEvents.length > 0 ? `${unlockEvents.reduce((s, e) => s + (e.amount || 0), 0).toFixed(2)} eUSX` : undefined} />
+                      </>
+                    )}
+
+                    {/* Step 2: Cooldown escrow (if cooldown happened) */}
+                    {cooldownEvents.length > 0 && (
+                      <>
+                        <FlowNode icon={Lock} label="Cooldown Escrow" sublabel="USX held" color="orange" />
+                        <FlowReverseConnector label="Withdraw" amount={withdrawEvents.length > 0 ? `${withdrawEvents.reduce((s, e) => s + (e.amount || 0), 0).toFixed(2)} USX` : undefined} />
+                      </>
+                    )}
+
+                    {/* Step 3: USX → Redeem → USDC back to vault */}
+                    <FlowNode icon={Lock} label={vault.vaultId} sublabel={`Idle: $${fmt(vault.idleBalance)}`}
+                      color="teal" address={vault.onChainAddress || undefined} />
+
+                    {redeemEvents.length > 0 && (
+                      <>
+                        <FlowReverseConnector label="Redeem USX→USDC" amount={`$${fmt(totalRedeemedOnChain)}`} />
+                        <div className="flex flex-col gap-1.5 shrink-0">
+                          {redeemEvents.map((e, i) => (
+                            <div key={i} className="flex items-center gap-1">
+                              <FlowNode icon={ArrowUpFromLine} label="USDC Redeemed"
+                                sublabel={`$${fmt(e.amount || 0)}`}
+                                color="green" />
+                              {e.txSignature && (
+                                <a href={explorerLink(e.txSignature)} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-teal-700 shrink-0">
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {/* Step 4: Formal withdrawal to client wallet (if requested) */}
+                    {vault.withdrawals?.length > 0 && (
+                      <>
+                        <FlowReverseConnector label="Withdraw" amount={totalFormalWithdrawn > 0 ? `$${fmt(totalFormalWithdrawn)}` : undefined} />
+                        <div className="flex flex-col gap-2 shrink-0">
+                          {uniqueDestWallets.length > 0 ? uniqueDestWallets.map((w, i) => {
+                            const wdTotal = vault.withdrawals.filter(wd => wd.destinationWallet === w && wd.status === 'approved').reduce((s, wd) => s + wd.amount, 0);
+                            return (
+                              <FlowNode key={i} icon={Wallet} label="Client Wallet"
+                                sublabel={wdTotal > 0 ? `$${fmt(wdTotal)}` : 'Pending'}
+                                color="orange" address={w} href={addrLink(w)} />
+                            );
+                          }) : (
+                            <FlowNode icon={Wallet} label="Client Wallet" sublabel="Pending" color="orange" />
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Pending withdrawals badge */}
+                  {pendingWithdrawals.length > 0 && (
+                    <div className="mt-2">
+                      <span className="text-[9px] px-2 py-0.5 bg-warning-100 text-warning-700 rounded font-medium">
+                        {pendingWithdrawals.length} withdrawal{pendingWithdrawals.length > 1 ? 's' : ''} pending approval
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* ─── Summary Stats ──────────────────────────────────── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <div className="bg-white border border-slate-200 rounded-[10px] p-2.5 text-center">
               <p className="text-[10px] text-slate-400 uppercase">Total In</p>
               <p className="text-sm font-mono font-semibold text-ink-900">${fmt(vault.totalDeposited)}</p>
@@ -280,6 +433,10 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
             <div className="bg-white border border-slate-200 rounded-[10px] p-2.5 text-center">
               <p className="text-[10px] text-slate-400 uppercase">Yield Earned</p>
               <p className="text-sm font-mono font-semibold text-success-700">+${fmt(totalYield)}</p>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-[10px] p-2.5 text-center">
+              <p className="text-[10px] text-slate-400 uppercase">Total Out</p>
+              <p className="text-sm font-mono font-semibold text-warning-700">${fmt(totalWithdrawn)}</p>
             </div>
             <div className="bg-white border border-slate-200 rounded-[10px] p-2.5 text-center">
               <p className="text-[10px] text-slate-400 uppercase">Idle Balance</p>

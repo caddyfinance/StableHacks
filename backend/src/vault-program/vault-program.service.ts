@@ -415,6 +415,70 @@ export class VaultProgramService {
   }
 
   /**
+   * Withdraw USDC from a vault PDA's ATA to the AMINA bank wallet.
+   * Uses the Anchor program's withdraw_from_vault instruction (authority = AMINA bank).
+   * This debits the segregated vault on-chain, proving fund movement.
+   */
+  async withdrawFromVault(
+    vaultId: string,
+    amount: number,
+    programId?: string,
+  ): Promise<{ txSignature: string; vaultPda: string } | null> {
+    if (!this.isConfigured() && !programId) {
+      this.logger.warn('AMINA program not configured — cannot withdraw from vault on-chain');
+      return null;
+    }
+
+    try {
+      const connection = this.getConnection();
+      const authority = this.getAminaBankKeypair();
+      const targetProgramId = this.getProgramPublicKey(programId);
+      const [vaultPda] = this.deriveVaultPda(vaultId, programId);
+
+      const { getAssociatedTokenAddress, createTransferInstruction, TOKEN_PROGRAM_ID } = await import('@solana/spl-token');
+      const usdcMint = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
+      const amountLamports = BigInt(Math.round(amount * 1e6));
+
+      const vaultAta = await getAssociatedTokenAddress(usdcMint, vaultPda, true);
+      const aminaAta = await getAssociatedTokenAddress(usdcMint, authority.publicKey);
+
+      // Build withdraw_from_vault instruction via Anchor program
+      // The program signs for the vault PDA to transfer USDC
+      const discriminator = this.getDiscriminator('withdraw_from_vault');
+      const amountBuf = Buffer.alloc(8);
+      amountBuf.writeBigUInt64LE(amountLamports);
+      const instructionData = Buffer.concat([discriminator, amountBuf]);
+
+      const instruction = new TransactionInstruction({
+        programId: targetProgramId,
+        keys: [
+          { pubkey: vaultPda, isSigner: false, isWritable: true },
+          { pubkey: vaultAta, isSigner: false, isWritable: true },
+          { pubkey: aminaAta, isSigner: false, isWritable: true },
+          { pubkey: authority.publicKey, isSigner: true, isWritable: true },
+          { pubkey: usdcMint, isSigner: false, isWritable: false },
+          { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        ],
+        data: instructionData,
+      });
+
+      const tx = new Transaction().add(instruction);
+      tx.feePayer = authority.publicKey;
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      tx.recentBlockhash = blockhash;
+      tx.sign(authority);
+
+      const txSignature = await this.sendAndConfirm(connection, tx);
+      this.logger.log(`Withdrew ${amount} USDC from vault ${vaultId} PDA (${vaultPda.toBase58()}), tx=${txSignature}`);
+
+      return { txSignature, vaultPda: vaultPda.toBase58() };
+    } catch (error: any) {
+      this.logger.warn(`Vault on-chain withdraw failed for ${vaultId}: ${error.message}. Proceeding with AMINA wallet funds.`);
+      return null;
+    }
+  }
+
+  /**
    * Send USDC from the Amina Bank wallet to a recipient wallet.
    * Used for on-ramp: Amina sends USDC to the client after fiat is received.
    */

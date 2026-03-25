@@ -1,9 +1,13 @@
-import { Injectable, Inject, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, BadRequestException, ForbiddenException, NotFoundException, Logger } from '@nestjs/common';
+import { Connection, PublicKey } from '@solana/web3.js';
+import { getAssociatedTokenAddress } from '@solana/spl-token';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsService } from '../events/events.service';
 import { SasService } from '../sas/sas.service';
 import { VaultProgramService } from '../vault-program/vault-program.service';
 import { SolsticeService } from '../solstice/solstice.service';
+
+const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
 
 @Injectable()
 export class VaultsService {
@@ -72,6 +76,7 @@ export class VaultsService {
         credential: true,
         deposits: { orderBy: { createdAt: 'desc' } },
         allocations: { include: { strategy: true }, orderBy: { createdAt: 'desc' } },
+        consentRequests: { where: { actionType: 'WITHDRAWAL' }, orderBy: { createdAt: 'desc' } },
         events: { orderBy: { timestamp: 'desc' }, take: 50 },
       },
       orderBy: { createdAt: 'desc' },
@@ -85,28 +90,74 @@ export class VaultsService {
       byOwner[key].push(v);
     }
 
+    // Fetch on-chain data for each vault in parallel
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
+    const connection = new Connection(rpcUrl, { commitment: 'confirmed', wsEndpoint: undefined as any });
+
+    const onChainData: Record<string, { usdcBalance: number; eusxBalance: number; usxValue: number; exchangeRate: number }> = {};
+    await Promise.all(vaults.map(async (v) => {
+      try {
+        // Read on-chain USDC balance from AMINA wallet ATA
+        const aminaPubkey = new PublicKey(aminaWallet);
+        const aminaAta = await getAssociatedTokenAddress(USDC_MINT, aminaPubkey);
+        let usdcBalance = 0;
+        try {
+          const bal = await connection.getTokenAccountBalance(aminaAta);
+          usdcBalance = Number(bal.value.uiAmount || 0);
+        } catch { /* ATA may not exist */ }
+
+        // Read Solstice position
+        let eusxBalance = 0, usxValue = 0, exchangeRate = 1;
+        try {
+          const pos = await this.solstice.getPositionForVault(v.vaultId);
+          eusxBalance = pos.eusxBalance;
+          usxValue = pos.usxValue;
+          exchangeRate = pos.exchangeRate;
+        } catch { /* no position */ }
+
+        onChainData[v.vaultId] = { usdcBalance, eusxBalance, usxValue, exchangeRate };
+      } catch {
+        onChainData[v.vaultId] = { usdcBalance: 0, eusxBalance: 0, usxValue: 0, exchangeRate: 1 };
+      }
+    }));
+
     return {
       aminaWallet,
       totalVaults: vaults.length,
       totalDeposited: vaults.reduce((s, v) => s + (v.totalDeposited || 0), 0),
-      totalNAV: vaults.reduce((s, v) => s + (v.totalNAV || 0), 0),
+      totalNAV: vaults.reduce((s, v) => {
+        const oc = onChainData[v.vaultId];
+        return s + (oc ? oc.usdcBalance + oc.usxValue : (v.totalNAV || 0));
+      }, 0),
       vaultsByOwner: Object.entries(byOwner).map(([wallet, walletVaults]) => ({
         ownerWallet: wallet,
         vaultCount: walletVaults.length,
         totalDeposited: walletVaults.reduce((s, v) => s + (v.totalDeposited || 0), 0),
-        totalNAV: walletVaults.reduce((s, v) => s + (v.totalNAV || 0), 0),
-        vaults: walletVaults.map((v) => ({
+        totalNAV: walletVaults.reduce((s, v) => {
+          const oc = onChainData[v.vaultId];
+          return s + (oc ? oc.usdcBalance + oc.usxValue : (v.totalNAV || 0));
+        }, 0),
+        vaults: walletVaults.map((v) => {
+          const oc = onChainData[v.vaultId] || { usdcBalance: 0, eusxBalance: 0, usxValue: 0, exchangeRate: 1 };
+          return {
           vaultId: v.vaultId,
           clientReference: v.clientReference,
           baseAsset: v.baseAsset,
           status: v.status,
           paused: v.paused,
-          idleBalance: v.idleBalance,
+          idleBalance: oc.usdcBalance,
+          totalDeployed: oc.usxValue,
           totalDeposited: v.totalDeposited,
-          totalNAV: v.totalNAV,
+          totalNAV: oc.usdcBalance + oc.usxValue,
           onChainAddress: v.onChainAddress,
           programId: v.programId,
           createdAt: v.createdAt,
+          onChain: {
+            usdcBalance: oc.usdcBalance,
+            eusxBalance: oc.eusxBalance,
+            usxValue: oc.usxValue,
+            exchangeRate: oc.exchangeRate,
+          },
           credential: {
             credentialId: v.credential.credentialId,
             clientReference: v.credential.clientReference,
@@ -132,6 +183,16 @@ export class VaultsService {
             onChainAddress: a.onChainAddress,
             createdAt: a.createdAt,
           })),
+          withdrawals: v.consentRequests.map((w) => ({
+            requestId: w.requestId,
+            amount: w.amount,
+            status: w.status,
+            destinationWallet: (w.details as any)?.destinationWallet || (w.details as any)?.callerWallet || '',
+            initiator: w.initiator,
+            consentedBy: w.consentedBy,
+            consentedAt: w.consentedAt,
+            createdAt: w.createdAt,
+          })),
           recentEvents: v.events.slice(0, 20).map((e) => ({
             eventId: e.eventId,
             actionType: e.actionType,
@@ -140,7 +201,8 @@ export class VaultsService {
             txSignature: e.txSignature,
             timestamp: e.timestamp,
           })),
-        })),
+        };
+        }),
       })),
     };
   }
@@ -709,7 +771,47 @@ export class VaultsService {
     const details = request.details as any;
     const destinationWallet = details?.destinationWallet || details?.callerWallet || '';
 
-    // Execute the withdrawal
+    // ─── Step 1: Log withdrawal approval ──────────────────────
+    await this.events.emit({
+      vaultId: request.vaultId, actionType: 'WITHDRAWAL_APPROVED',
+      actor: 'portfolio_manager', role: 'Portfolio Manager',
+      asset: vault.baseAsset, amount: request.amount, result: 'success',
+      reason: `Withdrawal request ${requestId} approved. Processing ${request.amount.toLocaleString()} ${vault.baseAsset} to ${destinationWallet.slice(0, 8)}...`,
+      onChainAddress: vault.onChainAddress || undefined,
+    });
+
+    // ─── Step 2: On-chain USDC transfer to client wallet ──────
+    let onChainTxSig = txSignature || null;
+    if (destinationWallet) {
+      try {
+        const result = await this.vaultProgram.sendUsdc(destinationWallet, request.amount);
+        onChainTxSig = result.txSignature;
+
+        await this.events.emit({
+          vaultId: request.vaultId, actionType: 'WITHDRAWAL_TRANSFERRED',
+          actor: 'portfolio_manager', role: 'Portfolio Manager',
+          asset: vault.baseAsset, amount: request.amount, result: 'success',
+          reason: [
+            `On-chain USDC transfer: ${request.amount.toLocaleString()} ${vault.baseAsset} sent to ${destinationWallet}.`,
+            `From AMINA wallet (${result.aminaWallet}) to client wallet (${destinationWallet}).`,
+            `Tx: ${result.txSignature}.`,
+          ].join(' '),
+          txSignature: result.txSignature,
+          onChainAddress: destinationWallet,
+        });
+      } catch (e: any) {
+        // Log transfer failure but continue with DB update
+        await this.events.emit({
+          vaultId: request.vaultId, actionType: 'WITHDRAWAL_TRANSFERRED',
+          actor: 'portfolio_manager', role: 'Portfolio Manager',
+          asset: vault.baseAsset, amount: request.amount, result: 'failed',
+          reason: `On-chain USDC transfer failed: ${e.message}. Funds remain in AMINA custody for manual transfer.`,
+          onChainAddress: destinationWallet,
+        });
+      }
+    }
+
+    // ─── Step 3: Update DB ────────────────────────────────────
     const updated = await this.prisma.vault.update({
       where: { vaultId: request.vaultId },
       data: { idleBalance: { decrement: request.amount }, totalNAV: { decrement: request.amount } },
@@ -717,21 +819,31 @@ export class VaultsService {
 
     await this.prisma.consentRequest.update({
       where: { requestId },
-      data: { status: 'approved', consentedBy: 'admin', consentedAt: new Date() },
+      data: { status: 'approved', consentedBy: 'portfolio_manager', consentedAt: new Date() },
     });
 
+    // ─── Step 4: Final audit event ────────────────────────────
     await this.events.emit({
-      vaultId: request.vaultId, actionType: 'REDEMPTION_EXECUTED', actor: 'admin', role: 'Admin',
+      vaultId: request.vaultId, actionType: 'REDEMPTION_EXECUTED',
+      actor: 'portfolio_manager', role: 'Portfolio Manager',
       asset: vault.baseAsset, amount: request.amount, result: 'success',
-      reason: `Withdrawal of ${request.amount.toLocaleString()} ${vault.baseAsset} processed to ${destinationWallet.slice(0, 8)}...`,
-      txSignature,
-      onChainAddress: vault.onChainAddress || undefined,
+      reason: [
+        `Withdrawal ${requestId} completed: ${request.amount.toLocaleString()} ${vault.baseAsset} redeemed to ${destinationWallet.slice(0, 8)}...`,
+        onChainTxSig ? `On-chain tx: ${onChainTxSig}.` : 'No on-chain transfer.',
+        `Idle balance updated: ${updated.idleBalance.toLocaleString()} ${vault.baseAsset}.`,
+      ].join(' '),
+      txSignature: onChainTxSig || undefined,
+      onChainAddress: destinationWallet || vault.onChainAddress || undefined,
     });
 
-    return { message: `Withdrawal of ${request.amount.toLocaleString()} ${vault.baseAsset} processed`, vault: updated };
+    return {
+      message: `Withdrawal of ${request.amount.toLocaleString()} ${vault.baseAsset} processed`,
+      txSignature: onChainTxSig,
+      vault: updated,
+    };
   }
 
-  async unwind(vaultId: string, strategyId: string) {
+  async unwind(vaultId: string, strategyId: string, amount?: number) {
     const vault = await this.prisma.vault.findUnique({
       where: { vaultId },
       include: { allocations: { where: { strategyId, status: { in: ['active', 'cooldown'] } } } },
@@ -742,58 +854,87 @@ export class VaultsService {
     const totalUnwindDb = dbAllocations.reduce((s, a) => s + a.amount + a.yieldAccrued, 0);
     const yieldTotal = dbAllocations.reduce((s, a) => s + a.yieldAccrued, 0);
 
-    // ─── Solstice: use on-chain eUSX balance as source of truth ──
-    let unlockResult: any = null;
-    let withdrawResult: any = null;
+    // ─── Solstice: on-chain unlock + withdraw + redeem ───────────
     if (strategyId === 'solstice-eusx-yield') {
-      // Read on-chain position to determine actual deployed amount
+      // Read on-chain position
       const position = await this.solstice.getPositionForVault(vaultId);
       if (position.eusxBalance <= 0) {
         throw new BadRequestException('No on-chain eUSX position to unwind');
       }
 
-      const onChainAmount = position.usxValue;
+      // Calculate unlock amount: partial or full
+      const isPartial = amount != null && amount > 0 && amount < position.usxValue;
+      const unlockUsxAmount = isPartial ? amount : position.usxValue;
+
+      console.log(`[UNWIND] vault=${vaultId} on-chain eUSX=${position.eusxBalance} usxValue=${position.usxValue} requested=${amount || 'full'} unlocking=${unlockUsxAmount}`);
 
       // Step 1: Unlock eUSX → USX goes to cooldown escrow
-      unlockResult = await this.solstice.unlockEUSX(vaultId, onChainAmount);
+      const unlockResult = await this.solstice.unlockEUSX(vaultId, unlockUsxAmount);
 
-      // Step 2: Withdraw USX from cooldown escrow + redeem to collateral
+      // Step 2: Small delay then withdraw USX from cooldown escrow
+      await new Promise(r => setTimeout(r, 2000));
+
+      let withdrawResult: any = null;
       try {
         withdrawResult = await this.solstice.withdrawUSX(vaultId);
       } catch (e: any) {
-        // Withdraw may fail if cooldown period not elapsed — mark as cooldown
-        await this.prisma.allocation.updateMany({ where: { vaultId, strategyId, status: 'active' }, data: { status: 'cooldown' } });
-        await this.events.emit({
-          vaultId, actionType: 'SOLSTICE_COOLDOWN_REQUESTED', actor: 'portfolio_manager', role: 'Portfolio Manager',
-          asset: vault.baseAsset, amount: onChainAmount, strategy: strategyId, result: 'pending',
-          reason: `eUSX unlocked on-chain (tx: ${unlockResult.txSignature}). Protocol cooldown in progress — funds pending withdrawal.`,
-          txSignature: unlockResult.txSignature,
-        });
-        return {
-          message: `eUSX unlocked on-chain. Withdrawal pending cooldown period.`,
-          status: 'cooldown',
-          unlockTx: unlockResult.txSignature,
-          totalUnwind: onChainAmount,
-        };
+        console.warn(`[UNWIND] Withdraw attempt failed: ${e.message}. Retrying after delay...`);
+        // Retry once after another delay (devnet cooldown may be short)
+        await new Promise(r => setTimeout(r, 3000));
+        try {
+          withdrawResult = await this.solstice.withdrawUSX(vaultId);
+        } catch (e2: any) {
+          // Still failing — mark as cooldown
+          await this.prisma.allocation.updateMany({ where: { vaultId, strategyId, status: 'active' }, data: { status: 'cooldown' } });
+          await this.events.emit({
+            vaultId, actionType: 'SOLSTICE_COOLDOWN_REQUESTED', actor: 'portfolio_manager', role: 'Portfolio Manager',
+            asset: vault.baseAsset, amount: unlockUsxAmount, strategy: strategyId, result: 'pending',
+            reason: `eUSX unlocked on-chain (tx: ${unlockResult.txSignature}). Protocol cooldown in progress — funds pending withdrawal. Error: ${e2.message}`,
+            txSignature: unlockResult.txSignature,
+          });
+          return {
+            message: `eUSX unlocked on-chain. Withdrawal pending cooldown period.`,
+            status: 'cooldown',
+            unlockTx: unlockResult.txSignature,
+            totalUnwind: unlockUsxAmount,
+          };
+        }
       }
 
-      // ─── Update DB: mark all allocations as unwound ──────────
-      await this.prisma.allocation.updateMany({ where: { vaultId, strategyId, status: { in: ['active', 'cooldown'] } }, data: { status: 'unwound' } });
+      // ─── Success: update DB ──────────────────────────────────
+      const returnAmount = withdrawResult?.usxReceived > 0 ? withdrawResult.usxReceived : unlockUsxAmount;
 
-      const returnAmount = withdrawResult?.usxReceived > 0 ? withdrawResult.usxReceived : onChainAmount;
+      if (isPartial) {
+        // Partial pull: reduce allocation amount, keep active
+        const activeAlloc = dbAllocations.find(a => a.status === 'active');
+        if (activeAlloc) {
+          await this.prisma.allocation.update({
+            where: { id: activeAlloc.id },
+            data: { amount: { decrement: returnAmount } },
+          });
+        }
+      } else {
+        // Full pull: mark all allocations as unwound
+        await this.prisma.allocation.updateMany({ where: { vaultId, strategyId, status: { in: ['active', 'cooldown'] } }, data: { status: 'unwound' } });
+      }
+
       await this.prisma.vault.update({ where: { vaultId }, data: { idleBalance: { increment: returnAmount } } });
 
       await this.events.emit({
         vaultId, actionType: 'UNWIND_EXECUTED', actor: 'portfolio_manager', role: 'Portfolio Manager',
         asset: vault.baseAsset, amount: returnAmount, strategy: strategyId, result: 'success',
-        reason: `On-chain unwind: unlocked ${position.eusxBalance.toFixed(4)} eUSX (tx: ${unlockResult?.txSignature}), withdrew + redeemed USX to collateral (tx: ${withdrawResult?.txSignature}). Returned ${returnAmount} ${vault.baseAsset} to idle balance.`,
-        txSignature: withdrawResult?.txSignature || unlockResult?.txSignature,
+        reason: [
+          `${isPartial ? 'Partial' : 'Full'} on-chain unwind: unlocked ${unlockResult.eusxBurned?.toFixed(4) || '?'} eUSX (tx: ${unlockResult.txSignature}).`,
+          `Withdrew + redeemed USX to collateral (tx: ${withdrawResult?.txSignature}).`,
+          `Returned ${returnAmount.toFixed(4)} ${vault.baseAsset} to idle balance.`,
+        ].join(' '),
+        txSignature: withdrawResult?.txSignature || unlockResult.txSignature,
       });
 
       return {
-        message: `Unwound ${returnAmount} ${vault.baseAsset}`,
+        message: `Unwound ${returnAmount.toFixed(4)} ${vault.baseAsset}`,
         totalUnwind: returnAmount,
-        unlockTx: unlockResult?.txSignature,
+        unlockTx: unlockResult.txSignature,
         withdrawTx: withdrawResult?.txSignature,
         onChainVerified: withdrawResult?.onChainVerified || unlockResult?.onChainVerified || false,
       };

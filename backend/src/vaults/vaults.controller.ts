@@ -192,8 +192,8 @@ export class VaultsController {
   @ApiParam({ name: 'id', description: 'Vault identifier' })
   @ApiCreatedResponse({ description: 'Strategy position successfully unwound.' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions. Emergency admin role required.' })
-  unwind(@Param('id') id: string, @Body() body: { strategyId: string }) {
-    return this.service.unwind(id, body.strategyId);
+  unwind(@Param('id') id: string, @Body() body: { strategyId: string; amount?: number }) {
+    return this.service.unwind(id, body.strategyId, body.amount);
   }
 
   @Post(':id/pause')

@@ -69,6 +69,7 @@ export const api = {
   deposit: (id: string, data: any) => request<any>(`/vaults/${id}/deposit`, { method: 'POST', body: JSON.stringify(data) }),
   allocate: (id: string, data: any) => request<any>(`/vaults/${id}/allocate`, { method: 'POST', body: JSON.stringify(data) }),
   redeem: (id: string, data: any) => request<any>(`/vaults/${id}/redeem`, { method: 'POST', body: JSON.stringify(data) }),
+  processWithdrawal: (requestId: string) => request<any>(`/vaults/withdrawals/${requestId}/process`, { method: 'POST', body: JSON.stringify({}) }),
   unwind: (id: string, data: any) => request<any>(`/vaults/${id}/unwind`, { method: 'POST', body: JSON.stringify(data) }),
   togglePause: (id: string) => request<any>(`/vaults/${id}/pause`, { method: 'POST' }),
   accrueYield: (id: string) => request<any>(`/vaults/${id}/accrue-yield`, { method: 'POST' }),

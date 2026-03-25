@@ -15,6 +15,7 @@ import {
 import bs58 from 'bs58';
 import { EventsService } from '../events/events.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { VaultProgramService } from '../vault-program/vault-program.service';
 import { fetchYieldPool, YieldPoolState } from '@exponent-labs/solstice-idl';
 
 /** Solstice Yield Vault program ID on devnet */
@@ -57,13 +58,16 @@ export class SolsticeService {
   private readonly logger = new Logger(SolsticeService.name);
   private events: EventsService;
   private prisma: PrismaService;
+  private vaultProgram: VaultProgramService;
 
   constructor(
     @Inject(EventsService) events: EventsService,
     @Inject(PrismaService) prisma: PrismaService,
+    @Inject(VaultProgramService) vaultProgram: VaultProgramService,
   ) {
     this.events = events;
     this.prisma = prisma;
+    this.vaultProgram = vaultProgram;
   }
 
   // ─── Helpers ────────────────────────────────────────────────────
@@ -451,6 +455,28 @@ export class SolsticeService {
 
     this.logger.log(`[LOCK] Pre-balance: ${preBalanceCollateral} ${collateralLabel}, ${preBalanceUSX} USX, ${preBalanceEUSX} eUSX`);
 
+    // ─── Step 0: Debit vault PDA (segregated fund movement) ──
+    // Transfer USDC from the vault's on-chain PDA to AMINA wallet
+    // This proves the funds flow from the segregated vault, not a shared pool
+    const vault = await this.prisma.vault.findUnique({ where: { vaultId } });
+    if (vault?.programId) {
+      const withdrawResult = await this.vaultProgram.withdrawFromVault(vaultId, amount, vault.programId);
+      if (withdrawResult) {
+        this.logger.log(`[LOCK] Debited ${amount} USDC from vault PDA (${withdrawResult.vaultPda}), tx=${withdrawResult.txSignature}`);
+        await this.events.emit({
+          vaultId, actionType: 'VAULT_PDA_DEBIT',
+          actor: 'portfolio_manager', role: 'Portfolio Manager',
+          asset: 'USDC', amount, strategy: STRATEGY_ID,
+          result: 'success',
+          reason: `Segregated fund movement: ${amount} USDC debited from vault PDA (${withdrawResult.vaultPda}) to AMINA custody wallet for strategy deployment.`,
+          txSignature: withdrawResult.txSignature,
+          onChainAddress: withdrawResult.vaultPda,
+        });
+      } else {
+        this.logger.warn(`[LOCK] Vault PDA debit skipped (program not available or failed). Using AMINA wallet funds directly.`);
+      }
+    }
+
     // ─── Step 1: Mint devnet collateral if needed ────────────
     if (preBalanceCollateral < amount) {
       this.logger.log(`[LOCK] Minting ${amount} devnet ${collateralLabel} (current: ${preBalanceCollateral})`);
@@ -733,15 +759,14 @@ export class SolsticeService {
       onChainAddress: cooldownEscrow.toBase58(),
     });
 
-    // Read cooldown escrow vault balance to determine withdraw amount
-    const escrowVaultAta = await getAssociatedTokenAddress(USX_MINT, cooldownEscrowVault, true);
-    const escrowBalance = await this.getTokenBalance(connection, escrowVaultAta);
+    // Read cooldown escrow vault balance — the PDA itself IS the token account
+    const escrowBalance = await this.getTokenBalance(connection, cooldownEscrowVault);
     const withdrawAmountLamports = Math.round(escrowBalance * 1e6);
 
-    this.logger.log(`[WITHDRAW] Cooldown escrow balance: ${escrowBalance} USX (${withdrawAmountLamports} lamports)`);
+    this.logger.log(`[WITHDRAW] Cooldown escrow vault (${cooldownEscrowVault.toBase58()}): ${escrowBalance} USX (${withdrawAmountLamports} lamports)`);
 
     if (withdrawAmountLamports <= 0) {
-      throw new Error(`No USX in cooldown escrow. Balance: ${escrowBalance}. Cooldown period may not be over yet.`);
+      throw new Error(`No USX in cooldown escrow (${cooldownEscrowVault.toBase58()}). Balance: ${escrowBalance}. Cooldown period may not be over yet.`);
     }
 
     // Fetch Withdraw instruction from USX API
@@ -880,8 +905,11 @@ export class SolsticeService {
   async getPositionForVault(vaultId: string): Promise<{
     vaultId: string;
     eusxBalance: number;
+    usxBalance: number;
     usxValue: number;
+    usdcBalance: number;
     exchangeRate: number;
+    cooldownEscrowBalance: number;
     allocations: { id: string; amount: number; yieldAccrued: number; status: string; txSignature: string | null; createdAt: Date }[];
     aminaBankWallet: string;
     eusxAta: string;
@@ -891,9 +919,21 @@ export class SolsticeService {
     const authority = this.getAminaBankKeypair();
     const user = authority.publicKey;
     const userEusxAta = await getAssociatedTokenAddress(EUSX_MINT, user);
+    const userUsxAta = await getAssociatedTokenAddress(USX_MINT, user);
+    const userUsdcAta = await getAssociatedTokenAddress(USDC_MINT, user);
 
-    // On-chain balance
+    // On-chain balances — all from AMINA wallet ATAs
     const eusxBalance = await this.getTokenBalance(connection, userEusxAta);
+    const usxBalance = await this.getTokenBalance(connection, userUsxAta);
+    const usdcBalance = await this.getTokenBalance(connection, userUsdcAta);
+
+    // Cooldown escrow balance — the PDA itself is the token account
+    const [, ] = this.deriveCooldownEscrow(user);
+    const [cooldownEscrowVault] = this.deriveCooldownEscrowVault(user);
+    let cooldownEscrowBalance = 0;
+    try {
+      cooldownEscrowBalance = await this.getTokenBalance(connection, cooldownEscrowVault);
+    } catch { /* escrow may not exist yet */ }
 
     // Exchange rate
     let exchangeRate = 1;
@@ -912,7 +952,7 @@ export class SolsticeService {
     });
 
     return {
-      vaultId, eusxBalance, usxValue, exchangeRate,
+      vaultId, eusxBalance, usxBalance, usxValue, usdcBalance, exchangeRate, cooldownEscrowBalance,
       allocations,
       aminaBankWallet: user.toBase58(),
       eusxAta: userEusxAta.toBase58(),
@@ -937,6 +977,8 @@ export class SolsticeService {
             'SOLSTICE_WITHDRAW_INITIATED', 'SOLSTICE_WITHDRAW',
             'SOLSTICE_REDEEM_COLLATERAL',
             'SOLSTICE_COOLDOWN_REQUESTED', 'UNWIND_EXECUTED',
+            'VAULT_PDA_DEBIT', 'VAULT_PDA_CREDIT',
+            'WITHDRAWAL_REQUESTED', 'WITHDRAWAL_APPROVED', 'WITHDRAWAL_TRANSFERRED', 'REDEMPTION_EXECUTED',
           ],
         },
       },

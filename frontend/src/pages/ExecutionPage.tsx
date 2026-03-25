@@ -58,6 +58,9 @@ export default function ExecutionPage() {
   const [onChainBalance, setOnChainBalance] = useState<number | null>(null);
   const [vaultOnChainAddress, setVaultOnChainAddress] = useState<string | null>(null);
 
+  // Pending withdrawal requests
+  const [pendingWithdrawals, setPendingWithdrawals] = useState<any[]>([]);
+
   // Solstice on-chain position
   const [solsticePosition, setSolsticePosition] = useState<any>(null);
   const [solsticePoolState, setSolsticePoolState] = useState<any>(null);
@@ -96,6 +99,11 @@ export default function ExecutionPage() {
           return fetchOnChainUsdcBalance(wallet);
         }).then(setOnChainBalance).catch(() => setOnChainBalance(0));
       }
+
+      // Load pending withdrawal requests
+      api.getConsentRequests().then(reqs => {
+        setPendingWithdrawals(reqs.filter((r: any) => r.status === 'pending' && r.actionType === 'WITHDRAWAL' && r.vaultId === activeVaultId));
+      }).catch(() => setPendingWithdrawals([]));
 
       // Load Solstice data in parallel (non-blocking)
       Promise.all([
@@ -168,8 +176,10 @@ export default function ExecutionPage() {
   }
   const totalDeployed = positions.reduce((s, p) => s + p.amount, 0);
   const totalYield = positions.reduce((s, p) => s + p.yield, 0);
-  const totalNAV = (snapshot?.idleBalance || 0) + totalDeployed + totalYield;
-  const idlePct = totalNAV > 0 ? ((snapshot?.idleBalance || 0) / totalNAV * 100) : 0;
+  // Idle: vault PDA on-chain USDC (decreases when deployed via program CPI). Deployed: on-chain eUSX.
+  const idleBalance = onChainBalance ?? (snapshot?.idleBalance || 0);
+  const totalNAV = idleBalance + totalDeployed + totalYield;
+  const idlePct = totalNAV > 0 ? (idleBalance / totalNAV * 100) : 0;
   const deployedPct = totalNAV > 0 ? (totalDeployed / totalNAV * 100) : 0;
 
   // Merge strategies with positions for the table
@@ -252,7 +262,7 @@ export default function ExecutionPage() {
     setSubmitting(true);
     setOutcome(null);
     try {
-      const res = await api.unwind(activeVaultId!, { strategyId: selectedStrategy });
+      const res = await api.unwind(activeVaultId!, { strategyId: selectedStrategy, ...(pullType === 'partial' ? { amount: pullAmount } : {}) });
       if (res.status === 'cooldown') {
         setOutcome({ type: 'cooldown', strategyName: strat?.name || selectedStrategy, amount: pullAmount, reason: `eUSX unlocked on-chain (tx: ${res.unlockTx?.slice(0, 16)}...). Protocol cooldown in progress — funds will be available for withdrawal shortly.`, txSignature: res.unlockTx });
         notify('success', 'eUSX unlocked — cooldown in progress');
@@ -383,7 +393,7 @@ export default function ExecutionPage() {
                     </div>
                   </div>
 
-                  {(onChainBalance ?? 0) <= 0 && (snapshot?.idleBalance || 0) <= 0 && (
+                  {(onChainBalance ?? 0) <= 0 && (idleBalance || 0) <= 0 && (
                     <div className="bg-slate-50 border border-slate-200 rounded-[12px] p-3 text-center">
                       <p className="text-xs text-slate-500">No balance available to deploy. Deposit USDC into the vault first.</p>
                     </div>
@@ -406,14 +416,10 @@ export default function ExecutionPage() {
 
                   {/* Show balance info once strategy is selected */}
                   {selectedStrategy && (
-                    <div className="bg-slate-50 border border-slate-200 rounded-[12px] p-3 text-xs space-y-1">
+                    <div className="bg-slate-50 border border-slate-200 rounded-[12px] p-3 text-xs">
                       <div className="flex justify-between">
                         <span className="text-slate-500">On-chain USDC available</span>
-                        <span className="text-ink-900 font-mono font-semibold">{onChainBalance !== null ? fmt(onChainBalance) : '—'} USDC</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">DB idle balance</span>
-                        <span className="text-slate-700 font-mono">{fmt(snapshot?.idleBalance)} USDC</span>
+                        <span className="text-ink-900 font-mono font-semibold">{fmt(idleBalance)} USDC</span>
                       </div>
                     </div>
                   )}
@@ -431,7 +437,7 @@ export default function ExecutionPage() {
                       </p>
                       <div className="flex justify-between"><span className="text-slate-700">Strategy</span><span className="text-ink-900">{strategies.find((s: any) => s.strategyId === selectedStrategy)?.name || '—'}</span></div>
                       <div className="flex justify-between"><span className="text-slate-700">Amount</span><span className="text-ink-900">{fmt(parseFloat(amount))} {isSolstice ? 'USX' : 'USDC'}</span></div>
-                      <div className="flex justify-between"><span className="text-slate-700">Post-deploy idle</span><span className="text-ink-900">{fmt((snapshot?.idleBalance || 0) - (parseFloat(amount) || 0))} USDC</span></div>
+                      <div className="flex justify-between"><span className="text-slate-700">Post-deploy idle</span><span className="text-ink-900">{fmt((idleBalance || 0) - (parseFloat(amount) || 0))} USDC</span></div>
                       <div className="flex justify-between"><span className="text-slate-700">Mandate</span><StatusBadge status={snapshot?.mandateStatus || 'none'} /></div>
                       {isSolstice && (
                         <>
@@ -459,7 +465,7 @@ export default function ExecutionPage() {
                       )}
                     </div>
                   )}
-                  <button onClick={handleDeploy} disabled={submitting || !selectedStrategy || !amount || (snapshot?.idleBalance || 0) <= 0}
+                  <button onClick={handleDeploy} disabled={submitting || !selectedStrategy || !amount || (idleBalance || 0) <= 0}
                     className="w-full bg-teal-700 hover:bg-teal-800 disabled:bg-slate-200 disabled:text-slate-500 text-white text-sm font-semibold rounded-[12px] py-2.5 transition-colors flex items-center justify-center gap-2">
                     {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                     {submitting ? (isSolstice ? 'Executing on-chain...' : 'Validating & Deploying...') : (isSolstice ? 'Deploy to Solstice (On-Chain)' : 'Deploy to Strategy')}
@@ -517,9 +523,9 @@ export default function ExecutionPage() {
               {tab === 'idle' && (
                 <div className="space-y-4">
                   <div className="bg-teal-50 rounded-[18px] p-4 text-center space-y-2">
-                    <p className="text-2xl font-bold text-ink-900 font-mono">{onChainBalance !== null ? fmt(onChainBalance) : fmt(snapshot?.idleBalance)} USDC</p>
+                    <p className="text-2xl font-bold text-ink-900 font-mono">{fmt(idleBalance)} USDC</p>
                     <p className="text-xs text-slate-700">
-                      {onChainBalance !== null ? 'On-chain vault balance' : 'Current idle balance'}
+                      On-chain vault balance
                       {vaultOnChainAddress && (
                         <a href={`https://solscan.io/account/${vaultOnChainAddress}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
                           className="ml-1.5 text-teal-700 hover:underline inline-flex items-center gap-0.5 text-[10px]">
@@ -572,6 +578,45 @@ export default function ExecutionPage() {
                 <div className="border-t border-slate-200 pt-2"><span className="text-[10px] uppercase tracking-wider text-slate-700">Consent Request</span><p className="text-warning-700 text-xs font-mono mt-1">{outcome.consentRequestId}</p></div>
               )}
             </div>
+          )}
+
+          {/* Pending Withdrawal Requests */}
+          {pendingWithdrawals.length > 0 && (
+            <Card title="Pending Withdrawals" subtitle={`${pendingWithdrawals.length} awaiting approval`}>
+              <div className="space-y-2">
+                {pendingWithdrawals.map((w: any) => (
+                  <div key={w.requestId} className="flex items-center justify-between bg-warning-100/50 border border-warning-700/20 rounded-[12px] px-4 py-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-semibold text-ink-900">{w.requestId}</span>
+                        <StatusBadge status="pending" />
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        {fmt(w.amount)} USDC to {w.details?.destinationWallet ? `${w.details.destinationWallet.slice(0, 8)}...` : 'client wallet'}
+                        {' '}&middot; requested by {w.initiator?.slice(0, 8) || 'client'}
+                        {' '}&middot; {new Date(w.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        setSubmitting(true);
+                        try {
+                          await api.processWithdrawal(w.requestId);
+                          notify('success', `Withdrawal ${w.requestId} approved — ${fmt(w.amount)} USDC processed`);
+                          loadData();
+                        } catch (err: any) {
+                          notify('error', err?.message || 'Failed to process withdrawal');
+                        } finally { setSubmitting(false); }
+                      }}
+                      disabled={submitting}
+                      className="ml-4 px-4 py-2 bg-success-700 hover:bg-teal-800 disabled:bg-slate-200 disabled:text-slate-500 text-white text-xs font-semibold rounded-[10px] transition-colors flex items-center gap-1.5">
+                      {submitting ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3" />}
+                      Approve & Process
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </Card>
           )}
 
           {/* Strategy Positions Table */}
@@ -666,7 +711,7 @@ export default function ExecutionPage() {
                 {/* Breakdown */}
                 <div className="space-y-2">
                   {[
-                    ['Idle Balance', fmt(snapshot?.idleBalance), `${idlePct.toFixed(1)}%`],
+                    ['Idle Balance', fmt(idleBalance), `${idlePct.toFixed(1)}%`],
                     ['Deployed Balance', fmt(totalDeployed), `${deployedPct.toFixed(1)}%`],
                     ['Yield Accrued', `+${fmt(totalYield)}`, ''],
                   ].map(([label, value, pct]) => (
@@ -763,9 +808,35 @@ export default function ExecutionPage() {
                     </div>
 
                     {/* Status */}
-                    <div className={`rounded-[8px] px-3 py-2 text-center text-[10px] font-medium ${hasPosition ? 'bg-success-100 text-success-700' : 'bg-slate-100 text-slate-500'}`}>
-                      {hasPosition ? 'Earning yield' : 'No active position'}
-                    </div>
+                    {solsticePosition.cooldownEscrowBalance > 0 ? (
+                      <div className="space-y-2">
+                        <div className="bg-info-100 rounded-[8px] px-3 py-2 text-center">
+                          <p className="text-[10px] font-medium text-info-700">Cooldown Escrow</p>
+                          <p className="text-sm font-bold font-mono text-info-700 mt-0.5">{solsticePosition.cooldownEscrowBalance.toFixed(4)} USX</p>
+                          <p className="text-[9px] text-info-700/70 mt-0.5">Unlocked — ready to withdraw</p>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            setSubmitting(true);
+                            try {
+                              const res = await api.solsticeWithdraw(activeVaultId!);
+                              notify('success', `Withdrawn ${res.usxReceived?.toFixed(4) || ''} USX — redeemed to USDC`);
+                              setOutcome({ type: 'approved', strategyName: 'Solstice eUSX Yield', amount: res.usxReceived || 0, reason: `Cooldown withdrawal complete. ${res.usxReceived?.toFixed(4)} USX withdrawn and redeemed to USDC.`, txSignature: res.txSignature });
+                              loadData();
+                            } catch (err: any) { notify('error', err?.message || 'Withdraw failed'); }
+                            finally { setSubmitting(false); }
+                          }}
+                          disabled={submitting}
+                          className="w-full bg-info-700 hover:bg-info-800 disabled:bg-slate-200 disabled:text-slate-500 text-white text-xs font-semibold rounded-[8px] py-2 transition-colors flex items-center justify-center gap-1.5">
+                          {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
+                          {submitting ? 'Withdrawing...' : 'Complete Withdrawal'}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className={`rounded-[8px] px-3 py-2 text-center text-[10px] font-medium ${hasPosition ? 'bg-success-100 text-success-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {hasPosition ? 'Earning yield' : 'No active position'}
+                      </div>
+                    )}
 
                     {/* On-chain link */}
                     {solsticePosition.eusxAta && (
@@ -782,7 +853,7 @@ export default function ExecutionPage() {
 
           {/* Fund Flow Timeline */}
           {solsticeFundFlow.length > 0 && (
-            <Card title="Fund Flow" subtitle="On-chain activity log">
+            <Card title="Fund Flow" subtitle="On-chain activity log" className='mt-5'>
               <div className="space-y-1 max-h-[240px] overflow-y-auto">
                 {solsticeFundFlow.slice(0, 15).map((e: any) => (
                   <div key={e.eventId} className={`bg-teal-50 rounded-[12px] px-3 py-2 border-l-2 ${
