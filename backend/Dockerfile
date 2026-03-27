@@ -1,5 +1,5 @@
 # Single-stage build to avoid COPY --from issues
-FROM node:20-slim
+FROM --platform=linux/amd64 node:20-slim
 
 RUN apt-get update && apt-get install -y openssl curl bzip2 && rm -rf /var/lib/apt/lists/*
 
@@ -20,8 +20,7 @@ RUN npm ci
 COPY . .
 
 RUN npx prisma generate
-RUN cat tsconfig.json && cat nest-cli.json
-RUN npx nest build 2>&1 && echo "BUILD DONE" && ls -la dist/ && ls -la dist/main.js
+RUN npx nest build
 
 EXPOSE 3000
 
