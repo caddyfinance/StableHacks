@@ -10,7 +10,7 @@ RUN npm ci
 
 COPY . .
 
-RUN npx prisma generate && npx nest build
+RUN npx prisma generate && npx nest build && ls -la dist/
 
 # ── Runtime stage ────────────────────────────────────────────
 FROM node:20-slim
@@ -24,22 +24,25 @@ RUN sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)" && \
 ENV PATH="/root/.local/share/solana/install/active_release/bin:${PATH}"
 ENV SOLANA_CLI_PATH="/root/.local/share/solana/install/active_release/bin/solana"
 
-# Verify solana CLI is available
 RUN solana --version
 
 WORKDIR /app
 
-# Copy production dependencies
+# Copy production dependencies and install
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 
-# Copy Prisma schema (needed for prisma db push at startup)
+# Copy Prisma schema and generate client
 COPY prisma ./prisma
 RUN npx prisma generate
 
-# Copy built app and program binary
+# Copy built output, program binary, and nest config
 COPY --from=builder /app/dist ./dist
 COPY program-binary ./program-binary
+COPY nest-cli.json tsconfig.json ./
+
+# Verify dist/main.js exists
+RUN ls -la dist/main.js
 
 EXPOSE 3000
 
