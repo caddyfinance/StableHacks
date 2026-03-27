@@ -19,10 +19,9 @@ RUN npm ci
 
 COPY . .
 
-RUN npx prisma generate && npx nest build
-
-# Verify build output
-RUN ls -la dist/main.js
+RUN npx prisma generate
+RUN cat tsconfig.json && cat nest-cli.json
+RUN npx nest build 2>&1 && echo "BUILD DONE" && ls -la dist/ && ls -la dist/main.js
 
 EXPOSE 3000
 
