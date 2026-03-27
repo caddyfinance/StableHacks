@@ -749,8 +749,8 @@ export class VaultsService {
     const vault = await this.prisma.vault.findUnique({ where: { vaultId }, include: { mandate: true } });
     if (!vault) throw new NotFoundException('Vault not found');
 
-    if (amount > vault.idleBalance) {
-      throw new BadRequestException(`Insufficient idle balance. Available: ${vault.idleBalance.toLocaleString()}`);
+    if (amount > vault.totalNAV) {
+      throw new BadRequestException(`Amount exceeds vault NAV. Total NAV: ${vault.totalNAV.toLocaleString()}`);
     }
 
     // Create a pending withdrawal request
