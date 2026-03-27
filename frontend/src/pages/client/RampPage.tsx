@@ -10,19 +10,6 @@ import { ArrowDown, ArrowDownToLine, ArrowUpFromLine, ExternalLink, RefreshCw, C
 const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
 const DEVNET_RPC = (import.meta as any).env?.VITE_SOLANA_RPC_URL || 'https://api.devnet.solana.com';
 
-/** Fetch the AMINA bank's on-chain USDC balance */
-async function fetchAminaBankBalance(aminaWallet: string): Promise<number> {
-  try {
-    const { Connection, PublicKey } = await import('@solana/web3.js');
-    const { getAssociatedTokenAddress } = await import('@solana/spl-token');
-    const conn = new Connection(DEVNET_RPC, 'confirmed');
-    const ata = await getAssociatedTokenAddress(USDC_MINT, new PublicKey(aminaWallet));
-    const info = await conn.getTokenAccountBalance(ata);
-    return Number(info.value.uiAmount || 0);
-  } catch {
-    return 0;
-  }
-}
 
 const fmt = (v: number) => v != null && !isNaN(v) ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
 
@@ -41,7 +28,6 @@ export default function RampPage() {
   const [error, setError] = useState('');
   const [bankBal, setBankBal] = useState<number | null>(null);
   const [usdcBal, setUsdcBal] = useState<number | null>(null);
-  const [aminaWallet, setAminaWalletAddr] = useState<string | null>(null);
 
   const wallet = publicKey?.toBase58() || clientInfo?.walletAddress || '';
   const parsed = parseFloat(amount) || 0;
@@ -55,21 +41,17 @@ export default function RampPage() {
         setUsdcBal(r.value.length > 0 ? r.value[0].account.data.parsed.info.tokenAmount.uiAmount ?? 0 : 0);
       } catch { setUsdcBal(0); }
     }
-    // Fetch AMINA bank wallet and its USDC balance
+    // Fetch AMINA Bank USD balance from backend
     try {
-      const { wallet: aminaAddr } = await api.getAminaWallet();
-      setAminaWalletAddr(aminaAddr);
-      if (aminaAddr) {
-        const bal = await fetchAminaBankBalance(aminaAddr);
-        setBankBal(bal);
-      }
+      const { balance } = await api.getAminaBankBalance();
+      setBankBal(balance);
     } catch { setBankBal(0); }
   };
 
   useEffect(() => { refreshBalances(); }, [wallet, step]);
 
-  const fromAsset = tab === 'onramp' ? 'USDC' : 'USDC';
-  const toAsset = tab === 'onramp' ? 'USDC' : 'USDC';
+  const fromAsset = tab === 'onramp' ? 'USD' : 'USDC';
+  const toAsset = tab === 'onramp' ? 'USDC' : 'USD';
   const fromBal = tab === 'onramp' ? (bankBal ?? 0) : (usdcBal ?? 0);
   const toBal = tab === 'onramp' ? (usdcBal ?? 0) : (bankBal ?? 0);
   const canSubmit = parsed > 0 && parsed <= fromBal && !!publicKey;
@@ -177,7 +159,7 @@ export default function RampPage() {
             <Banknote className="w-5 h-5 text-teal-700" />
             On/Off Ramp
           </h1>
-          <p className="text-xs text-slate-500 mt-1">Transfer USDC between AMINA Bank and your wallet</p>
+          <p className="text-xs text-slate-500 mt-1">Transfer USD/USDC between AMINA Bank and your wallet</p>
         </div>
         <button onClick={refreshBalances}
           className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-teal-700 transition-colors">
@@ -188,17 +170,9 @@ export default function RampPage() {
       {/* Balance Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="bg-white border border-slate-200 rounded-[18px] p-6 shadow-1">
-          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">AMINA Bank Wallet (USDC)</p>
-          <p className="text-xl font-bold font-mono font-display text-ink-900">{bankBal !== null ? fmt(bankBal) : '—'}</p>
-          <p className="text-[10px] text-slate-500 mt-0.5">
-            On-chain balance
-            {aminaWallet && (
-              <a href={`https://solscan.io/account/${aminaWallet}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                className="ml-1.5 text-teal-700 hover:underline inline-flex items-center gap-0.5">
-                <ExternalLink className="w-2.5 h-2.5" />
-              </a>
-            )}
-          </p>
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">AMINA Bank (USD)</p>
+          <p className="text-xl font-bold font-mono font-display text-ink-900">{bankBal !== null ? `$${fmt(bankBal)}` : '—'}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Fiat balance</p>
         </div>
         <div className="bg-white border border-slate-200 rounded-[18px] p-6 shadow-1">
           <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Your Wallet (USDC)</p>
@@ -327,7 +301,7 @@ export default function RampPage() {
                     : parsed <= 0
                     ? 'Enter an amount'
                     : parsed > fromBal
-                    ? 'Insufficient USDC'
+                    ? `Insufficient ${fromAsset}`
                     : tab === 'onramp'
                     ? 'Receive USDC from AMINA Bank'
                     : 'Send USDC to AMINA Bank'
@@ -395,7 +369,7 @@ export default function RampPage() {
               <div className="flex items-center justify-center gap-6 text-xs">
                 <div className="text-center">
                   <p className="text-slate-500">AMINA Bank</p>
-                  <p className="text-ink-900 font-mono font-medium">{bankBal !== null ? fmt(bankBal) : '—'} USDC</p>
+                  <p className="text-ink-900 font-mono font-medium">${bankBal !== null ? fmt(bankBal) : '—'} USD</p>
                 </div>
                 <div className="text-center">
                   <p className="text-slate-500">Your Wallet</p>

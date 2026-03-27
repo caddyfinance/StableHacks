@@ -12,6 +12,7 @@ export class VaultsService {
   private sas: SasService;
   private vaultProgram: VaultProgramService;
   private solstice: SolsticeService;
+  private bankBalance = 50000; // Simulated AMINA Bank USD balance
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
     @Inject(EventsService) events: EventsService,
@@ -1052,12 +1053,21 @@ export class VaultsService {
     return updated;
   }
 
+  /** Get simulated AMINA Bank USD balance */
+  getBankBalance() {
+    return { balance: this.bankBalance, currency: 'USD' };
+  }
+
   /**
    * On-ramp: Amina Bank sends USDC to the user's wallet on-chain.
    * Records the event in the audit trail.
    */
   async onramp(recipientWallet: string, amount: number, callerWallet?: string) {
+    if (amount > this.bankBalance) {
+      throw new BadRequestException('Insufficient AMINA Bank balance');
+    }
     const result = await this.vaultProgram.sendUsdc(recipientWallet, amount);
+    this.bankBalance -= amount;
 
     await this.events.emit({
       actionType: 'ONRAMP_COMPLETED',
@@ -1091,6 +1101,7 @@ export class VaultsService {
       txSignature,
     });
 
+    this.bankBalance += amount;
     return { message: `Off-ramp of ${amount.toLocaleString()} USDC completed`, status: 'success', aminaWallet, txSignature };
   }
 

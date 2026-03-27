@@ -160,6 +160,13 @@ export class VaultsController {
     return { wallet: this.vaultProgram.getAminaBankWallet() };
   }
 
+  @Get('amina-bank-balance')
+  @ApiOperation({ summary: 'Get AMINA Bank USD balance', description: 'Returns the simulated AMINA Bank fiat (USD) balance available for on-ramp.' })
+  @ApiOkResponse({ description: 'Returns balance and currency.' })
+  getAminaBankBalance() {
+    return this.service.getBankBalance();
+  }
+
   @Post('onramp')
   @Roles('admin', 'portfolio_manager', 'client_representative')
   @ApiOperation({ summary: 'On-ramp fiat to crypto', description: 'Convert fiat to on-chain tokens and send to a recipient wallet.' })

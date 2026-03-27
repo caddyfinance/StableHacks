@@ -63,6 +63,7 @@ export const api = {
   getMandate: (id: string) => request<any>(`/vaults/${id}/mandate`),
   activateVault: (id: string) => request<any>(`/vaults/${id}/activate`, { method: 'POST' }),
   getAminaWallet: () => request<{ wallet: string }>('/vaults/amina-wallet'),
+  getAminaBankBalance: () => request<{ balance: number; currency: string }>('/vaults/amina-bank-balance'),
   onramp: (recipientWallet: string, amount: number) => request<any>('/vaults/onramp', { method: 'POST', body: JSON.stringify({ recipientWallet, amount }) }),
   offramp: (senderWallet: string, amount: number, txSignature?: string) => request<any>('/vaults/offramp', { method: 'POST', body: JSON.stringify({ senderWallet, amount, txSignature }) }),
   getDeposits: (id: string) => request<any[]>(`/vaults/${id}/deposits`),
