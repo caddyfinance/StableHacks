@@ -226,6 +226,7 @@ pub mod amina_vault {
     // ─── Mandate Policy ──────────────────────────────────────────
 
     /// Attach a mandate policy to a vault constraining strategy execution.
+    /// The liquidity buffer cannot be set below the protocol minimum (10%).
     pub fn attach_mandate(
         ctx: Context<AttachMandate>,
         allowed_strategies: Vec<String>,
@@ -235,18 +236,31 @@ pub mod amina_vault {
         consent_threshold: u64,
         leverage_allowed: bool,
     ) -> Result<()> {
+        require!(
+            liquidity_buffer_bps >= PROTOCOL_LIQUIDITY_BUFFER_BPS,
+            VaultError::BelowProtocolMinimum
+        );
+
         let mandate = &mut ctx.accounts.mandate;
         mandate.vault = ctx.accounts.vault.key();
-        mandate.allowed_strategies = allowed_strategies;
-        mandate.blocked_strategies = blocked_strategies;
-        mandate.max_allocation_bps = max_allocation_bps;
+        mandate.allowed_strategies = allowed_strategies.clone();
+        mandate.blocked_strategies = blocked_strategies.clone();
+        mandate.max_allocation_bps = max_allocation_bps.clone();
         mandate.liquidity_buffer_bps = liquidity_buffer_bps;
         mandate.consent_threshold = consent_threshold;
         mandate.leverage_allowed = leverage_allowed;
         mandate.status = MandateStatus::Active;
+        mandate.version = 1;
 
         emit!(MandateAttached {
             vault_id: ctx.accounts.vault.vault_id.clone(),
+            authority: ctx.accounts.authority.key(),
+            allowed_strategies,
+            blocked_strategies,
+            liquidity_buffer_bps,
+            consent_threshold,
+            leverage_allowed,
+            version: 1,
             timestamp: Clock::get()?.unix_timestamp,
         });
 
@@ -270,17 +284,25 @@ pub mod amina_vault {
         );
 
         let mandate = &mut ctx.accounts.mandate;
-        mandate.allowed_strategies = allowed_strategies;
-        mandate.blocked_strategies = blocked_strategies;
-        mandate.max_allocation_bps = max_allocation_bps;
+        let old_version = mandate.version;
+        mandate.allowed_strategies = allowed_strategies.clone();
+        mandate.blocked_strategies = blocked_strategies.clone();
+        mandate.max_allocation_bps = max_allocation_bps.clone();
         mandate.liquidity_buffer_bps = liquidity_buffer_bps;
         mandate.consent_threshold = consent_threshold;
         mandate.leverage_allowed = leverage_allowed;
+        mandate.version = old_version.checked_add(1).unwrap_or(old_version);
 
         emit!(MandateUpdated {
             vault_id: ctx.accounts.vault.vault_id.clone(),
-            new_buffer_bps: liquidity_buffer_bps,
-            updated_by: ctx.accounts.authority.key(),
+            authority: ctx.accounts.authority.key(),
+            allowed_strategies,
+            blocked_strategies,
+            liquidity_buffer_bps,
+            consent_threshold,
+            leverage_allowed,
+            old_version,
+            new_version: mandate.version,
             timestamp: Clock::get()?.unix_timestamp,
         });
 
@@ -304,8 +326,11 @@ pub mod amina_vault {
 
         emit!(DepositRecorded {
             vault_id: vault.vault_id.clone(),
+            authority: ctx.accounts.authority.key(),
             amount,
             source_reference,
+            new_idle_balance: vault.idle_balance,
+            new_total_nav: vault.total_nav,
             timestamp: Clock::get()?.unix_timestamp,
         });
 
@@ -337,8 +362,10 @@ pub mod amina_vault {
 
         emit!(AllocationExecuted {
             vault_id: vault.vault_id.clone(),
+            authority: ctx.accounts.authority.key(),
             strategy_id,
             amount,
+            post_idle_balance: vault.idle_balance,
             timestamp: Clock::get()?.unix_timestamp,
         });
 
@@ -370,8 +397,11 @@ pub mod amina_vault {
 
         emit!(RedemptionExecuted {
             vault_id: vault.vault_id.clone(),
+            authority: ctx.accounts.authority.key(),
             amount,
             destination,
+            post_idle_balance: vault.idle_balance,
+            post_total_nav: vault.total_nav,
             timestamp: Clock::get()?.unix_timestamp,
         });
 
@@ -387,6 +417,7 @@ pub mod amina_vault {
 
         emit!(VaultPauseToggled {
             vault_id: vault.vault_id.clone(),
+            authority: ctx.accounts.authority.key(),
             paused: vault.paused,
             timestamp: Clock::get()?.unix_timestamp,
         });
@@ -405,8 +436,10 @@ pub mod amina_vault {
 
         emit!(UnwindExecuted {
             vault_id: vault.vault_id.clone(),
+            authority: ctx.accounts.authority.key(),
             strategy_id,
             amount,
+            post_idle_balance: vault.idle_balance,
             timestamp: Clock::get()?.unix_timestamp,
         });
 
@@ -464,6 +497,7 @@ pub struct Mandate {
     pub consent_threshold: u64,
     pub leverage_allowed: bool,
     pub status: MandateStatus,
+    pub version: u32,
 }
 
 // ─── Enums ───────────────────────────────────────────────────────
@@ -587,7 +621,7 @@ pub struct AttachMandate<'info> {
     #[account(
         init_if_needed,
         payer = authority,
-        space = 8 + 32 + 512 + 2 + 8 + 1 + 1 + 64,
+        space = 8 + 32 + 512 + 2 + 8 + 1 + 1 + 4 + 64,
         seeds = [b"mandate", vault.key().as_ref()],
         bump,
     )]
@@ -695,44 +729,66 @@ pub struct VaultCreated {
 #[event]
 pub struct MandateAttached {
     pub vault_id: String,
+    pub authority: Pubkey,
+    pub allowed_strategies: Vec<String>,
+    pub blocked_strategies: Vec<String>,
+    pub liquidity_buffer_bps: u16,
+    pub consent_threshold: u64,
+    pub leverage_allowed: bool,
+    pub version: u32,
     pub timestamp: i64,
 }
 
 #[event]
 pub struct MandateUpdated {
     pub vault_id: String,
-    pub new_buffer_bps: u16,
-    pub updated_by: Pubkey,
+    pub authority: Pubkey,
+    pub allowed_strategies: Vec<String>,
+    pub blocked_strategies: Vec<String>,
+    pub liquidity_buffer_bps: u16,
+    pub consent_threshold: u64,
+    pub leverage_allowed: bool,
+    pub old_version: u32,
+    pub new_version: u32,
     pub timestamp: i64,
 }
 
 #[event]
 pub struct DepositRecorded {
     pub vault_id: String,
+    pub authority: Pubkey,
     pub amount: u64,
     pub source_reference: String,
+    pub new_idle_balance: u64,
+    pub new_total_nav: u64,
     pub timestamp: i64,
 }
 
 #[event]
 pub struct AllocationExecuted {
     pub vault_id: String,
+    pub authority: Pubkey,
     pub strategy_id: String,
     pub amount: u64,
+    pub post_idle_balance: u64,
     pub timestamp: i64,
 }
 
 #[event]
 pub struct RedemptionExecuted {
     pub vault_id: String,
+    pub authority: Pubkey,
     pub amount: u64,
     pub destination: Pubkey,
+    pub post_idle_balance: u64,
+    pub post_total_nav: u64,
     pub timestamp: i64,
 }
 
 #[event]
 pub struct VaultPauseToggled {
     pub vault_id: String,
+    pub authority: Pubkey,
     pub paused: bool,
     pub timestamp: i64,
 }
@@ -740,8 +796,10 @@ pub struct VaultPauseToggled {
 #[event]
 pub struct UnwindExecuted {
     pub vault_id: String,
+    pub authority: Pubkey,
     pub strategy_id: String,
     pub amount: u64,
+    pub post_idle_balance: u64,
     pub timestamp: i64,
 }
 

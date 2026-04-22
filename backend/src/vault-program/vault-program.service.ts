@@ -69,6 +69,61 @@ export class VaultProgramService {
   }
 
   /**
+   * Borsh-serialize a Vec<String>: 4-byte LE vec length + each string serialized
+   */
+  private serializeVecString(values: string[]): Buffer {
+    const len = Buffer.alloc(4);
+    len.writeUInt32LE(values.length, 0);
+    return Buffer.concat([len, ...values.map(v => this.serializeString(v))]);
+  }
+
+  /**
+   * Borsh-serialize a Vec<u16>: 4-byte LE vec length + each u16 as 2-byte LE
+   */
+  private serializeVecU16(values: number[]): Buffer {
+    const len = Buffer.alloc(4);
+    len.writeUInt32LE(values.length, 0);
+    const items = values.map(v => {
+      const buf = Buffer.alloc(2);
+      buf.writeUInt16LE(v, 0);
+      return buf;
+    });
+    return Buffer.concat([len, ...items]);
+  }
+
+  /**
+   * Borsh-serialize the mandate instruction arguments.
+   * Matches the Anchor contract: (Vec<String>, Vec<String>, Vec<u16>, u16, u64, bool)
+   */
+  private serializeMandateArgs(mandate: any): Buffer {
+    const allowedStrategies: string[] = mandate.allowedStrategies || [];
+    const blockedStrategies: string[] = mandate.blockedStrategies || [];
+
+    // maxAllocationBps is stored as JSON { strategyId: bps } in DB,
+    // but the contract expects Vec<u16> parallel to allowedStrategies
+    const maxAllocMap = mandate.maxAllocationBps || {};
+    const maxAllocBps: number[] = allowedStrategies.map(id => maxAllocMap[id] ?? 0);
+
+    const bufferBps = Buffer.alloc(2);
+    bufferBps.writeUInt16LE(mandate.liquidityBufferBps ?? 1000, 0);
+
+    const consentThreshold = Buffer.alloc(8);
+    const threshold = BigInt(Math.round(mandate.consentThreshold ?? 250000));
+    consentThreshold.writeBigUInt64LE(threshold, 0);
+
+    const leverageByte = Buffer.from([mandate.leverageAllowed ? 1 : 0]);
+
+    return Buffer.concat([
+      this.serializeVecString(allowedStrategies),
+      this.serializeVecString(blockedStrategies),
+      this.serializeVecU16(maxAllocBps),
+      bufferBps,
+      consentThreshold,
+      leverageByte,
+    ]);
+  }
+
+  /**
    * Poll for transaction confirmation using getSignatureStatuses (no WebSocket needed).
    */
   private async pollConfirmation(connection: Connection, txSignature: string, timeoutMs = 30000): Promise<void> {
@@ -591,7 +646,65 @@ export class VaultProgramService {
   }
 
   /**
+   * Attach a mandate to a vault on-chain via the attach_mandate instruction.
+   * Called once at vault activation — the moment the client accepts the investment terms.
+   * Builds the real transaction, signs with admin keypair, and sends on-chain.
+   * Returns null (non-fatal) if the program is not configured.
+   */
+  async attachMandate(programId: string | null | undefined, vaultId: string, mandate: any): Promise<{ txSignature: string } | null> {
+    if (!this.isConfigured() && !programId) {
+      this.logger.warn(`attachMandate skipped — program not configured for vault ${vaultId}`);
+      return null;
+    }
+
+    try {
+      const connection = this.getConnection();
+      const authority = this.getAminaBankKeypair();
+      const pid = programId ? new PublicKey(programId) : this.getProgramPublicKey();
+
+      const [vaultPda] = PublicKey.findProgramAddressSync([Buffer.from('vault'), Buffer.from(vaultId)], pid);
+      const [mandatePda] = PublicKey.findProgramAddressSync([Buffer.from('mandate'), vaultPda.toBuffer()], pid);
+
+      this.logger.log(`attach_mandate: vault=${vaultId}, buffer=${mandate.liquidityBufferBps}bps, allowed=${(mandate.allowedStrategies || []).join(',')}`);
+      this.logger.log(`attach_mandate PDAs: vault=${vaultPda.toBase58()}, mandate=${mandatePda.toBase58()}, program=${pid.toBase58()}`);
+
+      const discriminator = this.getDiscriminator('attach_mandate');
+      const argsData = this.serializeMandateArgs(mandate);
+      const instructionData = Buffer.concat([discriminator, argsData]);
+
+      // AttachMandate accounts: mandate (init_if_needed, writable), vault, authority (signer+payer), system_program
+      const instruction = new TransactionInstruction({
+        programId: pid,
+        keys: [
+          { pubkey: mandatePda, isSigner: false, isWritable: true },
+          { pubkey: vaultPda, isSigner: false, isWritable: false },
+          { pubkey: authority.publicKey, isSigner: true, isWritable: true },
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        data: instructionData,
+      });
+
+      const transaction = new Transaction().add(instruction);
+      transaction.feePayer = authority.publicKey;
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      transaction.recentBlockhash = blockhash;
+      transaction.sign(authority);
+
+      const txSignature = await this.sendAndConfirm(connection, transaction);
+
+      this.logger.log(`attach_mandate confirmed: vault=${vaultId}, tx=${txSignature}`);
+      return { txSignature };
+    } catch (error: any) {
+      this.logger.error(`attach_mandate failed for vault ${vaultId}: ${error.message}`);
+      if (error.logs) this.logger.error(`Program logs: ${error.logs.join('\n')}`);
+      throw error;
+    }
+  }
+
+  /**
    * Sync a mandate update to the on-chain program PDA via the update_mandate instruction.
+   * Builds the real transaction, signs with admin keypair, and sends on-chain.
+   * Called when the mandate is edited post-activation (e.g. from MandatePage "Sync to Chain").
    * Returns null (non-fatal) if the program is not configured.
    */
   async updateMandate(programId: string | null | undefined, vaultId: string, mandate: any): Promise<{ txSignature: string } | null> {
@@ -608,22 +721,37 @@ export class VaultProgramService {
       const [vaultPda] = PublicKey.findProgramAddressSync([Buffer.from('vault'), Buffer.from(vaultId)], pid);
       const [mandatePda] = PublicKey.findProgramAddressSync([Buffer.from('mandate'), vaultPda.toBuffer()], pid);
 
-      // Anchor discriminator for update_mandate
-      const discriminator = createHash('sha256').update('global:update_mandate').digest().slice(0, 8);
+      this.logger.log(`update_mandate: vault=${vaultId}, buffer=${mandate.liquidityBufferBps}bps, version=${mandate.version}`);
+      this.logger.log(`update_mandate PDAs: vault=${vaultPda.toBase58()}, mandate=${mandatePda.toBase58()}, program=${pid.toBase58()}`);
 
-      // Encode instruction data (Borsh-compatible simple encoding via Buffer)
-      // update_mandate(allowed_strategies, blocked_strategies, max_allocation_bps, liquidity_buffer_bps, consent_threshold, leverage_allowed)
-      // For now, send an empty payload — the real Borsh encoding would require the anchor IDL client.
-      // A full Anchor client call via @coral-xyz/anchor is the production path; this stub logs intent.
-      this.logger.log(`update_mandate intent: vault=${vaultId}, buffer=${mandate.liquidityBufferBps}bps, version=${mandate.version}`);
+      const discriminator = this.getDiscriminator('update_mandate');
+      const argsData = this.serializeMandateArgs(mandate);
+      const instructionData = Buffer.concat([discriminator, argsData]);
 
-      // Stub: return a simulated tx signature so the DB sync flag is set correctly in demo mode.
-      // Replace this block with a real Anchor program method call when integrating the full IDL client.
-      const stubTxSig = `mandate-sync-${vaultId}-v${mandate.version}-${Date.now()}`;
-      this.logger.log(`update_mandate stub tx: ${stubTxSig}`);
-      return { txSignature: stubTxSig };
+      // UpdateMandate accounts: mandate (mut, PDA), vault, authority (signer)
+      const instruction = new TransactionInstruction({
+        programId: pid,
+        keys: [
+          { pubkey: mandatePda, isSigner: false, isWritable: true },
+          { pubkey: vaultPda, isSigner: false, isWritable: false },
+          { pubkey: authority.publicKey, isSigner: true, isWritable: true },
+        ],
+        data: instructionData,
+      });
+
+      const transaction = new Transaction().add(instruction);
+      transaction.feePayer = authority.publicKey;
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      transaction.recentBlockhash = blockhash;
+      transaction.sign(authority);
+
+      const txSignature = await this.sendAndConfirm(connection, transaction);
+
+      this.logger.log(`update_mandate confirmed: vault=${vaultId}, v${mandate.version}, tx=${txSignature}`);
+      return { txSignature };
     } catch (error: any) {
       this.logger.error(`update_mandate failed for vault ${vaultId}: ${error.message}`);
+      if (error.logs) this.logger.error(`Program logs: ${error.logs.join('\n')}`);
       throw error;
     }
   }

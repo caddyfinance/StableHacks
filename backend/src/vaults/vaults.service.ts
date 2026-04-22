@@ -526,7 +526,33 @@ export class VaultsService {
     }
 
     const mandate = await this.prisma.mandate.create({ data: { vaultId, ...data } });
-    await this.events.emit({ vaultId, actionType: 'MANDATE_ATTACHED', actor: 'admin', role: 'Admin', result: 'success', reason: `Mandate bound to vault ${vaultId}` });
+
+    // If the vault has a deployed program, attach the mandate on-chain immediately
+    let txSignature: string | undefined;
+    if (vault.programId) {
+      try {
+        const result = await this.vaultProgram.attachMandate(vault.programId, vaultId, mandate);
+        txSignature = result?.txSignature;
+        if (txSignature) {
+          await this.prisma.mandate.update({
+            where: { vaultId },
+            data: { onChainSynced: true, onChainSyncTx: txSignature },
+          });
+        }
+      } catch (e: any) {
+        await this.events.emit({
+          vaultId, actionType: 'MANDATE_ATTACH_FAILED', actor: 'admin', role: 'Admin',
+          result: 'failure', reason: `On-chain mandate attach failed for vault ${vaultId}: ${e.message}. Mandate saved in DB.`,
+        });
+      }
+    }
+
+    await this.events.emit({
+      vaultId, actionType: 'MANDATE_ATTACHED', actor: 'admin', role: 'Admin',
+      result: 'success',
+      reason: `Mandate bound to vault ${vaultId}.${txSignature ? ` Signed & anchored on-chain: tx ${txSignature}` : ''}`,
+      txSignature,
+    });
     return mandate;
   }
 
@@ -674,11 +700,12 @@ export class VaultsService {
     await this.events.emit({
       vaultId, actionType: 'MANDATE_SYNCED', actor: callerWallet || 'admin', role: 'Admin',
       result: 'success',
-      reason: `Mandate v${vault.mandate.version} synced to chain for vault ${vaultId}.`,
+      reason: `Mandate v${vault.mandate.version} signed and synced to chain for vault ${vaultId}. Signed by admin authority.`,
       txSignature: txSig,
+      onChainAddress: vault.programId || undefined,
     });
 
-    return { vaultId, onChainSynced: true, txSignature: txSig };
+    return { vaultId, onChainSynced: true, txSignature: txSig, programId: vault.programId };
   }
 
   private buildRulesFromData(vaultId: string, data: any, createdBy: string) {
@@ -739,16 +766,40 @@ export class VaultsService {
         },
       });
 
+      // Attach mandate on-chain — client has agreed to terms at activation
+      const freshVault = await this.prisma.vault.findUnique({ where: { vaultId } });
+      let attachResult: { txSignature: string } | null = null;
+      try {
+        attachResult = await this.vaultProgram.attachMandate(freshVault?.programId, vaultId, mandate);
+      } catch (e: any) {
+        await this.events.emit({
+          vaultId, actionType: 'MANDATE_ATTACH_FAILED', actor: callerWallet || 'client', role: 'client_representative',
+          result: 'failure',
+          reason: `On-chain mandate attach failed at vault activation for ${vaultId}: ${e.message}. Mandate saved in DB but not yet on-chain.`,
+        });
+      }
+
+      if (attachResult) {
+        await this.prisma.mandate.update({
+          where: { vaultId },
+          data: { onChainSynced: true, onChainSyncTx: attachResult.txSignature },
+        });
+      }
+
       await this.events.emit({
         vaultId, actionType: 'MANDATE_ATTACHED', actor: callerWallet || 'client', role: 'client_representative',
         result: 'success',
-        reason: `Default mandate created and accepted by client on vault activation. Allowed: ${allowedIds.join(', ')}.`,
+        reason: `Default mandate created and accepted by client on vault activation. Allowed: ${allowedIds.join(', ')}.${attachResult ? ` Signed & anchored on-chain: tx ${attachResult.txSignature}` : ' On-chain sync pending — will require manual sync.'}`,
+        txSignature: attachResult?.txSignature,
       });
     }
+
+    const mandateAfterSync = await this.prisma.mandate.findUnique({ where: { vaultId } });
 
     const updated = await this.prisma.vault.update({
       where: { vaultId },
       data: { status: 'active' },
+      include: { mandate: true },
     });
 
     await this.events.emit({
@@ -757,10 +808,15 @@ export class VaultsService {
       actor: callerWallet || 'client',
       role: 'client_representative',
       result: 'success',
-      reason: `Client approved mandate and activated vault ${vaultId}`,
+      reason: `Client approved mandate and activated vault ${vaultId}. Mandate on-chain: ${mandateAfterSync?.onChainSynced ? 'yes' : 'pending'}.`,
+      txSignature: mandateAfterSync?.onChainSyncTx || undefined,
     });
 
-    return updated;
+    return {
+      ...updated,
+      mandateOnChainSynced: mandateAfterSync?.onChainSynced ?? false,
+      mandateOnChainTx: mandateAfterSync?.onChainSyncTx ?? null,
+    };
   }
 
   async getDeposits(vaultId: string) {

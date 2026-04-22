@@ -3,7 +3,7 @@ import { api } from '../lib/api';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import StatusBadge from '../components/StatusBadge';
-import { ExternalLink, CheckCircle, Loader2, Clock, XCircle, Shield, Key, FileCheck, Vault, Award } from 'lucide-react';
+import { ExternalLink, CheckCircle, Loader2, Clock, XCircle, Shield, Key, FileCheck, Vault, Award, Zap } from 'lucide-react';
 
 interface Credential {
   credentialId: string;
@@ -84,6 +84,7 @@ export default function VaultFactoryPage() {
   const [vaults, setVaults] = useState<Vault[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [activating, setActivating] = useState<string | null>(null);
   const [selectedCredentialId, setSelectedCredentialId] = useState('');
   const [lastCreated, setLastCreated] = useState<CreatedVault | null>(null);
   const [liveSteps, setLiveSteps] = useState<LiveStep[]>([]);
@@ -209,6 +210,23 @@ export default function VaultFactoryPage() {
       notify('error', 'Failed to create vault');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleActivate = async (vaultId: string) => {
+    setActivating(vaultId);
+    try {
+      await api.activateVault(vaultId);
+      notify('success', `Vault ${vaultId} activated — mandate anchored on-chain`);
+      await loadData();
+      if (lastCreated?.vaultId === vaultId) {
+        setLastCreated((prev) => prev ? { ...prev, status: 'active' } : prev);
+      }
+      useStore.getState().setActiveVaultId(vaultId);
+    } catch {
+      notify('error', 'Failed to activate vault');
+    } finally {
+      setActivating(null);
     }
   };
 
@@ -433,6 +451,7 @@ export default function VaultFactoryPage() {
 
           {/* Success summary after completion */}
           {!submitting && lastCreated && (
+            <>
             <div className="mt-4 pt-4 border-t border-slate-200/30">
               <div className="flex items-center gap-2 text-success-700 mb-3">
                 <CheckCircle className="w-5 h-5" />
@@ -524,6 +543,60 @@ export default function VaultFactoryPage() {
               Dismiss
             </button>
             </div>
+
+            {/* Mandate acceptance step — shown when vault is still in 'initiated' state */}
+            {lastCreated.status !== 'active' && (
+              <div className="mt-4 pt-4 border-t border-slate-200/30">
+                <div className="flex items-start gap-3 bg-teal-50 border border-teal-200/60 rounded-[14px] p-4">
+                  <div className="w-9 h-9 rounded-[10px] bg-teal-100 flex items-center justify-center flex-shrink-0">
+                    <FileCheck className="w-4.5 h-4.5 text-teal-700" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-ink-900">Review & Activate Mandate</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      The vault is deployed but not yet active. Activating commits the default investment mandate on-chain — the client accepts a 10% liquidity buffer, 250,000 USDC consent threshold, no leverage, and low-risk strategy allocations at 40% cap.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 mt-3 text-[11px]">
+                      {[
+                        ['Liquidity Buffer', '10% (protocol minimum)'],
+                        ['Consent Threshold', '250,000 USDC'],
+                        ['Leverage', 'Not Permitted'],
+                        ['Strategy Cap', '40% per strategy'],
+                      ].map(([label, val]) => (
+                        <div key={label} className="bg-white/70 rounded-[8px] px-2.5 py-1.5">
+                          <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">{label}</p>
+                          <p className="text-ink-900 font-medium mt-0.5">{val}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => handleActivate(lastCreated.vaultId)}
+                      disabled={activating === lastCreated.vaultId}
+                      className="mt-3 flex items-center gap-2 px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-[10px] transition-colors disabled:opacity-50"
+                    >
+                      {activating === lastCreated.vaultId ? (
+                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Activating & Anchoring Mandate...</>
+                      ) : (
+                        <><Zap className="w-3.5 h-3.5" /> Activate Vault & Accept Mandate</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {lastCreated.status === 'active' && (
+              <div className="mt-4 pt-4 border-t border-slate-200/30">
+                <div className="flex items-center gap-2 bg-success-100 border border-success-700/20 rounded-[12px] px-4 py-3">
+                  <CheckCircle className="w-4 h-4 text-success-700 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-success-700">Vault Active — Mandate Anchored On-Chain</p>
+                    <p className="text-[10px] text-success-700/80 mt-0.5">Investment mandate committed to Solana at activation. Sync badge will show on Mandate Details page.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </Card>
       )}
@@ -600,15 +673,29 @@ export default function VaultFactoryPage() {
                   )}
                 </div>
 
-                <button
-                  onClick={() => {
-                    useStore.getState().setActiveVaultId(v.vaultId);
-                    notify('info', `Active vault set to ${v.vaultId.slice(0, 8)}...`);
-                  }}
-                  className="mt-3 w-full text-xs text-teal-700 hover:text-ink-900 border border-teal-700/30 hover:bg-teal-50 rounded-[12px] py-1.5 font-medium transition-all ease-amina duration-150"
-                >
-                  Set as Active Vault
-                </button>
+                {v.status === 'initiated' ? (
+                  <button
+                    onClick={() => handleActivate(v.vaultId)}
+                    disabled={activating === v.vaultId}
+                    className="mt-3 w-full text-xs text-white bg-teal-700 hover:bg-teal-800 rounded-[12px] py-1.5 font-semibold transition-all ease-amina duration-150 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    {activating === v.vaultId ? (
+                      <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Activating...</>
+                    ) : (
+                      <><Zap className="w-3.5 h-3.5" /> Activate & Anchor Mandate</>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      useStore.getState().setActiveVaultId(v.vaultId);
+                      notify('info', `Active vault set to ${v.vaultId.slice(0, 8)}...`);
+                    }}
+                    className="mt-3 w-full text-xs text-teal-700 hover:text-ink-900 border border-teal-700/30 hover:bg-teal-50 rounded-[12px] py-1.5 font-medium transition-all ease-amina duration-150"
+                  >
+                    Set as Active Vault
+                  </button>
+                )}
               </div>
             ))}
           </div>

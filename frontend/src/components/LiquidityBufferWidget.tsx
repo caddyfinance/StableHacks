@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { ShieldCheck, Lock, TrendingUp, AlertTriangle, Info } from 'lucide-react';
 
 interface LiquidityBufferWidgetProps {
@@ -17,27 +17,26 @@ const fmt = (v: number) =>
 function getHealthColor(utilization: number): { bar: string; text: string; bg: string; border: string } {
   if (utilization >= 150) return { bar: 'bg-success-700', text: 'text-success-700', bg: 'bg-success-100', border: 'border-success-700/30' };
   if (utilization >= 100) return { bar: 'bg-teal-700', text: 'text-teal-700', bg: 'bg-teal-50', border: 'border-teal-700/30' };
-  if (utilization >= 90) return { bar: 'bg-warning-700', text: 'text-warning-700', bg: 'bg-warning-100', border: 'border-warning-700/30' };
+  if (utilization >= 90)  return { bar: 'bg-warning-700', text: 'text-warning-700', bg: 'bg-warning-100', border: 'border-warning-700/30' };
   return { bar: 'bg-error-700', text: 'text-error-700', bg: 'bg-error-100', border: 'border-error-700/30' };
 }
 
 function getHealthLabel(utilization: number): string {
   if (utilization >= 150) return 'Healthy';
   if (utilization >= 100) return 'Adequate';
-  if (utilization >= 90) return 'Low';
+  if (utilization >= 90)  return 'Low';
   return 'Critical';
 }
 
-interface TooltipProps {
+interface InlineTooltipProps {
   children: React.ReactNode;
   content: string;
 }
 
-function Tooltip({ children, content }: TooltipProps) {
+function InlineTooltip({ children, content }: InlineTooltipProps) {
   const [visible, setVisible] = useState(false);
   return (
-    <span
-      className="relative inline-flex items-center"
+    <span className="relative inline-flex items-center gap-1"
       onMouseEnter={() => setVisible(true)}
       onMouseLeave={() => setVisible(false)}
     >
@@ -69,6 +68,27 @@ export default function LiquidityBufferWidget({
   const requiredFillPct = totalNAV > 0 ? (requiredBuffer / totalNAV) * 100 : 0;
   const deployedPct = Math.max(0, 100 - fillPct);
 
+  // Bar hover tooltip state
+  const barRef = useRef<HTMLDivElement>(null);
+  const [barTooltip, setBarTooltip] = useState<{ x: number; label: string } | null>(null);
+
+  const handleBarMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = barRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const pct = ((e.clientX - rect.left) / rect.width) * 100;
+    const x = e.clientX - rect.left;
+
+    let label: string;
+    if (pct <= requiredFillPct) {
+      label = `Protocol buffer: ${fmt(lockedBuffer)} USDC locked (${bufferPct}% of NAV)`;
+    } else if (pct <= fillPct) {
+      label = `Excess idle: ${fmt(Math.max(0, idleBalance - requiredBuffer))} USDC above required`;
+    } else {
+      label = `Deployed: ${fmt(Math.max(0, totalNAV - idleBalance))} USDC (${deployedPct.toFixed(1)}% of NAV)`;
+    }
+    setBarTooltip({ x, label });
+  };
+
   return (
     <div className={`rounded-[18px] border ${health.border} ${health.bg} p-4 space-y-3`}>
       {/* Title row */}
@@ -84,39 +104,54 @@ export default function LiquidityBufferWidget({
 
       {/* Buffer bar */}
       <div className="space-y-1.5">
-        {/* Bar with hover segments */}
-        <div className="relative h-4 rounded-full bg-slate-200/60 overflow-hidden border border-slate-200/50">
-          {/* Deployed (right side, fills from right) */}
-          <Tooltip content={`Deployed: ${fmt(totalNAV - idleBalance)} USDC (${deployedPct.toFixed(1)}% of NAV)`}>
+        {/* Bar */}
+        <div
+          ref={barRef}
+          className="relative h-4 rounded-full bg-slate-200/60 overflow-visible border border-slate-200/50 cursor-default"
+          onMouseMove={handleBarMouseMove}
+          onMouseLeave={() => setBarTooltip(null)}
+        >
+          {/* Inner clip container so segments stay rounded */}
+          <div className="absolute inset-0 rounded-full overflow-hidden">
+            {/* Deployed capital — fills from right */}
             <div
-              className="absolute right-0 top-0 h-full bg-slate-300/50 transition-all cursor-default"
+              className="absolute right-0 top-0 h-full bg-slate-300/60 transition-all"
               style={{ width: `${deployedPct}%` }}
             />
-          </Tooltip>
 
-          {/* Idle above required (between locked and total idle) */}
-          {fillPct > requiredFillPct && (
-            <Tooltip content={`Excess idle: ${fmt(idleBalance - requiredBuffer)} USDC above required buffer`}>
+            {/* Excess idle — between locked threshold and total idle */}
+            {fillPct > requiredFillPct && (
               <div
-                className="absolute top-0 h-full bg-teal-300/70 transition-all cursor-default"
+                className="absolute top-0 h-full bg-teal-300/70 transition-all"
                 style={{ left: `${requiredFillPct}%`, width: `${fillPct - requiredFillPct}%` }}
               />
-            </Tooltip>
-          )}
+            )}
 
-          {/* Locked buffer portion */}
-          <Tooltip content={`Protocol buffer: ${fmt(lockedBuffer)} USDC locked (${bufferPct}% of NAV — cannot be deployed)`}>
+            {/* Locked protocol buffer */}
             <div
-              className={`absolute left-0 top-0 h-full ${health.bar} opacity-80 transition-all cursor-default`}
+              className={`absolute left-0 top-0 h-full ${health.bar} opacity-80 transition-all`}
               style={{ width: `${Math.min(100, requiredFillPct)}%` }}
             />
-          </Tooltip>
 
-          {/* Required marker line */}
-          <div
-            className="absolute top-0 h-full w-0.5 bg-white/80 transition-all pointer-events-none"
-            style={{ left: `${Math.min(99.5, requiredFillPct)}%` }}
-          />
+            {/* Required threshold divider */}
+            <div
+              className="absolute top-0 h-full w-0.5 bg-white/80 pointer-events-none"
+              style={{ left: `${Math.min(99.5, requiredFillPct)}%` }}
+            />
+          </div>
+
+          {/* Floating tooltip */}
+          {barTooltip && (
+            <div
+              className="absolute -top-9 z-50 pointer-events-none"
+              style={{ left: Math.min(barTooltip.x, (barRef.current?.offsetWidth ?? 0) - 10) }}
+            >
+              <div className="relative -translate-x-1/2 whitespace-nowrap rounded-[8px] bg-ink-900 text-white text-[10px] px-2.5 py-1.5 shadow-lg">
+                {barTooltip.label}
+                <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-ink-900" />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Axis labels */}
@@ -141,15 +176,14 @@ export default function LiquidityBufferWidget({
             </div>
           )}
           <div className="flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-slate-300/50 border border-slate-300" />
+            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-slate-300/60 border border-slate-300" />
             <span className="text-[10px] text-slate-500">Deployed capital</span>
           </div>
-          <Tooltip content="Buffer utilization = actual idle ÷ required buffer × 100">
-            <span className="flex items-center gap-1 text-[10px] text-slate-400 cursor-default">
-              <Info className="w-3 h-3" />
-              Coverage: <span className={`font-semibold ${health.text} ml-0.5`}>{bufferUtilization.toFixed(0)}%</span>
-            </span>
-          </Tooltip>
+          <InlineTooltip content="Buffer coverage = actual idle ÷ required buffer × 100">
+            <Info className="w-3 h-3 text-slate-400 cursor-default" />
+            <span className="text-[10px] text-slate-400">Coverage:</span>
+            <span className={`text-[10px] font-semibold ${health.text}`}>{bufferUtilization.toFixed(0)}%</span>
+          </InlineTooltip>
         </div>
       </div>
 

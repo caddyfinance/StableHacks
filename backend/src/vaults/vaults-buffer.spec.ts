@@ -195,9 +195,11 @@ describe('VaultsService — buffer enforcement', () => {
         findMany: jest.fn().mockResolvedValue([]),
       },
       consentRequest: {
+        findUnique: jest.fn(),
         findFirst: jest.fn().mockResolvedValue(null),
         count: jest.fn().mockResolvedValue(0),
         create: jest.fn(),
+        update: jest.fn(),
       },
       deposit: { findMany: jest.fn().mockResolvedValue([]) },
     };
@@ -206,6 +208,7 @@ describe('VaultsService — buffer enforcement', () => {
     vaultProgramMock = {
       getAminaBankWallet: jest.fn().mockReturnValue('BANK_WALLET'),
       updateMandate: jest.fn().mockResolvedValue({ txSignature: 'SIM_TX_123' }),
+      sendUsdc: jest.fn().mockResolvedValue({ txSignature: 'SEND_TX_123' }),
     };
 
     // Dynamic import to avoid module-resolution issues during tests
@@ -605,6 +608,156 @@ describe('VaultsService — buffer enforcement', () => {
     it('throws BadRequestException when vault has no mandate', async () => {
       prismaMock.vault.findUnique.mockResolvedValue({ ...makeVault(), mandate: null });
       await expect(service.syncMandateToChain('VLT-TEST')).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  // ── getMandateHistory ────────────────────────────────────────────────────
+
+  describe('getMandateHistory', () => {
+    it('returns all rule records (active + superseded)', async () => {
+      prismaMock.vault.findUnique.mockResolvedValue(makeVault());
+      const allRules = [
+        { id: '1', ruleType: 'liquidity_buffer', params: { bps: 1000 }, status: 'superseded', version: 1, vaultId: 'VLT-TEST' },
+        { id: '2', ruleType: 'liquidity_buffer', params: { bps: 1500 }, status: 'superseded', version: 2, vaultId: 'VLT-TEST' },
+        { id: '3', ruleType: 'liquidity_buffer', params: { bps: 2000 }, status: 'active',     version: 3, vaultId: 'VLT-TEST' },
+      ];
+      prismaMock.mandateRule.findMany.mockResolvedValue(allRules);
+
+      const history = await service.getMandateHistory('VLT-TEST');
+      expect(history).toHaveLength(3);
+      expect(history.some((r: any) => r.status === 'superseded')).toBe(true);
+      expect(history.some((r: any) => r.status === 'active')).toBe(true);
+    });
+
+    it('returns empty array when no rules exist', async () => {
+      prismaMock.vault.findUnique.mockResolvedValue(makeVault());
+      prismaMock.mandateRule.findMany.mockResolvedValue([]);
+
+      const history = await service.getMandateHistory('VLT-TEST');
+      expect(history).toHaveLength(0);
+    });
+
+    it('throws NotFoundException for unknown vault', async () => {
+      prismaMock.vault.findUnique.mockResolvedValue(null);
+      await expect(service.getMandateHistory('UNKNOWN')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('includes rules across all versions in chronological order', async () => {
+      prismaMock.vault.findUnique.mockResolvedValue(makeVault());
+      const rules = [
+        { id: '3', ruleType: 'consent_threshold', params: { amount: 500000 }, status: 'active',     version: 2, vaultId: 'VLT-TEST', createdAt: new Date('2024-02-01') },
+        { id: '1', ruleType: 'consent_threshold', params: { amount: 250000 }, status: 'superseded', version: 1, vaultId: 'VLT-TEST', createdAt: new Date('2024-01-01') },
+        { id: '2', ruleType: 'liquidity_buffer',  params: { bps: 1000 },      status: 'superseded', version: 1, vaultId: 'VLT-TEST', createdAt: new Date('2024-01-01') },
+      ];
+      prismaMock.mandateRule.findMany.mockResolvedValue(rules);
+
+      const history = await service.getMandateHistory('VLT-TEST');
+      expect(history).toHaveLength(3);
+      expect(history[0].id).toBe('3'); // most recent first (mock returns as-is)
+    });
+  });
+
+  // ── processWithdrawal — buffer enforcement ───────────────────────────────
+
+  describe('processWithdrawal — liquidity buffer', () => {
+    const makeWithdrawalRequest = (overrides: Partial<{
+      requestId: string;
+      vaultId: string;
+      amount: number;
+      status: string;
+      actionType: string;
+      details: any;
+      initiator: string;
+    }> = {}) => ({
+      requestId: 'WDR-001',
+      vaultId: 'VLT-TEST',
+      amount: 10_000,
+      status: 'pending',
+      actionType: 'WITHDRAWAL',
+      details: { destinationWallet: 'DEST_WALLET' },
+      initiator: 'client',
+      ...overrides,
+    });
+
+    it('blocks withdrawal that would leave post-idle below required buffer', async () => {
+      // NAV=1_000_000, idle=100_000, buffer=10% → required=90_000 post-withdrawal
+      // redeem 20_000 → post_idle=80_000, post_NAV=980_000, post_required=98_000 → violation
+      const request = makeWithdrawalRequest({ amount: 20_000 });
+      prismaMock.consentRequest.findUnique.mockResolvedValue(request);
+      prismaMock.vault.findUnique.mockResolvedValue(
+        makeVault({ idleBalance: 100_000, totalNAV: 1_000_000 })
+      );
+      prismaMock.mandate.findUnique.mockResolvedValue(makeMandate({ liquidityBufferBps: 1000 }));
+
+      await expect(service.processWithdrawal('WDR-001')).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('emits WITHDRAWAL_BLOCKED when buffer would be violated', async () => {
+      const request = makeWithdrawalRequest({ amount: 20_000 });
+      prismaMock.consentRequest.findUnique.mockResolvedValue(request);
+      prismaMock.vault.findUnique.mockResolvedValue(
+        makeVault({ idleBalance: 100_000, totalNAV: 1_000_000 })
+      );
+      prismaMock.mandate.findUnique.mockResolvedValue(makeMandate({ liquidityBufferBps: 1000 }));
+
+      await expect(service.processWithdrawal('WDR-001')).rejects.toBeInstanceOf(BadRequestException);
+      expect(eventsMock.emit).toHaveBeenCalledWith(
+        expect.objectContaining({ actionType: 'WITHDRAWAL_BLOCKED', result: 'failure' }),
+      );
+    });
+
+    it('allows withdrawal when post-idle meets buffer on post-NAV', async () => {
+      // NAV=1_000_000, idle=500_000, buffer=10%
+      // redeem 50_000 → post_idle=450_000, post_NAV=950_000, post_required=95_000 → 450k > 95k ✓
+      const request = makeWithdrawalRequest({ amount: 50_000 });
+      prismaMock.consentRequest.findUnique.mockResolvedValue(request);
+      const vault = makeVault({ idleBalance: 500_000, totalNAV: 1_000_000 });
+      prismaMock.vault.findUnique.mockResolvedValue(vault);
+      prismaMock.mandate.findUnique.mockResolvedValue(makeMandate({ liquidityBufferBps: 1000 }));
+      prismaMock.vault.update.mockResolvedValue({ ...vault, idleBalance: 450_000, totalNAV: 950_000 });
+      prismaMock.consentRequest.update.mockResolvedValue({ ...request, status: 'approved' });
+
+      const result = await service.processWithdrawal('WDR-001');
+      expect(result).toBeDefined();
+    });
+
+    it('uses post-withdrawal NAV (not current NAV) to calculate required buffer', async () => {
+      // This is the key invariant: post_required = post_NAV * bps / 10000 (not current_NAV)
+      // NAV=700, idle=100, buffer=10% → redeem 40 → post_idle=60, post_NAV=660, post_required=66 → violation
+      const request = makeWithdrawalRequest({ amount: 40 });
+      prismaMock.consentRequest.findUnique.mockResolvedValue(request);
+      prismaMock.vault.findUnique.mockResolvedValue(
+        makeVault({ idleBalance: 100, totalNAV: 700 })
+      );
+      prismaMock.mandate.findUnique.mockResolvedValue(makeMandate({ liquidityBufferBps: 1000 }));
+
+      await expect(service.processWithdrawal('WDR-001')).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('skips buffer check when vault has no mandate', async () => {
+      // Without a mandate, withdrawal proceeds if idle is sufficient
+      const request = makeWithdrawalRequest({ amount: 5_000 });
+      prismaMock.consentRequest.findUnique.mockResolvedValue(request);
+      const vault = makeVault({ idleBalance: 10_000, totalNAV: 10_000 });
+      prismaMock.vault.findUnique.mockResolvedValue(vault);
+      prismaMock.mandate.findUnique.mockResolvedValue(null);
+      prismaMock.vault.update.mockResolvedValue({ ...vault, idleBalance: 5_000, totalNAV: 5_000 });
+      prismaMock.consentRequest.update.mockResolvedValue({ ...request, status: 'approved' });
+
+      const result = await service.processWithdrawal('WDR-001');
+      expect(result).toBeDefined();
+    });
+
+    it('throws NotFoundException for unknown request', async () => {
+      prismaMock.consentRequest.findUnique.mockResolvedValue(null);
+      await expect(service.processWithdrawal('UNKNOWN')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('throws BadRequestException when request is not pending', async () => {
+      prismaMock.consentRequest.findUnique.mockResolvedValue(
+        makeWithdrawalRequest({ status: 'approved' })
+      );
+      await expect(service.processWithdrawal('WDR-001')).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 });

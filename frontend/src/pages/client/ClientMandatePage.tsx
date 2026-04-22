@@ -5,6 +5,7 @@ import Card from '../../components/Card';
 import StatusBadge from '../../components/StatusBadge';
 import NotVerified from '../../components/NotVerified';
 import LiquidityBufferWidget from '../../components/LiquidityBufferWidget';
+import MandateRuleCard from '../../components/MandateRuleCard';
 import { FileCheck, Eye, CheckCircle } from 'lucide-react';
 
 const fmt = (v: number) =>
@@ -17,6 +18,7 @@ export default function ClientMandatePage() {
 
   const [loading, setLoading] = useState(true);
   const [mandate, setMandate] = useState<any>(null);
+  const [mandateRules, setMandateRules] = useState<any[]>([]);
   const [strategies, setStrategies] = useState<any[]>([]);
   const [snapshot, setSnapshot] = useState<any>(null);
 
@@ -35,11 +37,13 @@ export default function ClientMandatePage() {
       api.getMandate(activeVaultId).catch(() => null),
       api.getStrategies().catch(() => []),
       api.getSnapshot(activeVaultId).catch(() => null),
+      api.getMandateRules(activeVaultId).catch(() => []),
     ])
-      .then(([mandateData, stratData, snapData]) => {
+      .then(([mandateData, stratData, snapData, rulesData]) => {
         if (mandateData && mandateData.status) setMandate(mandateData);
         setStrategies(stratData || []);
         setSnapshot(snapData);
+        setMandateRules(rulesData || []);
       })
       .finally(() => setLoading(false));
   }, [activeVaultId]);
@@ -83,6 +87,7 @@ export default function ClientMandatePage() {
   const allowedStrategies: string[] = mandate.allowedStrategies || [];
   const idleBuffer = Math.round((mandate.liquidityBufferBps || 0) / 100);
 
+  // Build strategy rows for fallback (when no mandate rules yet)
   const strategyRows = strategies.map((s) => {
     const id = s.strategyId || s.id;
     const allocBps = maxAlloc[id] ?? 0;
@@ -104,6 +109,7 @@ export default function ClientMandatePage() {
   // Live USDC figures from snapshot
   const lockedBuffer = snapshot?.requiredBuffer ?? (snapshot?.totalNAV ? (snapshot.totalNAV * (mandate.liquidityBufferBps ?? 1000)) / 10000 : null);
   const deployable = snapshot?.deployableBalance ?? null;
+  const totalNAVForRules = snapshot?.totalNAV ?? null;
 
   return (
     <div className="p-6 space-y-6">
@@ -177,25 +183,41 @@ export default function ClientMandatePage() {
         </div>
       ) : null}
 
-      {/* Strategy Allocations */}
-      <Card title="Strategy Allocation Limits" subtitle="Maximum allocation per strategy as defined in your mandate">
-        {strategyRows.length > 0 ? (
-          <div className="space-y-3">
-            {strategyRows.map((s) => (
-              <div key={s.id} className="flex items-center justify-between bg-slate-100 rounded-md px-4 py-3">
-                <div>
-                  <p className="text-xs text-ink-900 font-medium">{s.name}</p>
-                  <p className="text-[10px] text-slate-500 font-mono">{s.id}</p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <StatusBadge status={s.status} />
-                  <span className="text-sm font-mono text-ink-900 font-semibold w-12 text-right">{s.allocPct}%</span>
-                </div>
-              </div>
+      {/* Mandate Rules — typed rule registry cards */}
+      <Card title="Investment Rules" subtitle="Active mandate controls enforced by the protocol">
+        {mandateRules.length > 0 ? (
+          <div className="space-y-2">
+            {mandateRules.map((rule: any) => (
+              <MandateRuleCard
+                key={rule.id}
+                ruleType={rule.ruleType}
+                params={rule.params}
+                status={rule.status}
+                version={rule.version}
+                navContext={totalNAVForRules ?? undefined}
+              />
             ))}
           </div>
         ) : (
-          <p className="text-xs text-slate-500">No strategies configured</p>
+          /* Fallback to flat strategy rows when no typed rules exist yet */
+          strategyRows.length > 0 ? (
+            <div className="space-y-3">
+              {strategyRows.map((s) => (
+                <div key={s.id} className="flex items-center justify-between bg-slate-100 rounded-md px-4 py-3">
+                  <div>
+                    <p className="text-xs text-ink-900 font-medium">{s.name}</p>
+                    <p className="text-[10px] text-slate-500 font-mono">{s.id}</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <StatusBadge status={s.status} />
+                    <span className="text-sm font-mono text-ink-900 font-semibold w-12 text-right">{s.allocPct}%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">No rules configured</p>
+          )
         )}
       </Card>
 

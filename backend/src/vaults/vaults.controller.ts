@@ -97,7 +97,8 @@ export class VaultsController {
     @Req() req: Request,
   ) {
     const callerWallet = (req.headers as any)['x-wallet'] as string | undefined;
-    return this.service.updateMandate(id, body, callerWallet || 'admin');
+    const callerRole = (req.headers as any)['x-role'] as string || 'admin';
+    return this.service.updateMandate(id, body, callerWallet || callerRole);
   }
 
   @Get(':id/mandate/rules')
