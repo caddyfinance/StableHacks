@@ -3,27 +3,87 @@ import { api } from '../lib/api';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import StatusBadge from '../components/StatusBadge';
-import { Eye, FileCheck } from 'lucide-react';
+import LiquidityBufferWidget from '../components/LiquidityBufferWidget';
+import { FileCheck, Edit3, Save, X, RefreshCw, Link, CheckCircle, Loader2, ChevronDown } from 'lucide-react';
+
+const fmt = (v: number) =>
+  v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function MandatePage() {
-  const { activeVaultId } = useStore();
+  const { activeVaultId, setActiveVaultId, notify } = useStore();
   const [loading, setLoading] = useState(true);
   const [mandate, setMandate] = useState<any>(null);
   const [strategies, setStrategies] = useState<any[]>([]);
+  const [snapshot, setSnapshot] = useState<any>(null);
+  const [vaults, setVaults] = useState<any[]>([]);
 
+  // Edit state
+  const [editing, setEditing] = useState(false);
+  const [editBps, setEditBps] = useState(1000);
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  // Load vault list once on mount
   useEffect(() => {
+    api.getVaults().catch(() => []).then((list: any[]) => {
+      setVaults(list || []);
+      if (!activeVaultId && list.length > 0) {
+        setActiveVaultId(list[0].vaultId);
+      }
+    });
+  }, []);
+
+  const reload = () => {
     if (!activeVaultId) return;
     setLoading(true);
+    setMandate(null);
     Promise.all([
       api.getMandate(activeVaultId).catch(() => null),
       api.getStrategies().catch(() => []),
+      api.getSnapshot(activeVaultId).catch(() => null),
     ])
-      .then(([mandateData, strategiesData]) => {
-        if (mandateData && mandateData.status) setMandate(mandateData);
+      .then(([mandateData, strategiesData, snapData]) => {
+        if (mandateData && mandateData.status) {
+          setMandate(mandateData);
+          setEditBps(mandateData.liquidityBufferBps ?? 1000);
+        }
         setStrategies(strategiesData || []);
+        setSnapshot(snapData);
       })
       .finally(() => setLoading(false));
-  }, [activeVaultId]);
+  };
+
+  useEffect(() => { reload(); }, [activeVaultId]);
+
+  const handleSave = async () => {
+    if (!activeVaultId) return;
+    setSaving(true);
+    try {
+      const updated = await api.updateMandate(activeVaultId, { liquidityBufferBps: editBps });
+      setMandate(updated);
+      setEditing(false);
+      notify('success', `Mandate updated — buffer set to ${editBps / 100}%`);
+      api.getSnapshot(activeVaultId).then(setSnapshot).catch(() => {});
+    } catch (err: any) {
+      notify('error', err?.message || err?.reason || 'Failed to update mandate');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSyncToChain = async () => {
+    if (!activeVaultId) return;
+    setSyncing(true);
+    try {
+      const res = await api.syncMandateToChain(activeVaultId);
+      notify('success', `Synced to chain — tx: ${(res.txSignature || '').slice(0, 16)}...`);
+      reload();
+    } catch (err: any) {
+      notify('error', err?.message || 'Chain sync failed');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   if (!activeVaultId) {
     return (
@@ -49,7 +109,24 @@ export default function MandatePage() {
           </div>
           <div>
             <h1 className="text-lg font-semibold text-ink-900">Mandate Details</h1>
-            <p className="text-xs text-slate-500 mt-0.5">Vault {activeVaultId}</p>
+            {vaults.length > 1 ? (
+              <div className="relative mt-1 inline-flex items-center">
+                <select
+                  value={activeVaultId || ''}
+                  onChange={(e) => setActiveVaultId(e.target.value)}
+                  className="appearance-none text-xs text-teal-700 font-mono bg-teal-50 border border-teal-200 rounded-[8px] pl-2.5 pr-6 py-1 cursor-pointer hover:bg-teal-100 transition-colors focus:outline-none focus:ring-1 focus:ring-teal-400"
+                >
+                  {vaults.map((v: any) => (
+                    <option key={v.vaultId} value={v.vaultId}>
+                      {v.vaultId}{v.clientReference ? ` — ${v.clientReference}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-1.5 w-3 h-3 text-teal-600 pointer-events-none" />
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 mt-0.5 font-mono">{activeVaultId}</p>
+            )}
           </div>
         </div>
         <div className="bg-warning-100 border border-warning-700/20 rounded-lg p-4">
@@ -66,7 +143,6 @@ export default function MandatePage() {
   const blockedStrategies: string[] = mandate.blockedStrategies || [];
   const idleBuffer = Math.round((mandate.liquidityBufferBps || 0) / 100);
 
-  // Build allocation rows from maxAllocationBps keys merged with strategies list
   const allocationRows = Object.entries(maxAlloc).map(([stratId, bps]) => {
     const strat = strategyMap.get(stratId);
     const name = strat?.name || stratId;
@@ -74,18 +150,19 @@ export default function MandatePage() {
     const isBlocked = blockedStrategies.includes(stratId);
     return { id: stratId, name, alloc: allocPct, status: isBlocked ? 'blocked' : 'approved' };
   });
-
-  // Also include any strategies that appear only in blocked/allowed but not in maxAlloc
   const allocKeys = new Set(Object.keys(maxAlloc));
   [...blockedStrategies, ...allowedStrategies].forEach((stratId) => {
     if (!allocKeys.has(stratId)) {
       const strat = strategyMap.get(stratId);
-      const name = strat?.name || stratId;
-      const isBlocked = blockedStrategies.includes(stratId);
-      allocationRows.push({ id: stratId, name, alloc: 0, status: isBlocked ? 'blocked' : 'approved' });
+      allocationRows.push({ id: stratId, name: strat?.name || stratId, alloc: 0, status: blockedStrategies.includes(stratId) ? 'blocked' : 'approved' });
       allocKeys.add(stratId);
     }
   });
+
+  // Live USDC preview for slider
+  const previewRequired = snapshot?.totalNAV != null ? (snapshot.totalNAV * editBps) / 10000 : null;
+  const previewDeployable = snapshot?.totalNAV != null ? Math.max(0, (snapshot.idleBalance ?? 0) - previewRequired!) : null;
+  const previewUtilization = previewRequired && previewRequired > 0 ? ((snapshot?.idleBalance ?? 0) / previewRequired) * 100 : 0;
 
   return (
     <div className="p-6 space-y-6">
@@ -97,15 +174,171 @@ export default function MandatePage() {
           </div>
           <div>
             <h1 className="text-lg font-semibold text-ink-900">Mandate Details</h1>
-            <p className="text-xs text-slate-500 mt-0.5">Vault {activeVaultId}</p>
+            {/* Vault selector */}
+            {vaults.length > 1 ? (
+              <div className="relative mt-1 inline-flex items-center">
+                <select
+                  value={activeVaultId || ''}
+                  onChange={(e) => { setActiveVaultId(e.target.value); setEditing(false); }}
+                  className="appearance-none text-xs text-teal-700 font-mono bg-teal-50 border border-teal-200 rounded-[8px] pl-2.5 pr-6 py-1 cursor-pointer hover:bg-teal-100 transition-colors focus:outline-none focus:ring-1 focus:ring-teal-400"
+                >
+                  {vaults.map((v: any) => (
+                    <option key={v.vaultId} value={v.vaultId}>
+                      {v.vaultId}{v.clientReference ? ` — ${v.clientReference}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-1.5 w-3 h-3 text-teal-600 pointer-events-none" />
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 mt-0.5 font-mono">{activeVaultId}</p>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Version badge */}
+          {mandate.version && (
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-200">
+              v{mandate.version}
+            </span>
+          )}
+          {/* On-chain sync badge */}
+          {mandate.onChainSynced ? (
+            <span className="flex items-center gap-1 text-[10px] font-medium px-2.5 py-1 rounded-md bg-success-100 text-success-700 border border-success-700/20">
+              <CheckCircle className="w-3 h-3" /> On-Chain Synced
+            </span>
+          ) : (
+            <span className="text-[10px] font-medium px-2.5 py-1 rounded-md bg-warning-100 text-warning-700 border border-warning-700/20">
+              Not Synced
+            </span>
+          )}
           <StatusBadge status={mandate.status} size="md" />
-          <span className="flex items-center gap-1.5 text-[10px] font-medium px-2.5 py-1 rounded-md bg-slate-100 text-slate-500 border border-slate-200">
-            <Eye className="w-3 h-3" /> View Only — Set by Client
-          </span>
+          <button onClick={() => reload()} className="flex items-center gap-1.5 text-[10px] text-slate-500 hover:text-teal-700 transition-colors">
+            <RefreshCw className="w-3 h-3" />
+          </button>
         </div>
+      </div>
+
+      {/* Liquidity Buffer Card — editable */}
+      <div className="bg-white border border-slate-200 rounded-[18px] shadow-1 p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-ink-900">Liquidity Buffer</h3>
+            <p className="text-[10px] text-slate-500 mt-0.5">Protocol minimum: 10% · Cannot be set below 10%</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {!editing ? (
+              <>
+                <button
+                  onClick={() => { setEditing(true); setEditBps(mandate.liquidityBufferBps ?? 1000); }}
+                  className="flex items-center gap-1.5 text-xs text-teal-700 hover:text-teal-800 bg-teal-50 border border-teal-200 rounded-[10px] px-3 py-1.5 transition-colors">
+                  <Edit3 className="w-3 h-3" /> Edit Buffer
+                </button>
+                {!mandate.onChainSynced && (
+                  <button
+                    onClick={handleSyncToChain}
+                    disabled={syncing}
+                    className="flex items-center gap-1.5 text-xs text-slate-700 hover:text-ink-900 bg-white border border-slate-200 rounded-[10px] px-3 py-1.5 transition-colors disabled:opacity-50">
+                    {syncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link className="w-3 h-3" />}
+                    Sync to Chain
+                  </button>
+                )}
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button onClick={() => setEditing(false)} className="flex items-center gap-1 text-xs text-slate-500 hover:text-ink-900 transition-colors">
+                  <X className="w-3 h-3" /> Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving || editBps < 1000}
+                  className="flex items-center gap-1.5 text-xs text-white bg-teal-700 hover:bg-teal-800 disabled:bg-slate-200 disabled:text-slate-500 rounded-[10px] px-3 py-1.5 transition-colors">
+                  {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                  Save Changes
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {editing ? (
+          <div className="space-y-4">
+            {/* Slider */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs text-slate-700 font-medium">Buffer: <span className="text-teal-700 font-bold">{editBps / 100}%</span></label>
+                <span className="text-[10px] text-slate-500">Range: 10% – 50%</span>
+              </div>
+              <input
+                type="range"
+                min={1000}
+                max={5000}
+                step={100}
+                value={editBps}
+                onChange={(e) => setEditBps(Number(e.target.value))}
+                className="w-full accent-teal-700"
+              />
+              <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                <span>10% (min)</span>
+                <span>50% (max)</span>
+              </div>
+            </div>
+
+            {/* Live USDC preview */}
+            {snapshot?.totalNAV != null && previewRequired != null && (
+              <div className="bg-teal-50 rounded-[12px] p-3 space-y-1.5 text-xs">
+                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Live Preview (current NAV)</p>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Total NAV</span>
+                  <span className="text-ink-900 font-mono">{fmt(snapshot.totalNAV)} USDC</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Required buffer ({editBps / 100}%)</span>
+                  <span className="text-error-700 font-mono font-semibold">{fmt(previewRequired)} USDC locked</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Max deployable</span>
+                  <span className="text-teal-700 font-mono font-semibold">{fmt(previewDeployable!)} USDC</span>
+                </div>
+                {editBps < 1000 && (
+                  <p className="text-error-700 text-[10px] mt-1">Buffer cannot be set below 10% (protocol minimum)</p>
+                )}
+              </div>
+            )}
+
+            {/* Buffer widget preview */}
+            {snapshot?.totalNAV != null && previewRequired != null && (
+              <LiquidityBufferWidget
+                totalNAV={snapshot.totalNAV}
+                idleBalance={snapshot.idleBalance ?? 0}
+                requiredBuffer={previewRequired}
+                deployableBalance={previewDeployable!}
+                bufferUtilization={previewUtilization}
+                bufferBps={editBps}
+                variant="admin"
+              />
+            )}
+          </div>
+        ) : (
+          <>
+            {snapshot?.requiredBuffer != null ? (
+              <LiquidityBufferWidget
+                totalNAV={snapshot.totalNAV ?? 0}
+                idleBalance={snapshot.idleBalance ?? 0}
+                requiredBuffer={snapshot.requiredBuffer}
+                deployableBalance={snapshot.deployableBalance ?? 0}
+                bufferUtilization={snapshot.bufferUtilization ?? 0}
+                bufferBps={mandate.liquidityBufferBps ?? 1000}
+                variant="admin"
+              />
+            ) : (
+              <div className="bg-teal-50 rounded-[12px] p-3 text-center">
+                <p className="text-sm font-bold text-teal-700">{idleBuffer}%</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">of total NAV must remain idle</p>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Strategy Allocations */}
@@ -139,7 +372,7 @@ export default function MandatePage() {
             { label: 'Consent Threshold', value: `${(mandate.consentThreshold || 0).toLocaleString()} USDC`, desc: 'Actions above this require client approval' },
             { label: 'Min Idle Buffer', value: `${idleBuffer}%`, desc: 'Minimum capital kept undeployed' },
             { label: 'Leverage', value: mandate.leverageAllowed ? 'Permitted' : 'Not Permitted', desc: mandate.leverageAllowed ? 'Leveraged positions allowed' : 'No leveraged positions' },
-            { label: 'Status', value: mandate.status?.toUpperCase() || '—', desc: 'Current mandate state' },
+            { label: 'Mandate Version', value: `v${mandate.version || 1}`, desc: mandate.lastUpdatedBy ? `Last updated by ${mandate.lastUpdatedBy}` : 'Initial version' },
           ].map(({ label, value, desc }) => (
             <div key={label} className="bg-slate-100 rounded-md px-4 py-3">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">{label}</p>

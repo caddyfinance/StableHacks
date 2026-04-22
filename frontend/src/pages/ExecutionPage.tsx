@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import StatusBadge from '../components/StatusBadge';
+import LiquidityBufferWidget from '../components/LiquidityBufferWidget';
 import { TrendingUp, ArrowDownToLine, ArrowUpFromLine, Pause, RefreshCw, ExternalLink, CheckCircle, XCircle, Loader2, Wallet, Timer, ArrowRight } from 'lucide-react';
 
 const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
@@ -415,7 +416,16 @@ export default function ExecutionPage() {
                     <label className="block text-xs font-medium text-slate-700 mb-1.5">Amount (USDC)</label>
                     <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 250,000"
                       className="w-full bg-white border border-slate-200 rounded-[12px] px-3 py-2 text-sm text-ink-900 focus:outline-none focus:ring-teal-600/20 focus:border-teal-600 disabled:bg-slate-100 disabled:text-slate-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                    <p className="text-[10px] text-slate-700 mt-1">Available: {fmt(snapshot?.idleBalance)} USDC (vault segregated balance)</p>
+                    {(() => {
+                      const deployable = snapshot?.deployableBalance ?? snapshot?.idleBalance ?? 0;
+                      const locked = (snapshot?.idleBalance ?? 0) - deployable;
+                      return (
+                        <p className="text-[10px] text-slate-700 mt-1">
+                          Deployable: <span className="text-teal-700 font-semibold font-mono">{fmt(deployable)} USDC</span>
+                          {locked > 0 && <span className="ml-1 text-slate-400">({fmt(locked)} USDC locked in buffer)</span>}
+                        </p>
+                      );
+                    })()}
                   </div>
                   {selectedStrategy && amount && (
                     <div className="bg-teal-50 rounded-[12px] p-3 text-xs space-y-1.5">
@@ -452,11 +462,28 @@ export default function ExecutionPage() {
                       )}
                     </div>
                   )}
-                  <button onClick={handleDeploy} disabled={submitting || !selectedStrategy || !amount || (snapshot?.idleBalance || 0) <= 0}
-                    className="w-full bg-teal-700 hover:bg-teal-800 disabled:bg-slate-200 disabled:text-slate-500 text-white text-sm font-semibold rounded-[12px] py-2.5 transition-colors flex items-center justify-center gap-2">
-                    {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {submitting ? (isSolstice ? 'Executing on-chain...' : 'Validating & Deploying...') : (isSolstice ? 'Deploy to Solstice (On-Chain)' : 'Deploy to Strategy')}
-                  </button>
+                  {(() => {
+                    const deployable = snapshot?.deployableBalance ?? snapshot?.idleBalance ?? 0;
+                    const parsed = parseFloat(amount);
+                    const exceedsDeployable = !isNaN(parsed) && parsed > deployable && deployable >= 0;
+                    return (
+                      <>
+                        {exceedsDeployable && (
+                          <div className="bg-error-100 border border-error-700/20 rounded-[10px] p-2.5 flex items-center gap-2">
+                            <span className="text-[10px] text-error-700">
+                              Amount exceeds deployable balance ({fmt(deployable)} USDC). {fmt(Math.min((snapshot?.idleBalance ?? 0), snapshot?.requiredBuffer ?? 0))} USDC is locked in the liquidity buffer.
+                            </span>
+                          </div>
+                        )}
+                        <button onClick={handleDeploy}
+                          disabled={submitting || !selectedStrategy || !amount || deployable <= 0 || exceedsDeployable}
+                          className="w-full bg-teal-700 hover:bg-teal-800 disabled:bg-slate-200 disabled:text-slate-500 text-white text-sm font-semibold rounded-[12px] py-2.5 transition-colors flex items-center justify-center gap-2">
+                          {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                          {submitting ? (isSolstice ? 'Executing on-chain...' : 'Validating & Deploying...') : (isSolstice ? 'Deploy to Solstice (On-Chain)' : 'Deploy to Strategy')}
+                        </button>
+                      </>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -794,6 +821,20 @@ export default function ExecutionPage() {
                   ))}
                 </div>
 
+                {/* Buffer health row */}
+                {snapshot?.requiredBuffer != null && (
+                  <div className="border-t border-slate-200 pt-3 space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-700">Buffer Status</span>
+                      <StatusBadge status={snapshot?.bufferHealth || 'none'} />
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-700">Deployable</span>
+                      <span className="text-teal-700 font-mono font-semibold">{fmt(snapshot.deployableBalance ?? 0)} USDC</span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Vault ID */}
                 <div className="border-t border-slate-200 pt-3">
                   <div className="flex justify-between text-[10px]">
@@ -804,6 +845,21 @@ export default function ExecutionPage() {
               </div>
             )}
           </Card>
+
+          {/* Liquidity Buffer Widget */}
+          {snapshot?.requiredBuffer != null && (
+            <div className="mt-5">
+              <LiquidityBufferWidget
+                totalNAV={totalNAV}
+                idleBalance={snapshot.idleBalance ?? 0}
+                requiredBuffer={snapshot.requiredBuffer}
+                deployableBalance={snapshot.deployableBalance ?? 0}
+                bufferUtilization={snapshot.bufferUtilization ?? 0}
+                bufferBps={snapshot.bufferBps ?? 1000}
+                variant="admin"
+              />
+            </div>
+          )}
 
           {/* Solstice On-Chain Position */}
           {solsticePosition && (

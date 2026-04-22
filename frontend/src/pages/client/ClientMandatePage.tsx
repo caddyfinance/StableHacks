@@ -4,7 +4,11 @@ import { useStore } from '../../store/useStore';
 import Card from '../../components/Card';
 import StatusBadge from '../../components/StatusBadge';
 import NotVerified from '../../components/NotVerified';
-import { FileCheck, Eye } from 'lucide-react';
+import LiquidityBufferWidget from '../../components/LiquidityBufferWidget';
+import { FileCheck, Eye, CheckCircle } from 'lucide-react';
+
+const fmt = (v: number) =>
+  v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function ClientMandatePage() {
   const { activeVaultId, setActiveVaultId, clientInfo } = useStore();
@@ -14,8 +18,8 @@ export default function ClientMandatePage() {
   const [loading, setLoading] = useState(true);
   const [mandate, setMandate] = useState<any>(null);
   const [strategies, setStrategies] = useState<any[]>([]);
+  const [snapshot, setSnapshot] = useState<any>(null);
 
-  // Auto-select vault
   useEffect(() => {
     if (!activeVaultId) {
       api.getVaults().then((vaults) => {
@@ -24,17 +28,18 @@ export default function ClientMandatePage() {
     }
   }, [activeVaultId, setActiveVaultId]);
 
-  // Load mandate + strategies
   useEffect(() => {
     if (!activeVaultId) return;
     setLoading(true);
     Promise.all([
       api.getMandate(activeVaultId).catch(() => null),
       api.getStrategies().catch(() => []),
+      api.getSnapshot(activeVaultId).catch(() => null),
     ])
-      .then(([mandateData, stratData]) => {
+      .then(([mandateData, stratData, snapData]) => {
         if (mandateData && mandateData.status) setMandate(mandateData);
         setStrategies(stratData || []);
+        setSnapshot(snapData);
       })
       .finally(() => setLoading(false));
   }, [activeVaultId]);
@@ -78,7 +83,6 @@ export default function ClientMandatePage() {
   const allowedStrategies: string[] = mandate.allowedStrategies || [];
   const idleBuffer = Math.round((mandate.liquidityBufferBps || 0) / 100);
 
-  // Build strategy rows by matching API strategies to mandate allocations
   const strategyRows = strategies.map((s) => {
     const id = s.strategyId || s.id;
     const allocBps = maxAlloc[id] ?? 0;
@@ -89,15 +93,17 @@ export default function ClientMandatePage() {
     return { name: s.name || id, id, allocPct, status };
   });
 
-  // If there are allocation keys not in the strategies list, show them too
   Object.keys(maxAlloc).forEach((key) => {
     if (!strategyRows.find((r) => r.id === key)) {
       const allocPct = Math.round((maxAlloc[key] || 0) / 100);
       const isBlocked = blockedStrategies.includes(key);
-      const status = isBlocked ? 'blocked' : 'approved';
-      strategyRows.push({ name: key, id: key, allocPct, status });
+      strategyRows.push({ name: key, id: key, allocPct, status: isBlocked ? 'blocked' : 'approved' });
     }
   });
+
+  // Live USDC figures from snapshot
+  const lockedBuffer = snapshot?.requiredBuffer ?? (snapshot?.totalNAV ? (snapshot.totalNAV * (mandate.liquidityBufferBps ?? 1000)) / 10000 : null);
+  const deployable = snapshot?.deployableBalance ?? null;
 
   return (
     <div className="p-6 space-y-6">
@@ -113,12 +119,63 @@ export default function ClientMandatePage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Version badge */}
+          {mandate.version && (
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-200">
+              v{mandate.version}
+            </span>
+          )}
+          {/* On-chain sync badge */}
+          {mandate.onChainSynced ? (
+            <span className="flex items-center gap-1 text-[10px] font-medium px-2.5 py-1 rounded-md bg-success-100 text-success-700 border border-success-700/20">
+              <CheckCircle className="w-3 h-3" /> On-Chain
+            </span>
+          ) : (
+            <span className="text-[10px] font-medium px-2.5 py-1 rounded-md bg-slate-100 text-slate-500 border border-slate-200">
+              Pending Sync
+            </span>
+          )}
           <StatusBadge status={mandate.status} size="md" />
           <span className="flex items-center gap-1.5 text-[10px] font-medium px-2.5 py-1 rounded-md bg-slate-100 text-slate-500 border border-slate-200">
             <Eye className="w-3 h-3" /> Read Only
           </span>
         </div>
       </div>
+
+      {/* Liquidity Buffer Widget — client trust view */}
+      {snapshot?.requiredBuffer != null ? (
+        <LiquidityBufferWidget
+          totalNAV={snapshot.totalNAV ?? 0}
+          idleBalance={snapshot.idleBalance ?? 0}
+          requiredBuffer={snapshot.requiredBuffer}
+          deployableBalance={snapshot.deployableBalance ?? 0}
+          bufferUtilization={snapshot.bufferUtilization ?? 0}
+          bufferBps={mandate.liquidityBufferBps ?? 1000}
+          variant="client"
+        />
+      ) : lockedBuffer != null ? (
+        <div className="bg-teal-50 border border-teal-200/50 rounded-[18px] p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-ink-900">Liquidity Buffer — {idleBuffer}%</p>
+            <StatusBadge status="active" />
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="bg-white/70 rounded-[10px] p-2.5 text-center">
+              <p className="text-[10px] text-slate-500">Locked (reserved)</p>
+              <p className="text-sm font-bold font-mono text-error-700">{fmt(lockedBuffer)} USDC</p>
+            </div>
+            {deployable != null && (
+              <div className="bg-white/70 rounded-[10px] p-2.5 text-center">
+                <p className="text-[10px] text-slate-500">Deployable</p>
+                <p className="text-sm font-bold font-mono text-teal-700">{fmt(deployable)} USDC</p>
+              </div>
+            )}
+          </div>
+          <p className="text-[10px] text-slate-500 text-center">
+            Protocol-enforced. Fund managers cannot deploy the locked buffer portion.
+          </p>
+        </div>
+      ) : null}
 
       {/* Strategy Allocations */}
       <Card title="Strategy Allocation Limits" subtitle="Maximum allocation per strategy as defined in your mandate">
@@ -149,7 +206,7 @@ export default function ClientMandatePage() {
             { label: 'Consent Threshold', value: `${(mandate.consentThreshold || 0).toLocaleString()} USDC`, desc: 'Actions above this amount require your explicit approval' },
             { label: 'Min Idle Buffer', value: `${idleBuffer}%`, desc: 'Minimum capital that must stay undeployed' },
             { label: 'Leverage', value: mandate.leverageAllowed ? 'Permitted' : 'Not Permitted', desc: mandate.leverageAllowed ? 'Leveraged positions are allowed' : 'No leveraged positions' },
-            { label: 'Status', value: mandate.status?.toUpperCase() || '—', desc: 'Current mandate state' },
+            { label: 'Mandate Version', value: `v${mandate.version || 1}`, desc: mandate.onChainSynced ? 'Synced to Solana' : 'Not yet on-chain' },
           ].map(({ label, value, desc }) => (
             <div key={label} className="bg-slate-100 rounded-md px-4 py-3">
               <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">{label}</p>
@@ -193,8 +250,11 @@ export default function ClientMandatePage() {
             </li>
           ))}
           <li>Transactions above <span className="font-medium">{(mandate.consentThreshold || 0).toLocaleString()} USDC</span> require explicit consent.</li>
-          <li>A minimum idle buffer of <span className="font-medium">{idleBuffer}%</span> must be maintained.</li>
+          <li>A minimum idle buffer of <span className="font-medium">{idleBuffer}%</span> must be maintained at all times.</li>
           <li>Leverage is {mandate.leverageAllowed ? <span className="text-warning-700 font-medium">permitted</span> : <span className="text-success-700 font-medium">not permitted</span>}.</li>
+          {mandate.onChainSynced && (
+            <li>This mandate is <span className="text-success-700 font-medium">cryptographically anchored</span> to the Solana blockchain.</li>
+          )}
         </ul>
       </Card>
     </div>

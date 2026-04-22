@@ -5,6 +5,10 @@ declare_id!("5uPg5pi46gXErKcYWyqEAn2uSU68VZSUgvGTPZuVGwyA");
 /// SAS (Solana Attestation Service) Program ID
 pub const SAS_PROGRAM_ID: &str = "22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG";
 
+/// Protocol-mandated minimum liquidity buffer: 10% of total NAV must remain idle at all times.
+/// This floor is inviolable — no mandate can set liquidityBufferBps below this value.
+pub const PROTOCOL_LIQUIDITY_BUFFER_BPS: u16 = 1000;
+
 /// AMINA Institutional Segregated Yield Vault Program
 ///
 /// Integrates with Solana Attestation Service (SAS) for on-chain credential
@@ -249,6 +253,40 @@ pub mod amina_vault {
         Ok(())
     }
 
+    /// Update an existing mandate policy on a vault.
+    /// The liquidity buffer cannot be set below the protocol minimum (10%).
+    pub fn update_mandate(
+        ctx: Context<UpdateMandate>,
+        allowed_strategies: Vec<String>,
+        blocked_strategies: Vec<String>,
+        max_allocation_bps: Vec<u16>,
+        liquidity_buffer_bps: u16,
+        consent_threshold: u64,
+        leverage_allowed: bool,
+    ) -> Result<()> {
+        require!(
+            liquidity_buffer_bps >= PROTOCOL_LIQUIDITY_BUFFER_BPS,
+            VaultError::BelowProtocolMinimum
+        );
+
+        let mandate = &mut ctx.accounts.mandate;
+        mandate.allowed_strategies = allowed_strategies;
+        mandate.blocked_strategies = blocked_strategies;
+        mandate.max_allocation_bps = max_allocation_bps;
+        mandate.liquidity_buffer_bps = liquidity_buffer_bps;
+        mandate.consent_threshold = consent_threshold;
+        mandate.leverage_allowed = leverage_allowed;
+
+        emit!(MandateUpdated {
+            vault_id: ctx.accounts.vault.vault_id.clone(),
+            new_buffer_bps: liquidity_buffer_bps,
+            updated_by: ctx.accounts.authority.key(),
+            timestamp: Clock::get()?.unix_timestamp,
+        });
+
+        Ok(())
+    }
+
     // ─── Deposit ─────────────────────────────────────────────────
 
     /// Deposit funds into a segregated vault from an approved source.
@@ -290,11 +328,12 @@ pub mod amina_vault {
         require!(!mandate.blocked_strategies.contains(&strategy_id), VaultError::StrategyBlocked);
         require!(mandate.allowed_strategies.contains(&strategy_id), VaultError::StrategyNotAllowed);
 
+        // deployable = idle - required_buffer; amount must not exceed this ceiling
         let required_buffer = (vault.total_nav as u128 * mandate.liquidity_buffer_bps as u128 / 10000) as u64;
-        let post_idle = vault.idle_balance.checked_sub(amount).ok_or(VaultError::InsufficientBalance)?;
-        require!(post_idle >= required_buffer, VaultError::LiquidityBufferViolation);
+        let deployable = vault.idle_balance.saturating_sub(required_buffer);
+        require!(amount <= deployable, VaultError::LiquidityBufferViolation);
 
-        vault.idle_balance = post_idle;
+        vault.idle_balance = vault.idle_balance.checked_sub(amount).ok_or(VaultError::InsufficientBalance)?;
 
         emit!(AllocationExecuted {
             vault_id: vault.vault_id.clone(),
@@ -309,16 +348,25 @@ pub mod amina_vault {
     // ─── Redemption ──────────────────────────────────────────────
 
     /// Redeem funds from idle balance to an approved destination.
+    /// Enforces the liquidity buffer invariant: post-withdrawal idle must be >= buffer on post-withdrawal NAV.
     pub fn redeem(
         ctx: Context<Redeem>,
         amount: u64,
         destination: Pubkey,
     ) -> Result<()> {
         let vault = &mut ctx.accounts.vault;
+        let mandate = &ctx.accounts.mandate;
+
         require!(vault.idle_balance >= amount, VaultError::InsufficientBalance);
 
-        vault.idle_balance = vault.idle_balance.checked_sub(amount).unwrap();
-        vault.total_nav = vault.total_nav.checked_sub(amount).unwrap();
+        // Buffer check on post-withdrawal state (NAV also shrinks, so recalculate against post-NAV)
+        let post_idle = vault.idle_balance.checked_sub(amount).ok_or(VaultError::InsufficientBalance)?;
+        let post_nav  = vault.total_nav.checked_sub(amount).ok_or(VaultError::InsufficientBalance)?;
+        let post_required = (post_nav as u128 * mandate.liquidity_buffer_bps as u128 / 10000) as u64;
+        require!(post_idle >= post_required, VaultError::LiquidityBufferViolation);
+
+        vault.idle_balance = post_idle;
+        vault.total_nav = post_nav;
 
         emit!(RedemptionExecuted {
             vault_id: vault.vault_id.clone(),
@@ -537,7 +585,7 @@ pub struct CreateVault<'info> {
 #[derive(Accounts)]
 pub struct AttachMandate<'info> {
     #[account(
-        init,
+        init_if_needed,
         payer = authority,
         space = 8 + 32 + 512 + 2 + 8 + 1 + 1 + 64,
         seeds = [b"mandate", vault.key().as_ref()],
@@ -566,9 +614,20 @@ pub struct AllocateToStrategy<'info> {
 }
 
 #[derive(Accounts)]
+pub struct UpdateMandate<'info> {
+    #[account(mut, seeds = [b"mandate", vault.key().as_ref()], bump)]
+    pub mandate: Account<'info, Mandate>,
+    pub vault: Account<'info, Vault>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+}
+
+#[derive(Accounts)]
 pub struct Redeem<'info> {
     #[account(mut, has_one = authority)]
     pub vault: Account<'info, Vault>,
+    #[account(seeds = [b"mandate", vault.key().as_ref()], bump)]
+    pub mandate: Account<'info, Mandate>,
     pub authority: Signer<'info>,
 }
 
@@ -636,6 +695,14 @@ pub struct VaultCreated {
 #[event]
 pub struct MandateAttached {
     pub vault_id: String,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct MandateUpdated {
+    pub vault_id: String,
+    pub new_buffer_bps: u16,
+    pub updated_by: Pubkey,
     pub timestamp: i64,
 }
 
@@ -708,4 +775,25 @@ pub enum VaultError {
     SasAttestationMismatch,
     #[msg("Program instance is already initialized")]
     AlreadyInitialized,
+    #[msg("Liquidity buffer BPS cannot be set below protocol minimum (1000 = 10%)")]
+    BelowProtocolMinimum,
+}
+
+// ─── Vault Helper Methods ────────────────────────────────────────
+
+impl Vault {
+    /// USDC that must stay idle: (total_nav * buffer_bps) / 10000
+    pub fn required_buffer(&self, bps: u16) -> u64 {
+        (self.total_nav as u128 * bps as u128 / 10000) as u64
+    }
+
+    /// Maximum amount that can be allocated without violating the buffer
+    pub fn deployable_balance(&self, bps: u16) -> u64 {
+        self.idle_balance.saturating_sub(self.required_buffer(bps))
+    }
+
+    /// True when the current idle balance satisfies the buffer requirement
+    pub fn verify_buffer(&self, bps: u16) -> bool {
+        self.idle_balance >= self.required_buffer(bps)
+    }
 }

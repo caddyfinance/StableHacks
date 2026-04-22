@@ -13,6 +13,13 @@ export class VaultsService {
   private vaultProgram: VaultProgramService;
   private solstice: SolsticeService;
   private bankBalance = 50000; // Simulated AMINA Bank USD balance
+  private readonly PROTOCOL_BUFFER_BPS = 1000; // 10% — mirrors PROTOCOL_LIQUIDITY_BUFFER_BPS in the contract
+
+  /** deployable = idle - (totalNAV * bufferBps / 10000); floor at 0 */
+  private getDeployableBalance(idleBalance: number, totalNAV: number, bufferBps: number): number {
+    return Math.max(0, idleBalance - (totalNAV * bufferBps) / 10000);
+  }
+
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
     @Inject(EventsService) events: EventsService,
@@ -446,6 +453,14 @@ export class VaultsService {
 
     const totalDeployed = Object.values(strategyExposures).reduce((s, e) => s + e.amount, 0);
 
+    // Liquidity buffer metrics
+    const bufferBps = vault.mandate?.liquidityBufferBps ?? this.PROTOCOL_BUFFER_BPS;
+    const totalNAV = vault.idleBalance + totalDeployed + totalYield;
+    const requiredBuffer = (totalNAV * bufferBps) / 10000;
+    const deployableBalance = this.getDeployableBalance(vault.idleBalance, totalNAV, bufferBps);
+    const bufferUtilization = requiredBuffer > 0 ? (vault.idleBalance / requiredBuffer) * 100 : 100;
+    const bufferHealth = vault.idleBalance >= requiredBuffer ? 'healthy' : 'violation';
+
     // Cooldown allocations (being unwound, awaiting protocol cooldown)
     const cooldownAllocations = vault.allocations
       .filter((a) => a.status === 'cooldown')
@@ -475,8 +490,16 @@ export class VaultsService {
       vaultId: vault.vaultId, status: vault.status, paused: vault.paused, baseAsset: vault.baseAsset,
       clientReference: vault.clientReference, credentialId: vault.credentialId,
       idleBalance: vault.idleBalance, totalDeployed, totalYield, totalCooldown,
-      totalNAV: vault.idleBalance + totalDeployed + totalYield,
+      totalNAV,
+      // Liquidity buffer metrics
+      requiredBuffer,
+      deployableBalance,
+      bufferUtilization,
+      bufferHealth,
+      bufferBps,
       mandateStatus: vault.mandate?.status || 'none',
+      mandateVersion: vault.mandate?.version ?? 1,
+      onChainSynced: vault.mandate?.onChainSynced ?? false,
       strategyExposures,
       cooldownAllocations,
       pendingWithdrawals,
@@ -511,6 +534,181 @@ export class VaultsService {
     const mandate = await this.prisma.mandate.findUnique({ where: { vaultId } });
     if (!mandate) throw new NotFoundException('No mandate found');
     return mandate;
+  }
+
+  async updateMandate(vaultId: string, data: {
+    allowedStrategies?: string[]; blockedStrategies?: string[];
+    maxAllocationBps?: Record<string, number>; liquidityBufferBps?: number;
+    consentThreshold?: number; leverageAllowed?: boolean; approvedDestinations?: string[];
+  }, updatedBy: string) {
+    const vault = await this.prisma.vault.findUnique({ where: { vaultId }, include: { mandate: true } });
+    if (!vault) throw new NotFoundException('Vault not found');
+    if (!vault.mandate) throw new BadRequestException('No mandate attached to vault. Use POST to create one first.');
+
+    if (data.liquidityBufferBps !== undefined && data.liquidityBufferBps < this.PROTOCOL_BUFFER_BPS) {
+      throw new BadRequestException(
+        `liquidityBufferBps (${data.liquidityBufferBps}) cannot be below the protocol minimum of ${this.PROTOCOL_BUFFER_BPS} (10%).`
+      );
+    }
+
+    const oldMandate = { ...vault.mandate };
+
+    // Archive all current active rules (history trail)
+    await this.prisma.mandateRule.updateMany({
+      where: { vaultId, status: 'active' },
+      data: { status: 'superseded' },
+    });
+
+    // Create new typed rule rows
+    const newRules = this.buildRulesFromData(vaultId, data, updatedBy);
+    if (newRules.length > 0) {
+      await this.prisma.mandateRule.createMany({ data: newRules });
+    }
+
+    // Update the mandate envelope
+    const updated = await this.prisma.mandate.update({
+      where: { vaultId },
+      data: {
+        ...(data.allowedStrategies !== undefined && { allowedStrategies: data.allowedStrategies }),
+        ...(data.blockedStrategies !== undefined && { blockedStrategies: data.blockedStrategies }),
+        ...(data.maxAllocationBps !== undefined && { maxAllocationBps: data.maxAllocationBps }),
+        ...(data.liquidityBufferBps !== undefined && { liquidityBufferBps: data.liquidityBufferBps }),
+        ...(data.consentThreshold !== undefined && { consentThreshold: data.consentThreshold }),
+        ...(data.leverageAllowed !== undefined && { leverageAllowed: data.leverageAllowed }),
+        ...(data.approvedDestinations !== undefined && { approvedDestinations: data.approvedDestinations }),
+        version: { increment: 1 },
+        lastUpdatedBy: updatedBy,
+        onChainSynced: false,
+      },
+    });
+
+    const changes = this.diffMandate(oldMandate, updated);
+    await this.events.emit({
+      vaultId, actionType: 'MANDATE_UPDATED', actor: updatedBy, role: 'Admin',
+      result: 'success',
+      reason: `Mandate v${updated.version} saved for vault ${vaultId}. Changes: ${changes}. On-chain sync pending.`,
+    });
+
+    return updated;
+  }
+
+  async getMandateRules(vaultId: string) {
+    const vault = await this.prisma.vault.findUnique({ where: { vaultId } });
+    if (!vault) throw new NotFoundException('Vault not found');
+    return this.prisma.mandateRule.findMany({
+      where: { vaultId, status: 'active' },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getMandateHistory(vaultId: string) {
+    const vault = await this.prisma.vault.findUnique({ where: { vaultId } });
+    if (!vault) throw new NotFoundException('Vault not found');
+    return this.prisma.mandateRule.findMany({
+      where: { vaultId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getBufferHealth(vaultId: string) {
+    const vault = await this.prisma.vault.findUnique({
+      where: { vaultId },
+      include: { mandate: true, allocations: { where: { status: 'active' } } },
+    });
+    if (!vault) throw new NotFoundException('Vault not found');
+
+    const activeDeployed = vault.allocations.reduce((s, a) => s + a.amount, 0);
+    const totalNAV = vault.idleBalance + activeDeployed;
+    const bufferBps = vault.mandate?.liquidityBufferBps ?? this.PROTOCOL_BUFFER_BPS;
+    const requiredBuffer = (totalNAV * bufferBps) / 10000;
+    const deployableBalance = this.getDeployableBalance(vault.idleBalance, totalNAV, bufferBps);
+    const bufferUtilization = requiredBuffer > 0 ? (vault.idleBalance / requiredBuffer) * 100 : 100;
+    const shortfall = Math.max(0, requiredBuffer - vault.idleBalance);
+    const status = vault.idleBalance >= requiredBuffer ? 'healthy' : 'violation';
+
+    return {
+      vaultId,
+      totalNAV,
+      idleBalance: vault.idleBalance,
+      requiredBuffer,
+      deployableBalance,
+      bufferUtilization,
+      shortfall,
+      bufferBps,
+      status,
+      message: status === 'healthy'
+        ? `Buffer healthy. Idle: ${vault.idleBalance.toFixed(2)}, required: ${requiredBuffer.toFixed(2)}, deployable: ${deployableBalance.toFixed(2)}.`
+        : `Buffer violation. Idle: ${vault.idleBalance.toFixed(2)}, required: ${requiredBuffer.toFixed(2)}, shortfall: ${shortfall.toFixed(2)}.`,
+    };
+  }
+
+  async syncMandateToChain(vaultId: string, callerWallet?: string) {
+    const vault = await this.prisma.vault.findUnique({ where: { vaultId }, include: { mandate: true } });
+    if (!vault) throw new NotFoundException('Vault not found');
+    if (!vault.mandate) throw new BadRequestException('No mandate to sync');
+
+    // Attempt on-chain update via vault program
+    let txSig: string | undefined;
+    try {
+      const result = await this.vaultProgram.updateMandate(vault.programId, vaultId, vault.mandate);
+      txSig = result?.txSignature;
+    } catch (e: any) {
+      await this.events.emit({
+        vaultId, actionType: 'MANDATE_SYNC_FAILED', actor: callerWallet || 'admin', role: 'Admin',
+        result: 'failure', reason: `On-chain mandate sync failed for vault ${vaultId}: ${e.message}`,
+      });
+      throw new BadRequestException(`On-chain sync failed: ${e.message}`);
+    }
+
+    await this.prisma.mandate.update({
+      where: { vaultId },
+      data: { onChainSynced: true, onChainSyncTx: txSig },
+    });
+
+    // Mark all active rules as synced
+    await this.prisma.mandateRule.updateMany({
+      where: { vaultId, status: 'active' },
+      data: { onChainSync: true, onChainTx: txSig },
+    });
+
+    await this.events.emit({
+      vaultId, actionType: 'MANDATE_SYNCED', actor: callerWallet || 'admin', role: 'Admin',
+      result: 'success',
+      reason: `Mandate v${vault.mandate.version} synced to chain for vault ${vaultId}.`,
+      txSignature: txSig,
+    });
+
+    return { vaultId, onChainSynced: true, txSignature: txSig };
+  }
+
+  private buildRulesFromData(vaultId: string, data: any, createdBy: string) {
+    const rules: any[] = [];
+    if (data.liquidityBufferBps !== undefined)
+      rules.push({ vaultId, ruleType: 'liquidity_buffer', params: { bps: data.liquidityBufferBps }, status: 'active', version: 1, createdBy });
+    if (data.consentThreshold !== undefined)
+      rules.push({ vaultId, ruleType: 'consent_threshold', params: { amount: data.consentThreshold }, status: 'active', version: 1, createdBy });
+    if (data.allowedStrategies !== undefined)
+      rules.push({ vaultId, ruleType: 'strategy_allowlist', params: { strategies: data.allowedStrategies }, status: 'active', version: 1, createdBy });
+    if (data.maxAllocationBps !== undefined)
+      Object.entries(data.maxAllocationBps).forEach(([strategyId, bps]) =>
+        rules.push({ vaultId, ruleType: 'strategy_cap', params: { strategyId, maxBps: bps }, status: 'active', version: 1, createdBy })
+      );
+    if (data.leverageAllowed !== undefined)
+      rules.push({ vaultId, ruleType: data.leverageAllowed ? 'leverage_allowed' : 'leverage_banned', params: {}, status: 'active', version: 1, createdBy });
+    if (data.approvedDestinations !== undefined)
+      rules.push({ vaultId, ruleType: 'approved_destination', params: { wallets: data.approvedDestinations }, status: 'active', version: 1, createdBy });
+    return rules;
+  }
+
+  private diffMandate(old: any, next: any): string {
+    const changes: string[] = [];
+    if (old.liquidityBufferBps !== next.liquidityBufferBps)
+      changes.push(`buffer: ${old.liquidityBufferBps / 100}% → ${next.liquidityBufferBps / 100}%`);
+    if (old.consentThreshold !== next.consentThreshold)
+      changes.push(`consent threshold: ${old.consentThreshold} → ${next.consentThreshold}`);
+    if (old.leverageAllowed !== next.leverageAllowed)
+      changes.push(`leverage: ${old.leverageAllowed} → ${next.leverageAllowed}`);
+    return changes.join(', ') || 'no scalar changes (array fields may have changed)';
   }
 
   async activateVault(vaultId: string, callerWallet?: string) {
@@ -702,11 +900,16 @@ export class VaultsService {
       throw new ForbiddenException(reason);
     }
 
-    // Liquidity buffer check
+    // Liquidity buffer check: use deployable balance as the allocation ceiling
     const requiredBuffer = (vault.totalNAV * mandate.liquidityBufferBps) / 10000;
-    const postIdle = vault.idleBalance - amount;
-    if (postIdle < requiredBuffer) {
-      const reason = `Post-allocation idle balance (${postIdle.toLocaleString()}) below required buffer (${requiredBuffer.toLocaleString()})`;
+    const deployableBalance = this.getDeployableBalance(vault.idleBalance, vault.totalNAV, mandate.liquidityBufferBps);
+    if (amount > deployableBalance) {
+      const reason = [
+        `Allocation exceeds deployable balance.`,
+        `Idle: ${vault.idleBalance.toLocaleString()}, Buffer locked: ${requiredBuffer.toFixed(2)},`,
+        `Deployable: ${deployableBalance.toFixed(2)}, Requested: ${amount.toLocaleString()}.`,
+        `Protocol requires ${mandate.liquidityBufferBps / 100}% of NAV (${requiredBuffer.toFixed(2)} ${vault.baseAsset}) to remain idle at all times.`,
+      ].join(' ');
       await this.events.emit({ vaultId, actionType: 'ALLOCATION_BLOCKED', actor: 'portfolio_manager', role: 'Portfolio Manager', asset: vault.baseAsset, amount, strategy: strategyId, result: 'failure', reason });
       throw new ForbiddenException(reason);
     }
@@ -798,6 +1001,26 @@ export class VaultsService {
 
     if (request.amount > vault.idleBalance) {
       throw new BadRequestException(`Insufficient idle balance. Available: ${vault.idleBalance.toLocaleString()}`);
+    }
+
+    // Buffer invariant: post-withdrawal idle must meet buffer on post-withdrawal NAV
+    const mandate = await this.prisma.mandate.findUnique({ where: { vaultId: request.vaultId } });
+    if (mandate) {
+      const postIdle = vault.idleBalance - request.amount;
+      const postNAV  = vault.totalNAV  - request.amount;
+      const postRequired = (postNAV * mandate.liquidityBufferBps) / 10000;
+      if (postIdle < postRequired) {
+        const reason = [
+          `Withdrawal would violate the liquidity buffer.`,
+          `Post-withdrawal idle: ${postIdle.toFixed(2)}, required: ${postRequired.toFixed(2)} (${mandate.liquidityBufferBps / 100}% of post-NAV ${postNAV.toFixed(2)}).`,
+          `Unwind deployed strategies first to free up idle balance.`,
+        ].join(' ');
+        await this.events.emit({
+          vaultId: request.vaultId, actionType: 'WITHDRAWAL_BLOCKED', actor: 'admin', role: 'Admin',
+          asset: vault.baseAsset, amount: request.amount, result: 'failure', reason,
+        });
+        throw new BadRequestException(reason);
+      }
     }
 
     const details = request.details as any;

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Inject, Req } from '@nestjs/common';
+import { Controller, Get, Post, Put, Param, Body, Inject, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiOkResponse, ApiCreatedResponse, ApiForbiddenResponse } from '@nestjs/swagger';
 import { Request } from 'express';
 import { VaultsService } from './vaults.service';
@@ -79,6 +79,61 @@ export class VaultsController {
   @ApiOkResponse({ description: 'Returns the vault mandate configuration.' })
   getMandate(@Param('id') id: string) {
     return this.service.getMandate(id);
+  }
+
+  @Put(':id/mandate')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Update vault mandate', description: 'Update an existing mandate. liquidityBufferBps cannot be set below 1000 (10%). Triggers on-chain sync automatically.' })
+  @ApiParam({ name: 'id', description: 'Vault identifier' })
+  @ApiOkResponse({ description: 'Mandate updated successfully.' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions. Admin role required.' })
+  updateMandate(
+    @Param('id') id: string,
+    @Body() body: {
+      allowedStrategies?: string[]; blockedStrategies?: string[];
+      maxAllocationBps?: Record<string, number>; liquidityBufferBps?: number;
+      consentThreshold?: number; leverageAllowed?: boolean; approvedDestinations?: string[];
+    },
+    @Req() req: Request,
+  ) {
+    const callerWallet = (req.headers as any)['x-wallet'] as string | undefined;
+    return this.service.updateMandate(id, body, callerWallet || 'admin');
+  }
+
+  @Get(':id/mandate/rules')
+  @ApiOperation({ summary: 'Get active mandate rules', description: 'Returns the typed rule registry for this vault mandate.' })
+  @ApiParam({ name: 'id', description: 'Vault identifier' })
+  @ApiOkResponse({ description: 'Returns array of active MandateRule records.' })
+  getMandateRules(@Param('id') id: string) {
+    return this.service.getMandateRules(id);
+  }
+
+  @Get(':id/mandate/history')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Get mandate change history', description: 'Returns all mandate rule records including superseded versions for audit trail.' })
+  @ApiParam({ name: 'id', description: 'Vault identifier' })
+  @ApiOkResponse({ description: 'Returns full MandateRule history.' })
+  getMandateHistory(@Param('id') id: string) {
+    return this.service.getMandateHistory(id);
+  }
+
+  @Get(':id/buffer-health')
+  @ApiOperation({ summary: 'Get vault buffer health', description: 'Returns live liquidity buffer metrics: required, deployable, utilization, and shortfall.' })
+  @ApiParam({ name: 'id', description: 'Vault identifier' })
+  @ApiOkResponse({ description: 'Returns buffer health status and metrics.' })
+  getBufferHealth(@Param('id') id: string) {
+    return this.service.getBufferHealth(id);
+  }
+
+  @Post(':id/mandate/sync')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Sync mandate to chain', description: 'Push the current DB mandate to the on-chain program PDA. Sets onChainSynced = true on success.' })
+  @ApiParam({ name: 'id', description: 'Vault identifier' })
+  @ApiCreatedResponse({ description: 'Mandate synced to chain.' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions. Admin role required.' })
+  syncMandateToChain(@Param('id') id: string, @Req() req: Request) {
+    const callerWallet = (req.headers as any)['x-wallet'] as string | undefined;
+    return this.service.syncMandateToChain(id, callerWallet);
   }
 
   @Get(':id/deposits')

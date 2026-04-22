@@ -13,7 +13,10 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "sas:setup": "tsx scripts/sas-setup.ts",
-    "sas:revoke": "tsx scripts/sas-revoke.ts"
+    "sas:revoke": "tsx scripts/sas-revoke.ts",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage"
   },
   "dependencies": {
     "@exponent-labs/solstice-idl": "^0.1.8",
@@ -38,9 +41,12 @@
   "devDependencies": {
     "@nestjs/cli": "^10.3.0",
     "@nestjs/schematics": "^10.1.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.19.37",
     "@types/uuid": "^9.0.0",
+    "jest": "^30.3.0",
     "prisma": "5.22.0",
+    "ts-jest": "^29.4.9",
     "tsx": "^4.0.0",
     "typescript": "^5.4.0"
   }

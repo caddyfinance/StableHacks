@@ -6,6 +6,7 @@ import { useStore } from '../../store/useStore';
 import Card from '../../components/Card';
 import StatusBadge from '../../components/StatusBadge';
 import NotVerified from '../../components/NotVerified';
+import LiquidityBufferWidget from '../../components/LiquidityBufferWidget';
 import { RefreshCw, ExternalLink } from 'lucide-react';
 
 const USDC_MINT_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
@@ -36,6 +37,7 @@ export default function VaultOverviewPage() {
   const [vaults, setVaults] = useState<VaultRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [usdcBalance, setUsdcBalance] = useState<number | null>(null);
+  const [snapshot, setSnapshot] = useState<any>(null);
 
   const walletAddress = publicKey?.toBase58() || clientInfo?.walletAddress || '';
 
@@ -45,7 +47,11 @@ export default function VaultOverviewPage() {
       const wallet = clientInfo?.walletAddress;
       const vaultData = wallet ? await api.getVaultsByWallet(wallet) : await api.getVaults();
       setVaults(vaultData);
+      const primaryVaultId = activeVaultId || (vaultData.length > 0 ? vaultData[0].vaultId : null);
       if (!activeVaultId && vaultData.length > 0) setActiveVaultId(vaultData[0].vaultId);
+      if (primaryVaultId) {
+        api.getSnapshot(primaryVaultId).then(setSnapshot).catch(() => {});
+      }
     } catch { /* silent */ } finally { setLoading(false); }
   };
 
@@ -125,6 +131,19 @@ export default function VaultOverviewPage() {
         </div>
       </div>
 
+
+      {/* Liquidity Buffer Widget — client trust view */}
+      {snapshot?.requiredBuffer != null && (
+        <LiquidityBufferWidget
+          totalNAV={snapshot.totalNAV ?? totalNAV}
+          idleBalance={snapshot.idleBalance ?? totalIdle}
+          requiredBuffer={snapshot.requiredBuffer}
+          deployableBalance={snapshot.deployableBalance ?? 0}
+          bufferUtilization={snapshot.bufferUtilization ?? 0}
+          bufferBps={snapshot.bufferBps ?? 1000}
+          variant="client"
+        />
+      )}
 
       {/* Vault Allocations */}
       {!loading && vaultRows.length > 0 && (

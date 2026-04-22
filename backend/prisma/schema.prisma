@@ -46,6 +46,7 @@ model Vault {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   mandate               Mandate?
+  mandateRules          MandateRule[]
   allocations           Allocation[]
   events                ComplianceEvent[]
   consentRequests       ConsentRequest[]
@@ -64,8 +65,27 @@ model Mandate {
   leverageAllowed       Boolean  @default(false)
   approvedDestinations  String[]
   status                String   @default("active")
+  version               Int      @default(1)
+  lastUpdatedBy         String?
+  onChainSynced         Boolean  @default(false)
+  onChainSyncTx         String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+model MandateRule {
+  id          String   @id @default(uuid())
+  vaultId     String
+  vault       Vault    @relation(fields: [vaultId], references: [vaultId])
+  ruleType    String
+  params      Json
+  status      String   @default("active")
+  version     Int      @default(1)
+  createdBy   String
+  onChainSync Boolean  @default(false)
+  onChainTx   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Strategy {
