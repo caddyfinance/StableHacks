@@ -1,22 +1,23 @@
 {
-  "name": "contracts",
+  "name": "amina-contracts",
   "version": "1.0.0",
-  "description": "Solana program built with Anchor that handles on-chain vault operations, credential verification, and SAS attestation checks. Deployed on Devnet.",
-  "main": "index.js",
-  "directories": {
-    "test": "tests"
-  },
+  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "seed:finstar": "npx ts-node scripts/seed-finstar.ts",
+    "seed:notabene": "npx ts-node scripts/seed-notabene.ts",
+    "seed:mesh": "npx ts-node scripts/seed-mesh.ts",
+    "seed:jurisdictions": "npx ts-node scripts/seed-jurisdictions.ts",
+    "seed:translation-layer": "npx ts-node scripts/seed-translation-layer.ts",
+    "seed:all": "npx ts-node scripts/seed-all.ts"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.29.0",
+    "@solana/web3.js": "^1.98.4"
+  },
   "devDependencies": {
-    "@types/mocha": "^10.0.10",
-    "@types/node": "^25.6.0",
-    "mocha": "^11.7.5",
-    "ts-mocha": "^11.1.0",
-    "typescript": "^6.0.3"
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3",
+    "ts-mocha": "^10.0.0",
+    "@types/node": "^20.11.0"
   }
 }

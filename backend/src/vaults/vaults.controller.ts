@@ -146,14 +146,21 @@ export class VaultsController {
   }
 
   @Post(':id/activate')
-  @Roles('client_representative')
-  @ApiOperation({ summary: 'Activate vault', description: 'Client approves the mandate and activates the vault. Changes status from initiated to active. Required before deposits.' })
+  @Roles('admin', 'client_representative')
+  @ApiOperation({ summary: 'Activate vault', description: 'Client (or admin on behalf of client) approves the mandate and activates the vault. Changes status from initiated to active. Required before deposits.' })
   @ApiParam({ name: 'id', description: 'Vault identifier' })
   @ApiCreatedResponse({ description: 'Vault activated successfully.' })
-  @ApiForbiddenResponse({ description: 'Insufficient permissions. Client representative role required.' })
-  activate(@Param('id') id: string, @Req() req: Request) {
-    const callerWallet = req.headers['x-wallet'] as string | undefined;
-    return this.service.activateVault(id, callerWallet);
+  @ApiForbiddenResponse({ description: 'Insufficient permissions. Admin or client representative role required.' })
+  activate(
+    @Param('id') id: string,
+    @Body() body: { signature?: string; signerWallet?: string },
+    @Req() req: Request,
+  ) {
+    const callerRole = req.headers['x-role'] as string;
+    const callerWallet = callerRole === 'admin'
+      ? undefined  // Admin activates on behalf of client — skip wallet ownership check
+      : req.headers['x-wallet'] as string | undefined;
+    return this.service.activateVault(id, callerWallet, body.signature, body.signerWallet);
   }
 
   @Post(':id/deposit')

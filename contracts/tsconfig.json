@@ -1,14 +1,16 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
+    "types": ["node"],
+    "typeRoots": ["./node_modules/@types"],
+    "lib": ["es2020"],
     "module": "commonjs",
-    "lib": ["ES2020"],
-    "strict": true,
+    "target": "es2020",
     "esModuleInterop": true,
-    "outDir": "target/ts",
-    "rootDir": ".",
-    "skipLibCheck": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "strict": true,
+    "outDir": "./dist",
+    "skipLibCheck": true
   },
-  "include": ["tests/**/*.ts"]
+  "include": ["scripts/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["node_modules"]
 }

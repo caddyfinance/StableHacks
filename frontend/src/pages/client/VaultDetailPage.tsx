@@ -7,6 +7,7 @@ import {
   createAssociatedTokenAccountIdempotentInstruction,
   createTransferInstruction,
 } from '@solana/spl-token';
+import bs58 from 'bs58';
 import { api } from '../../lib/api';
 import { useStore } from '../../store/useStore';
 import Card from '../../components/Card';
@@ -176,7 +177,7 @@ export default function VaultDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { notify, clientInfo, setActiveVaultId } = useStore();
-  const { publicKey, sendTransaction } = useWallet();
+  const { publicKey, sendTransaction, signMessage } = useWallet();
 
   if (!clientInfo?.credentialId) return <NotVerified />;
 
@@ -508,11 +509,28 @@ export default function VaultDetailPage() {
                   onClick={async () => {
                     if (vault.status === 'initiated') {
                       try {
-                        await api.activateVault(vault.vaultId);
+                        if (!publicKey || !signMessage) {
+                          notify('error', 'Connect your wallet to sign the mandate acceptance');
+                          return;
+                        }
+                        const message = `I accept the investment mandate for vault ${vault.vaultId}`;
+                        const messageBytes = new TextEncoder().encode(message);
+                        const signatureBytes = await signMessage(messageBytes);
+                        const sig = bs58.encode(signatureBytes);
+                        await api.activateVault(vault.vaultId, {
+                          signature: sig,
+                          signerWallet: publicKey.toBase58(),
+                        });
                         notify('success', 'Mandate approved — vault is now active');
                         await loadData();
                       } catch (e: any) {
-                        notify('error', e?.message || 'Failed to activate vault');
+                        const msg = e?.message || e?.reason || 'Failed to activate vault';
+                        if (msg.includes('User rejected')) {
+                          notify('error', 'Wallet signature cancelled');
+                        } else {
+                          notify('error', msg);
+                        }
+                        return;
                       }
                     }
                     setShowMandateModal(false);

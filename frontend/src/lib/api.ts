@@ -66,7 +66,8 @@ export const api = {
   getMandateHistory:  (id: string) => request<any[]>(`/vaults/${id}/mandate/history`),
   getBufferHealth:    (id: string) => request<any>(`/vaults/${id}/buffer-health`),
   syncMandateToChain: (id: string) => request<any>(`/vaults/${id}/mandate/sync`, { method: 'POST' }),
-  activateVault: (id: string) => request<any>(`/vaults/${id}/activate`, { method: 'POST' }),
+  activateVault: (id: string, opts?: { signature?: string; signerWallet?: string }) =>
+    request<any>(`/vaults/${id}/activate`, { method: 'POST', body: JSON.stringify(opts || {}) }),
   getAminaWallet: () => request<{ wallet: string }>('/vaults/amina-wallet'),
   getAminaBankBalance: () => request<{ balance: number; currency: string }>('/vaults/amina-bank-balance'),
   onramp: (recipientWallet: string, amount: number) => request<any>('/vaults/onramp', { method: 'POST', body: JSON.stringify({ recipientWallet, amount }) }),
@@ -110,4 +111,48 @@ export const api = {
     if (actionType) params.set('actionType', actionType);
     return request<any[]>(`/events?${params.toString()}`);
   },
+
+  // Translation Layer (Layer 2)
+  tlSubmitInstruction: (data: { instructionType: string; vaultId: string; amount: number; jurisdiction: string; strategyId: string }) =>
+    request<any>('/translation-layer/submit', { method: 'POST', body: JSON.stringify(data) }),
+  tlExecuteCompliance: (id: string) =>
+    request<any>(`/translation-layer/${id}/compliance`, { method: 'POST' }),
+  tlExecuteAction: (id: string) =>
+    request<any>(`/translation-layer/${id}/action`, { method: 'POST' }),
+  tlGetPipelineStatus: (id: string) =>
+    request<any>(`/translation-layer/${id}/status`),
+  tlGetHistory: (vaultId: string) =>
+    request<any[]>(`/translation-layer/history/${vaultId}`),
+  tlGetConfig: () =>
+    request<any>('/translation-layer/config'),
+
+  // Finstar (Layer 1 — Core Banking)
+  finstarGetConfig: () =>
+    request<any>('/finstar/config'),
+  finstarGetLedger: (vaultId: string) =>
+    request<any>(`/finstar/ledger/${vaultId}`),
+  finstarGetEntry: (entryId: string) =>
+    request<any>(`/finstar/entries/${entryId}`),
+  finstarGetReports: (vaultId: string) =>
+    request<any[]>(`/finstar/reports/${vaultId}`),
+
+  // Compliance Layer (Notabene, Mesh, Jurisdiction Engine)
+  complianceGetTravelRuleCheck: (checkId: string) =>
+    request<any>(`/compliance/travel-rule/${checkId}`),
+  complianceGetTravelRuleChecks: (vaultId?: string) => {
+    const params = vaultId ? `?vaultId=${vaultId}` : '';
+    return request<any[]>(`/compliance/travel-rule${params}`);
+  },
+  complianceGetVASPs: () =>
+    request<any[]>('/compliance/vasps'),
+  complianceGetVenues: () =>
+    request<any[]>('/compliance/venues'),
+  complianceGetRouting: (vaultId: string) =>
+    request<any[]>(`/compliance/routing/${vaultId}`),
+  complianceGetJurisdictions: () =>
+    request<any[]>('/compliance/jurisdictions'),
+  complianceGetJurisdiction: (code: string) =>
+    request<any>(`/compliance/jurisdictions/${code}`),
+  complianceGetAttestations: (vaultId: string) =>
+    request<any[]>(`/compliance/attestations/${vaultId}`),
 };

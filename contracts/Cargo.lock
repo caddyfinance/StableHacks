@@ -1260,6 +1260,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "mock-finstar"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+]
+
+[[package]]
+name = "mock-jurisdiction-engine"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+]
+
+[[package]]
+name = "mock-mesh"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+]
+
+[[package]]
+name = "mock-notabene"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+]
+
+[[package]]
+name = "mock-translation-layer"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "mock-finstar",
+ "mock-jurisdiction-engine",
+ "mock-mesh",
+ "mock-notabene",
+]
+
+[[package]]
 name = "num-bigint"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"

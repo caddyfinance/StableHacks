@@ -20,6 +20,9 @@ import CompliancePage from './pages/CompliancePage';
 import EmergencyPage from './pages/EmergencyPage';
 import AuditLogPage from './pages/admin/AuditLogPage';
 import TransparencyPage from './pages/admin/TransparencyPage';
+import ArchitecturePage from './pages/admin/ArchitecturePage';
+import TranslationPipelinePage from './pages/admin/TranslationPipelinePage';
+import FinstarLedgerPage from './pages/admin/FinstarLedgerPage';
 
 // Client pages
 import VaultOverviewPage from './pages/client/VaultOverviewPage';
@@ -33,10 +36,10 @@ import ClientMandatePage from './pages/client/ClientMandatePage';
 
 // Role → allowed routes
 const roleAccess: Record<Role, string[]> = {
-  admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance', '/amina/audit-log', '/amina/transparency'],
-  portfolio_manager: ['/amina', '/amina/mandate', '/amina/execution', '/amina/compliance'],
-  compliance_officer: ['/amina', '/amina/compliance'],
-  emergency_admin: ['/amina', '/amina/emergency', '/amina/compliance'],
+  admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance', '/amina/audit-log', '/amina/transparency', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger'],
+  portfolio_manager: ['/amina', '/amina/mandate', '/amina/execution', '/amina/compliance', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger'],
+  compliance_officer: ['/amina', '/amina/compliance', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger'],
+  emergency_admin: ['/amina', '/amina/emergency', '/amina/compliance', '/amina/architecture'],
   client_representative: [],
 };
 
@@ -75,18 +78,28 @@ function AccessDenied({ role, route }: { role: Role; route: string }) {
       { label: 'Compliance', path: '/amina/compliance' },
       { label: 'Audit Log', path: '/amina/audit-log' },
       { label: 'Transparency', path: '/amina/transparency' },
+      { label: 'Architecture', path: '/amina/architecture' },
+      { label: 'Translation Pipeline', path: '/amina/translation-pipeline' },
+      { label: 'Finstar Ledger', path: '/amina/finstar-ledger' },
     ],
     portfolio_manager: [
       { label: 'Mandate Details', path: '/amina/mandate' },
       { label: 'Execution', path: '/amina/execution' },
       { label: 'Compliance', path: '/amina/compliance' },
+      { label: 'Architecture', path: '/amina/architecture' },
+      { label: 'Translation Pipeline', path: '/amina/translation-pipeline' },
+      { label: 'Finstar Ledger', path: '/amina/finstar-ledger' },
     ],
     compliance_officer: [
       { label: 'Compliance', path: '/amina/compliance' },
+      { label: 'Architecture', path: '/amina/architecture' },
+      { label: 'Translation Pipeline', path: '/amina/translation-pipeline' },
+      { label: 'Finstar Ledger', path: '/amina/finstar-ledger' },
     ],
     emergency_admin: [
       { label: 'Emergency Controls', path: '/amina/emergency' },
       { label: 'Compliance', path: '/amina/compliance' },
+      { label: 'Architecture', path: '/amina/architecture' },
     ],
     client_representative: [],
   };
@@ -155,6 +168,9 @@ export default function App() {
         <Route path="emergency" element={<RequireRole route="/amina/emergency"><EmergencyPage /></RequireRole>} />
         <Route path="audit-log" element={<RequireRole route="/amina/audit-log"><AuditLogPage /></RequireRole>} />
         <Route path="transparency" element={<RequireRole route="/amina/transparency"><TransparencyPage /></RequireRole>} />
+        <Route path="architecture" element={<RequireRole route="/amina/architecture"><ArchitecturePage /></RequireRole>} />
+        <Route path="translation-pipeline" element={<RequireRole route="/amina/translation-pipeline"><TranslationPipelinePage /></RequireRole>} />
+        <Route path="finstar-ledger" element={<RequireRole route="/amina/finstar-ledger"><FinstarLedgerPage /></RequireRole>} />
       </Route>
 
       {/* Client routes */}

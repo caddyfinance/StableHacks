@@ -4,9 +4,19 @@ skip-lint = false
 
 [programs.devnet]
 amina_vault = "5uPg5pi46gXErKcYWyqEAn2uSU68VZSUgvGTPZuVGwyA"
+mock_finstar = "7jH9Lhe9Ny3a8LxUsS3BCSHoDKmQZz5Vpu1py4pemisF"
+mock_notabene = "FZ5EaUHqohNGBdsvjr4LYnK181xoBWNhZiUg1iTaf9f7"
+mock_mesh = "3ptgmaf1dWrn8WsmRsat641srbbY1vfBvhMwVwczpoU2"
+mock_jurisdiction_engine = "HhPHx1RgzA99brCGprSg5VwJ8ZRgeXkLADbDRUox3Cq6"
+mock_translation_layer = "EokhQnmdSswBvj8VfnV5TBKVantJNqGHWv243L8e6sDv"
 
 [programs.localnet]
 amina_vault = "5uPg5pi46gXErKcYWyqEAn2uSU68VZSUgvGTPZuVGwyA"
+mock_finstar = "7jH9Lhe9Ny3a8LxUsS3BCSHoDKmQZz5Vpu1py4pemisF"
+mock_notabene = "FZ5EaUHqohNGBdsvjr4LYnK181xoBWNhZiUg1iTaf9f7"
+mock_mesh = "3ptgmaf1dWrn8WsmRsat641srbbY1vfBvhMwVwczpoU2"
+mock_jurisdiction_engine = "HhPHx1RgzA99brCGprSg5VwJ8ZRgeXkLADbDRUox3Cq6"
+mock_translation_layer = "EokhQnmdSswBvj8VfnV5TBKVantJNqGHWv243L8e6sDv"
 
 [registry]
 url = "https://api.apr.dev"

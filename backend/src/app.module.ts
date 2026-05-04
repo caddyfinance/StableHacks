@@ -11,6 +11,9 @@ import { SasModule } from './sas/sas.module';
 import { VaultProgramModule } from './vault-program/vault-program.module';
 import { SolsticeModule } from './solstice/solstice.module';
 import { HealthModule } from './health/health.module';
+import { TranslationLayerModule } from './translation-layer/translation-layer.module';
+import { FinstarModule } from './finstar/finstar.module';
+import { ComplianceLayerModule } from './compliance-layer/compliance-layer.module';
 import { RolesGuard } from './auth/roles.guard';
 
 @Module({
@@ -26,6 +29,9 @@ import { RolesGuard } from './auth/roles.guard';
     VaultProgramModule,
     SolsticeModule,
     HealthModule,
+    TranslationLayerModule,
+    FinstarModule,
+    ComplianceLayerModule,
   ],
   providers: [
     {

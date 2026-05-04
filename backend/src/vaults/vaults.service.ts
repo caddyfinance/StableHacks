@@ -1,9 +1,13 @@
 import { Injectable, Inject, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { PublicKey } from '@solana/web3.js';
+import nacl from 'tweetnacl';
+import bs58 from 'bs58';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsService } from '../events/events.service';
 import { SasService } from '../sas/sas.service';
 import { VaultProgramService } from '../vault-program/vault-program.service';
 import { SolsticeService } from '../solstice/solstice.service';
+import { TranslationLayerService } from '../translation-layer/translation-layer.service';
 
 @Injectable()
 export class VaultsService {
@@ -12,8 +16,10 @@ export class VaultsService {
   private sas: SasService;
   private vaultProgram: VaultProgramService;
   private solstice: SolsticeService;
+  private translationLayer: TranslationLayerService;
   private bankBalance = 50000; // Simulated AMINA Bank USD balance
   private readonly PROTOCOL_BUFFER_BPS = 1000; // 10% — mirrors PROTOCOL_LIQUIDITY_BUFFER_BPS in the contract
+  private readonly useTranslationLayer = process.env.USE_TRANSLATION_LAYER !== 'false';
 
   /** deployable = idle - (totalNAV * bufferBps / 10000); floor at 0 */
   private getDeployableBalance(idleBalance: number, totalNAV: number, bufferBps: number): number {
@@ -26,12 +32,14 @@ export class VaultsService {
     @Inject(SasService) sas: SasService,
     @Inject(VaultProgramService) vaultProgram: VaultProgramService,
     @Inject(SolsticeService) solstice: SolsticeService,
+    @Inject(TranslationLayerService) translationLayer: TranslationLayerService,
   ) {
     this.prisma = prisma;
     this.events = events;
     this.sas = sas;
     this.vaultProgram = vaultProgram;
     this.solstice = solstice;
+    this.translationLayer = translationLayer;
   }
 
   /**
@@ -738,12 +746,42 @@ export class VaultsService {
     return changes.join(', ') || 'no scalar changes (array fields may have changed)';
   }
 
-  async activateVault(vaultId: string, callerWallet?: string) {
+  private verifyMandateSignature(vaultId: string, signature: string, signerWallet: string): boolean {
+    const expectedMessage = `I accept the investment mandate for vault ${vaultId}`;
+    const messageBytes = new TextEncoder().encode(expectedMessage);
+    const signatureBytes = bs58.decode(signature);
+    const publicKeyBytes = new PublicKey(signerWallet).toBytes();
+    return nacl.sign.detached.verify(messageBytes, signatureBytes, publicKeyBytes);
+  }
+
+  async activateVault(vaultId: string, callerWallet?: string, signature?: string, signerWallet?: string) {
     await this.verifyVaultOwnership(vaultId, callerWallet, true);
     const vault = await this.prisma.vault.findUnique({ where: { vaultId } });
     if (!vault) throw new NotFoundException('Vault not found');
     if (vault.status === 'active') return vault;
     if (vault.status !== 'initiated') throw new BadRequestException(`Vault cannot be activated from status: ${vault.status}`);
+
+    // Client-side activation requires wallet signature as cryptographic consent proof
+    if (callerWallet) {
+      if (!signature || !signerWallet) {
+        throw new BadRequestException('Wallet signature required to approve mandate. Sign the acceptance message in your wallet.');
+      }
+      if (signerWallet !== callerWallet) {
+        throw new ForbiddenException('Signer wallet does not match the connected wallet.');
+      }
+      if (vault.ownerWallet && signerWallet !== vault.ownerWallet) {
+        throw new ForbiddenException('Signer wallet does not match vault owner wallet.');
+      }
+      try {
+        const valid = this.verifyMandateSignature(vaultId, signature, signerWallet);
+        if (!valid) {
+          throw new BadRequestException('Invalid signature. The signed message does not match the expected mandate acceptance.');
+        }
+      } catch (e: any) {
+        if (e instanceof BadRequestException || e instanceof ForbiddenException) throw e;
+        throw new BadRequestException(`Signature verification failed: ${e.message}`);
+      }
+    }
 
     // Auto-create default mandate if none exists
     let mandate = await this.prisma.mandate.findUnique({ where: { vaultId } });
@@ -808,7 +846,7 @@ export class VaultsService {
       actor: callerWallet || 'client',
       role: 'client_representative',
       result: 'success',
-      reason: `Client approved mandate and activated vault ${vaultId}. Mandate on-chain: ${mandateAfterSync?.onChainSynced ? 'yes' : 'pending'}.`,
+      reason: `Client approved mandate and activated vault ${vaultId}.${signature ? ` Wallet signature verified (signer: ${signerWallet?.slice(0, 8)}...).` : ' No wallet signature (admin activation).'} Mandate on-chain: ${mandateAfterSync?.onChainSynced ? 'yes' : 'pending'}.`,
       txSignature: mandateAfterSync?.onChainSyncTx || undefined,
     });
 
@@ -906,7 +944,21 @@ export class VaultsService {
       onChainAddress: isOnChain ? aminaBankWallet || vault.onChainAddress || undefined : undefined,
     });
 
-    return { deposit, vault: updated };
+    // Route through translation layer for on-chain proof trail
+    let translationLayerResult: any = null;
+    if (this.useTranslationLayer) {
+      try {
+        const jurisdiction = deposit.jurisdictionTag || 'CH';
+        const submitted = await this.translationLayer.submitInstruction('Deposit', vaultId, amount, jurisdiction, 'deposit');
+        const compliance = await this.translationLayer.executeCompliance(submitted.instructionId, jurisdiction);
+        const action = await this.translationLayer.executeAction(submitted.instructionId);
+        translationLayerResult = { instructionId: submitted.instructionId, ...compliance, ...action };
+      } catch (err: any) {
+        // Non-blocking: log but don't fail the deposit
+      }
+    }
+
+    return { deposit, vault: updated, translationLayerResult };
   }
 
   async allocate(vaultId: string, strategyId: string, amount: number) {
@@ -996,7 +1048,23 @@ export class VaultsService {
 
     await this.events.emit({ vaultId, actionType: 'ALLOCATION_EXECUTED', actor: 'portfolio_manager', role: 'Portfolio Manager', asset: vault.baseAsset, amount, strategy: strategyId, result: 'success', reason: `Allocated ${amount.toLocaleString()} ${vault.baseAsset} to ${strategy.name}` });
 
-    return { allocation, message: `Successfully allocated ${amount.toLocaleString()} ${vault.baseAsset} to ${strategy.name}` };
+    // Route through AMINA translation layer for on-chain proof trail
+    let translationLayerResult: any = null;
+    if (this.useTranslationLayer) {
+      try {
+        const cred = await this.prisma.credential.findUnique({ where: { credentialId: vault.credentialId } });
+        const jurisdiction = cred?.jurisdiction || 'CH';
+        const submitted = await this.translationLayer.submitInstruction('Allocate', vaultId, amount, jurisdiction, strategyId);
+        const compliance = await this.translationLayer.executeCompliance(submitted.instructionId, jurisdiction);
+        const action = await this.translationLayer.executeAction(submitted.instructionId);
+        translationLayerResult = { instructionId: submitted.instructionId, ...compliance, ...action };
+        await this.events.emit({ vaultId, actionType: 'TL_PIPELINE_COMPLETE', actor: 'system', role: 'Translation Layer', asset: vault.baseAsset, amount, strategy: strategyId, result: 'success', reason: `Translation layer pipeline complete: ${submitted.instructionId}` });
+      } catch (err: any) {
+        await this.events.emit({ vaultId, actionType: 'TL_PIPELINE_COMPLETE', actor: 'system', role: 'Translation Layer', asset: vault.baseAsset, amount, strategy: strategyId, result: 'failure', reason: `Translation layer error (non-blocking): ${err.message}` });
+      }
+    }
+
+    return { allocation, translationLayerResult, message: `Successfully allocated ${amount.toLocaleString()} ${vault.baseAsset} to ${strategy.name}` };
   }
 
   /**

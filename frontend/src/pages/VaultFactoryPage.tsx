@@ -223,8 +223,8 @@ export default function VaultFactoryPage() {
         setLastCreated((prev) => prev ? { ...prev, status: 'active' } : prev);
       }
       useStore.getState().setActiveVaultId(vaultId);
-    } catch {
-      notify('error', 'Failed to activate vault');
+    } catch (e: any) {
+      notify('error', e?.message || e?.reason || 'Failed to activate vault');
     } finally {
       setActivating(null);
     }

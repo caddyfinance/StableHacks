@@ -1,7 +1,12 @@
 [workspace]
 resolver = "2"
 members = [
-    "programs/*"
+    "programs/amina-vault",
+    "programs/mock-finstar",
+    "programs/mock-notabene",
+    "programs/mock-mesh",
+    "programs/mock-jurisdiction-engine",
+    "programs/mock-translation-layer",
 ]
 
 [profile.release]
