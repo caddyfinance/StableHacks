@@ -72,6 +72,10 @@ export default function ClientLayout() {
               <span className="text-[11px] text-slate-500">Risk Profile</span>
               <span className="text-xs text-warning-700 font-medium">{clientInfo?.riskTier || 'Conservative'}</span>
             </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-slate-500">Segment</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 border border-teal-300/40 font-medium">Individual</span>
+            </div>
             {clientInfo?.walletAddress && (
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-slate-500">Wallet</span>

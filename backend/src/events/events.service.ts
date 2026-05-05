@@ -21,6 +21,11 @@ export class EventsService {
     reason?: string;
     txSignature?: string;
     onChainAddress?: string;
+    translationLayerRef?: string;
+    compliancePda?: string;
+    travelRulePda?: string;
+    routingPda?: string;
+    glEntryPda?: string;
   }) {
     const prefix = params.result === 'success' ? 'EVT' : params.result === 'pending' ? 'PND' : 'FAIL';
     const shortId = uuid().slice(0, 6).toUpperCase();

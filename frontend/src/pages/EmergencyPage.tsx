@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import StatusBadge from '../components/StatusBadge';
+import { ShieldCheck, Clock, Zap, Bell, ArrowRight } from 'lucide-react';
 
 interface VaultSnapshot {
   paused: boolean;
@@ -152,10 +153,28 @@ export default function EmergencyPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-ink-900">Emergency Controls</h1>
+        <h1 className="text-xl font-bold text-ink-900">24/7 Incident Response</h1>
         <p className="text-sm text-slate-700 mt-1">
-          Pause operations, disable adapters, and initiate strategy unwinds.
+          AMINA 24/7 operations centre — pause operations, disable adapters, initiate strategy unwinds, and track SLA compliance.
         </p>
+      </div>
+
+      {/* SLA Indicators */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { icon: ShieldCheck, label: 'Time Since Last Incident', value: '47 days', color: 'text-success-700', bg: 'bg-success-100' },
+          { icon: Clock, label: 'Avg Response Time', value: '< 2 minutes', color: 'text-teal-700', bg: 'bg-teal-100' },
+          { icon: Zap, label: 'SLA Uptime', value: '99.97%', color: 'text-teal-700', bg: 'bg-teal-100' },
+          { icon: Bell, label: 'Active Alerts', value: '0', color: 'text-success-700', bg: 'bg-success-100' },
+        ].map(({ icon: Icon, label, value, color, bg }) => (
+          <div key={label} className="bg-white border border-slate-200 rounded-[18px] p-4 shadow-1">
+            <div className={`w-8 h-8 rounded-[12px] ${bg} flex items-center justify-center mb-2`}>
+              <Icon className={`w-4 h-4 ${color}`} />
+            </div>
+            <p className={`text-lg font-bold ${color}`}>{value}</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">{label}</p>
+          </div>
+        ))}
       </div>
 
       {/* Section 1: Vault Pause Controls */}
@@ -320,6 +339,25 @@ export default function EmergencyPage() {
               )}
             </div>
           )}
+        </div>
+      </Card>
+
+      {/* Escalation Path */}
+      <Card title="Escalation Path" subtitle="Incident escalation procedure across AMINA's architecture">
+        <div className="flex items-center justify-center gap-3 py-4">
+          {[
+            { label: 'Caddy Module', sub: 'Layer 3 — Detect & Pause' },
+            { label: 'AMINA Operations', sub: 'Layer 2 — Investigate & Resolve' },
+            { label: 'Regulatory Notification', sub: 'Layer 1 — Report if required' },
+          ].map((step, i) => (
+            <div key={step.label} className="flex items-center gap-3">
+              <div className="bg-teal-50 border border-slate-200 rounded-[12px] px-5 py-3 text-center min-w-[180px]">
+                <p className="text-xs font-semibold text-ink-900">{step.label}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">{step.sub}</p>
+              </div>
+              {i < 2 && <ArrowRight className="w-4 h-4 text-slate-400 flex-shrink-0" />}
+            </div>
+          ))}
         </div>
       </Card>
     </div>

@@ -20,6 +20,11 @@ interface AuditEvent {
   strategy?: string;
   txSignature?: string;
   onChainAddress?: string;
+  translationLayerRef?: string;
+  compliancePda?: string;
+  travelRulePda?: string;
+  routingPda?: string;
+  glEntryPda?: string;
 }
 
 const CHAINALYSIS_BASE = 'https://app.chainalysis.com';
@@ -668,6 +673,7 @@ export default function CompliancePage() {
                     ['Client Reference', snapshot?.clientReference || '—'],
                     ['Mandate', snapshot?.mandateStatus || '—'],
                     ['Vault Status', snapshot?.paused ? 'Paused' : snapshot?.status || '—'],
+                    ['Jurisdiction', snapshot?.jurisdiction || 'CH'],
                     ['Risk Status', 'Green'],
                     ['Approved Providers', `${providerCount} active`],
                     ['Approved Destinations', `${approvedDestCount} wallets`],
@@ -763,6 +769,7 @@ export default function CompliancePage() {
                   { label: 'No Leverage', active: true },
                   { label: 'Approved Destinations Only', active: approvedDestCount > 0 },
                   { label: 'Travel Rule on External Edges', active: true },
+                  { label: 'Travel Rule Status: Compliant', active: events.some(e => e.travelRulePda) },
                   { label: 'Provider Whitelist Active', active: providerCount > 0 },
                   { label: 'Inbound Settlement Matching', active: true },
                   { label: 'Treasury Sweep Enabled', active: true },
@@ -782,6 +789,69 @@ export default function CompliancePage() {
               </div>
             </Card>
           </div>
+
+          {/* ROW 2b: Translation Layer Compliance Attestations */}
+          <Card title="Translation Layer Attestations" subtitle="On-chain compliance proof from AMINA Layer 2">
+            {(() => {
+              const tlEvents = events.filter(e => e.compliancePda || e.travelRulePda || e.routingPda || e.glEntryPda);
+              if (tlEvents.length === 0) return (
+                <div className="flex items-center gap-2 text-xs text-slate-500 py-4 justify-center">
+                  <ShieldCheck className="w-4 h-4" />
+                  No Translation Layer attestations recorded for this vault yet.
+                </div>
+              );
+              return (
+                <div className="space-y-2">
+                  {tlEvents.slice(0, 5).map(evt => (
+                    <div key={evt.eventId} className="bg-teal-50 border border-slate-200 rounded-[12px] p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-ink-900">{evt.actionType?.replace(/_/g, ' ')}</span>
+                        <span className="text-[10px] text-slate-500">{fmtTime(evt.timestamp)}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {evt.compliancePda && (
+                          <div className="text-[10px]">
+                            <span className="text-slate-500">Compliance PDA</span>
+                            <a href={`https://explorer.solana.com/address/${evt.compliancePda}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-0.5 text-teal-700 hover:underline font-mono">
+                              {evt.compliancePda.slice(0, 8)}...{evt.compliancePda.slice(-6)} <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          </div>
+                        )}
+                        {evt.travelRulePda && (
+                          <div className="text-[10px]">
+                            <span className="text-slate-500">Travel Rule PDA</span>
+                            <a href={`https://explorer.solana.com/address/${evt.travelRulePda}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-0.5 text-teal-700 hover:underline font-mono">
+                              {evt.travelRulePda.slice(0, 8)}...{evt.travelRulePda.slice(-6)} <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          </div>
+                        )}
+                        {evt.routingPda && (
+                          <div className="text-[10px]">
+                            <span className="text-slate-500">Routing PDA</span>
+                            <a href={`https://explorer.solana.com/address/${evt.routingPda}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-0.5 text-teal-700 hover:underline font-mono">
+                              {evt.routingPda.slice(0, 8)}...{evt.routingPda.slice(-6)} <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          </div>
+                        )}
+                        {evt.glEntryPda && (
+                          <div className="text-[10px]">
+                            <span className="text-slate-500">GL Entry PDA</span>
+                            <a href={`https://explorer.solana.com/address/${evt.glEntryPda}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-0.5 text-teal-700 hover:underline font-mono">
+                              {evt.glEntryPda.slice(0, 8)}...{evt.glEntryPda.slice(-6)} <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </Card>
 
           {/* ROW 3: Compliance Event Timeline */}
           <Card title="Compliance Event Timeline" subtitle={`${filteredEvents.length} events recorded`}>

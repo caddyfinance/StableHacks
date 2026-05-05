@@ -15,6 +15,7 @@ import {
   Layers,
   ArrowRightLeft,
   Landmark,
+  Activity,
 } from 'lucide-react';
 import { useStore, Role, ROLE_LABELS, AMINA_ROLES, Portal } from '../store/useStore';
 
@@ -28,17 +29,18 @@ const navItems = [
   { path: '/amina/compliance', label: 'Compliance', icon: ClipboardCheck, end: false },
   { path: '/amina/audit-log', label: 'Audit Log', icon: ScrollText, end: false },
   { path: '/amina/transparency', label: 'Transparency', icon: Eye, end: false },
-  { path: '/amina/emergency', label: 'Emergency Controls', icon: AlertTriangle, end: false },
+  { path: '/amina/emergency', label: '24/7 Incident Response', icon: AlertTriangle, end: false },
+  { path: '/amina/operations', label: '24/7 Operations', icon: Activity, end: false },
   { path: '/amina/architecture', label: 'Architecture', icon: Layers, end: false },
   { path: '/amina/translation-pipeline', label: 'Translation Pipeline', icon: ArrowRightLeft, end: false },
   { path: '/amina/finstar-ledger', label: 'Finstar Ledger', icon: Landmark, end: false },
 ];
 
 const roleAccess: Record<Role, string[]> = {
-  admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance', '/amina/audit-log', '/amina/transparency', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger'],
+  admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance', '/amina/audit-log', '/amina/transparency', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger', '/amina/operations'],
   portfolio_manager: ['/amina', '/amina/mandate', '/amina/execution', '/amina/compliance', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger'],
   compliance_officer: ['/amina', '/amina/compliance', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger'],
-  emergency_admin: ['/amina', '/amina/emergency', '/amina/compliance', '/amina/architecture'],
+  emergency_admin: ['/amina', '/amina/emergency', '/amina/compliance', '/amina/architecture', '/amina/operations'],
   client_representative: [],
 };
 

@@ -63,6 +63,7 @@ export default function ExecutionPage() {
   const [solsticePosition, setSolsticePosition] = useState<any>(null);
   const [solsticePoolState, setSolsticePoolState] = useState<any>(null);
   const [solsticeFundFlow, setSolsticeFundFlow] = useState<any[]>([]);
+  const [tlHistory, setTlHistory] = useState<any[]>([]);
 
   // Load vaults list
   useEffect(() => {
@@ -108,6 +109,8 @@ export default function ExecutionPage() {
         setSolsticePoolState(pool);
         setSolsticeFundFlow(flow);
       });
+
+      api.tlGetHistory(activeVaultId!).then(setTlHistory).catch(() => setTlHistory([]));
     } catch (err: any) {
       notify('error', err?.message || 'Failed to load data');
     } finally {
@@ -758,6 +761,43 @@ export default function ExecutionPage() {
               </table>
             </div>
           </Card>
+
+          {/* Translation Layer Pipeline */}
+          {tlHistory.length > 0 && (
+            <Card title="Translation Layer Pipeline" subtitle="Recent instruction processing via AMINA Layer 2">
+              <div className="space-y-2">
+                {tlHistory.slice(0, 3).map((inst: any) => {
+                  const steps = ['received', 'compliance_checked', 'route_selected', 'executed', 'booked_back', 'complete'];
+                  const currentIdx = steps.indexOf(inst.pipelineStatus || inst.status || 'received');
+                  return (
+                    <div key={inst.instructionId} className="bg-teal-50 border border-slate-200 rounded-[12px] p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-mono text-ink-900">{inst.instructionId?.slice(0, 12)}...</span>
+                        <span className="text-[10px] px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded font-medium">
+                          {inst.instructionType?.replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {steps.map((step, i) => (
+                          <div key={step} className="flex items-center gap-1">
+                            <div className={`w-2 h-2 rounded-full ${
+                              i < currentIdx ? 'bg-success-700' :
+                              i === currentIdx ? 'bg-teal-700 animate-pulse' :
+                              'bg-slate-200'
+                            }`} />
+                            {i < steps.length - 1 && (
+                              <div className={`w-3 h-0.5 ${i < currentIdx ? 'bg-success-700' : 'bg-slate-200'}`} />
+                            )}
+                          </div>
+                        ))}
+                        <span className="text-[9px] text-slate-500 ml-1">{(inst.pipelineStatus || inst.status || 'received').replace(/_/g, ' ')}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
         </div>
 
         {/* RIGHT: Vault Exposure Summary */}

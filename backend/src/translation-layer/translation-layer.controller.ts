@@ -1,7 +1,9 @@
 import { Controller, Post, Get, Body, Param, Logger } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { TranslationLayerService } from './translation-layer.service';
 import { Roles } from '../auth/roles.guard';
 
+@ApiTags('Translation Layer')
 @Controller('api/translation-layer')
 export class TranslationLayerController {
   private readonly logger = new Logger(TranslationLayerController.name);

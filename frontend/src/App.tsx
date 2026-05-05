@@ -23,6 +23,7 @@ import TransparencyPage from './pages/admin/TransparencyPage';
 import ArchitecturePage from './pages/admin/ArchitecturePage';
 import TranslationPipelinePage from './pages/admin/TranslationPipelinePage';
 import FinstarLedgerPage from './pages/admin/FinstarLedgerPage';
+import OperationsPage from './pages/admin/OperationsPage';
 
 // Client pages
 import VaultOverviewPage from './pages/client/VaultOverviewPage';
@@ -33,13 +34,15 @@ import RequestCredentialPage from './pages/client/RequestCredentialPage';
 import MyVaultsPage from './pages/client/MyVaultsPage';
 import VaultDetailPage from './pages/client/VaultDetailPage';
 import ClientMandatePage from './pages/client/ClientMandatePage';
+import DemoGuide from './components/DemoGuide';
+import PitchMode from './components/PitchMode';
 
 // Role → allowed routes
 const roleAccess: Record<Role, string[]> = {
-  admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance', '/amina/audit-log', '/amina/transparency', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger'],
+  admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance', '/amina/audit-log', '/amina/transparency', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger', '/amina/operations'],
   portfolio_manager: ['/amina', '/amina/mandate', '/amina/execution', '/amina/compliance', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger'],
   compliance_officer: ['/amina', '/amina/compliance', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger'],
-  emergency_admin: ['/amina', '/amina/emergency', '/amina/compliance', '/amina/architecture'],
+  emergency_admin: ['/amina', '/amina/emergency', '/amina/compliance', '/amina/architecture', '/amina/operations'],
   client_representative: [],
 };
 
@@ -81,6 +84,7 @@ function AccessDenied({ role, route }: { role: Role; route: string }) {
       { label: 'Architecture', path: '/amina/architecture' },
       { label: 'Translation Pipeline', path: '/amina/translation-pipeline' },
       { label: 'Finstar Ledger', path: '/amina/finstar-ledger' },
+      { label: '24/7 Operations', path: '/amina/operations' },
     ],
     portfolio_manager: [
       { label: 'Mandate Details', path: '/amina/mandate' },
@@ -97,9 +101,10 @@ function AccessDenied({ role, route }: { role: Role; route: string }) {
       { label: 'Finstar Ledger', path: '/amina/finstar-ledger' },
     ],
     emergency_admin: [
-      { label: 'Emergency Controls', path: '/amina/emergency' },
+      { label: '24/7 Incident Response', path: '/amina/emergency' },
       { label: 'Compliance', path: '/amina/compliance' },
       { label: 'Architecture', path: '/amina/architecture' },
+      { label: '24/7 Operations', path: '/amina/operations' },
     ],
     client_representative: [],
   };
@@ -144,6 +149,9 @@ function AccessDenied({ role, route }: { role: Role; route: string }) {
 
 export default function App() {
   return (
+    <>
+    <DemoGuide />
+    <PitchMode />
     <Routes>
       {/* Public routes */}
       <Route path="/" element={<LandingPage />} />
@@ -171,6 +179,7 @@ export default function App() {
         <Route path="architecture" element={<RequireRole route="/amina/architecture"><ArchitecturePage /></RequireRole>} />
         <Route path="translation-pipeline" element={<RequireRole route="/amina/translation-pipeline"><TranslationPipelinePage /></RequireRole>} />
         <Route path="finstar-ledger" element={<RequireRole route="/amina/finstar-ledger"><FinstarLedgerPage /></RequireRole>} />
+        <Route path="operations" element={<RequireRole route="/amina/operations"><OperationsPage /></RequireRole>} />
       </Route>
 
       {/* Client routes */}
@@ -195,5 +204,6 @@ export default function App() {
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }

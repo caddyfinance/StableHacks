@@ -14,6 +14,7 @@ import { HealthModule } from './health/health.module';
 import { TranslationLayerModule } from './translation-layer/translation-layer.module';
 import { FinstarModule } from './finstar/finstar.module';
 import { ComplianceLayerModule } from './compliance-layer/compliance-layer.module';
+import { OperationsModule } from './operations/operations.module';
 import { RolesGuard } from './auth/roles.guard';
 
 @Module({
@@ -32,6 +33,7 @@ import { RolesGuard } from './auth/roles.guard';
     TranslationLayerModule,
     FinstarModule,
     ComplianceLayerModule,
+    OperationsModule,
   ],
   providers: [
     {

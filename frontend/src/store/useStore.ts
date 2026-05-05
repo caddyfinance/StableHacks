@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 
 export type Role = 'admin' | 'portfolio_manager' | 'compliance_officer' | 'client_representative' | 'emergency_admin';
 export type Portal = 'client' | 'amina';
+export type Segment = 'individuals' | 'corporates' | 'b2b2c';
 
 export const ROLE_LABELS: Record<Role, string> = {
   admin: 'Bank Admin',
@@ -38,6 +39,8 @@ interface AppState {
   adminUser: AdminUser | null;
   clientInfo: ClientInfo | null;
   notification: { type: 'success' | 'error' | 'info'; message: string } | null;
+  activeSegment: Segment;
+  demoModeActive: boolean;
 
   loginAdmin: (user: AdminUser) => void;
   loginClient: (info: ClientInfo, vaultId: string | null) => void;
@@ -48,6 +51,8 @@ interface AppState {
   setActiveVaultId: (id: string | null) => void;
   notify: (type: 'success' | 'error' | 'info', message: string) => void;
   clearNotification: () => void;
+  setActiveSegment: (segment: Segment) => void;
+  setDemoMode: (active: boolean) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -60,6 +65,8 @@ export const useStore = create<AppState>()(
       adminUser: null,
       clientInfo: null,
       notification: null,
+      activeSegment: 'individuals',
+      demoModeActive: false,
 
       loginAdmin: (user) => set({
         isAuthenticated: true,
@@ -97,6 +104,8 @@ export const useStore = create<AppState>()(
         setTimeout(() => set({ notification: null }), 4000);
       },
       clearNotification: () => set({ notification: null }),
+      setActiveSegment: (segment) => set({ activeSegment: segment }),
+      setDemoMode: (active) => set({ demoModeActive: active }),
     }),
     {
       name: 'amina-session',
@@ -115,6 +124,8 @@ export const useStore = create<AppState>()(
         activeVaultId: state.activeVaultId,
         adminUser: state.adminUser,
         clientInfo: state.clientInfo,
+        activeSegment: state.activeSegment,
+        demoModeActive: state.demoModeActive,
       }) as unknown as AppState,
     },
   ),

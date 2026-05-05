@@ -1,11 +1,9 @@
 import { Controller, Get, Param, Query, Logger } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { ComplianceLayerService } from './compliance-layer.service';
 import { Roles } from '../auth/roles.guard';
 
-/**
- * REST controller for reading on-chain compliance data from mock compliance programs.
- * All endpoints require admin, portfolio_manager, or compliance_officer role.
- */
+@ApiTags('Compliance Layer')
 @Controller('api/compliance')
 export class ComplianceLayerController {
   private readonly logger = new Logger(ComplianceLayerController.name);

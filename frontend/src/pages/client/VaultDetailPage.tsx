@@ -739,6 +739,10 @@ export default function VaultDetailPage() {
           </div>
         </Card>
       )}
+
+      <div className="mt-8 text-center py-4 border-t border-slate-200">
+        <p className="text-[10px] text-slate-400">Powered by Caddy Module via AMINA Translation Layer</p>
+      </div>
     </div>
   );
 }

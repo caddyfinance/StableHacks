@@ -185,6 +185,89 @@ async function main() {
   });
 
   console.log('Seeded compliance events');
+
+  // Seed Translation Layer demo events (NP-33)
+  const mockPdaBase = '7Xf9r2kBc4mVnPQ8dL3wH5tYjAeZ6Ks1NbCg';
+  await prisma.complianceEvent.createMany({
+    data: [
+      {
+        eventId: 'EVT-TL-001',
+        vaultId: vault.vaultId,
+        actionType: 'TL_PIPELINE_COMPLETE',
+        actor: 'translation_layer',
+        role: 'system',
+        result: 'success',
+        reason: 'Full pipeline: DEPOSIT 1,000,000 USDC — jurisdiction CH, travel rule exempt, routed to Solstice, GL posted',
+        amount: 1000000,
+        asset: 'USDC',
+        translationLayerRef: `${mockPdaBase}InstrLog01aB`,
+        compliancePda: `${mockPdaBase}ComplAttest01`,
+        travelRulePda: `${mockPdaBase}TravelChk01x`,
+        routingPda: `${mockPdaBase}RouteDecis01`,
+        glEntryPda: `${mockPdaBase}GLEntry001ab`,
+        timestamp: new Date(Date.now() - 100000),
+      },
+      {
+        eventId: 'EVT-TL-002',
+        vaultId: vault.vaultId,
+        actionType: 'TL_COMPLIANCE_PASSED',
+        actor: 'translation_layer',
+        role: 'system',
+        result: 'success',
+        reason: 'Jurisdiction CH (FINMA): compliance attestation passed. Travel rule threshold 1,000 USDC.',
+        amount: 500000,
+        asset: 'USDC',
+        compliancePda: `${mockPdaBase}ComplAttest02`,
+        travelRulePda: `${mockPdaBase}TravelChk02x`,
+        timestamp: new Date(Date.now() - 90000),
+      },
+      {
+        eventId: 'EVT-TL-003',
+        vaultId: vault.vaultId,
+        actionType: 'TL_VENUE_ROUTED',
+        actor: 'translation_layer',
+        role: 'system',
+        result: 'success',
+        reason: 'Routed to Solstice eUSX Yield Vault via Mesh. Venue eligible, mandate allows.',
+        amount: 500000,
+        asset: 'USDC',
+        routingPda: `${mockPdaBase}RouteDecis02`,
+        timestamp: new Date(Date.now() - 85000),
+      },
+      {
+        eventId: 'EVT-TL-004',
+        vaultId: vault.vaultId,
+        actionType: 'TL_BOOKED_BACK',
+        actor: 'translation_layer',
+        role: 'system',
+        result: 'success',
+        reason: 'GL entry posted to Finstar. Debit: 5010-STRATEGY-DEPLOYED, Credit: 2010-CLIENT-VLT-001. SWIFT: AMINCHZZXXX.',
+        amount: 500000,
+        asset: 'USDC',
+        glEntryPda: `${mockPdaBase}GLEntry002ab`,
+        timestamp: new Date(Date.now() - 80000),
+      },
+      {
+        eventId: 'EVT-TL-005',
+        vaultId: vault.vaultId,
+        actionType: 'TL_PIPELINE_COMPLETE',
+        actor: 'translation_layer',
+        role: 'system',
+        result: 'success',
+        reason: 'Full pipeline: ALLOCATE 500,000 USDC to Solstice — all 5 PDAs created on-chain',
+        amount: 500000,
+        asset: 'USDC',
+        translationLayerRef: `${mockPdaBase}InstrLog02aB`,
+        compliancePda: `${mockPdaBase}ComplAttest03`,
+        travelRulePda: `${mockPdaBase}TravelChk03x`,
+        routingPda: `${mockPdaBase}RouteDecis03`,
+        glEntryPda: `${mockPdaBase}GLEntry003ab`,
+        timestamp: new Date(Date.now() - 75000),
+      },
+    ],
+  });
+
+  console.log('Seeded Translation Layer demo events');
   console.log('Seed complete!');
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { useStore, ROLE_LABELS, Role } from '../../store/useStore';
+import { useStore, ROLE_LABELS, Role, Segment } from '../../store/useStore';
 import Card from '../../components/Card';
 import StatusBadge from '../../components/StatusBadge';
 import {
@@ -612,7 +612,7 @@ const roleDashboardConfig: Record<string, { title: string; subtitle: string }> =
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────
 export default function AdminDashboardPage() {
-  const { currentRole, activeVaultId } = useStore();
+  const { currentRole, activeVaultId, activeSegment, setActiveSegment } = useStore();
   const data = useDashboardData();
   const config = roleDashboardConfig[currentRole] || roleDashboardConfig.admin;
 
@@ -629,6 +629,31 @@ export default function AdminDashboardPage() {
           {activeVaultId && <span className="ml-2 text-slate-500">— Active vault: <span className="text-ink-900 font-mono">{activeVaultId}</span></span>}
         </p>
       </div>
+
+      {currentRole === 'admin' && (
+        <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-[12px] p-1.5 shadow-1">
+          {([
+            { id: 'individuals' as Segment, label: 'Individuals', count: data.vaults.length },
+            { id: 'corporates' as Segment, label: 'Corporates', count: 0 },
+            { id: 'b2b2c' as Segment, label: 'B2B2C Partners', count: 0 },
+          ]).map(seg => (
+            <button
+              key={seg.id}
+              onClick={() => setActiveSegment(seg.id)}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-[10px] transition-all ease-amina duration-150 ${
+                activeSegment === seg.id
+                  ? 'bg-teal-700 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-ink-900 hover:bg-slate-50'
+              }`}
+            >
+              {seg.label}
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${
+                activeSegment === seg.id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+              }`}>{seg.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {currentRole === 'admin' && <AdminDashboard data={data} />}
       {currentRole === 'portfolio_manager' && <PortfolioManagerDashboard data={data} />}

@@ -155,4 +155,9 @@ export const api = {
     request<any>(`/compliance/jurisdictions/${code}`),
   complianceGetAttestations: (vaultId: string) =>
     request<any[]>(`/compliance/attestations/${vaultId}`),
+
+  // Operations (24/7 Health)
+  opsStatus: () => request<any[]>('/operations/status'),
+  opsSLA: () => request<any>('/operations/sla'),
+  opsAlerts: () => request<any[]>('/operations/alerts'),
 };
