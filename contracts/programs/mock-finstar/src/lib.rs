@@ -249,6 +249,9 @@ pub struct RecordBookBack<'info> {
 pub struct UpdateEntry<'info> {
     #[account(mut)]
     pub gl_entry: Account<'info, GLEntry>,
+    #[account(seeds = [b"finstar_config"], bump)]
+    pub config: Account<'info, FinstarConfig>,
+    #[account(constraint = authority.key() == config.admin @ FinstarError::Unauthorized)]
     pub authority: Signer<'info>,
 }
 
@@ -323,4 +326,6 @@ pub enum FinstarError {
     AlreadyInitialized,
     #[msg("Invalid entry status for this operation")]
     InvalidEntryStatus,
+    #[msg("Unauthorized: only admin can perform this action")]
+    Unauthorized,
 }

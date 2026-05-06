@@ -223,6 +223,9 @@ pub struct EvaluateTransfer<'info> {
 pub struct UpdateCheck<'info> {
     #[account(mut)]
     pub check: Account<'info, TravelRuleCheck>,
+    #[account(seeds = [b"notabene_config"], bump)]
+    pub config: Account<'info, NotabeneConfig>,
+    #[account(constraint = authority.key() == config.admin @ NotabeneError::Unauthorized)]
     pub authority: Signer<'info>,
 }
 
@@ -230,6 +233,9 @@ pub struct UpdateCheck<'info> {
 pub struct SuspendVASP<'info> {
     #[account(mut)]
     pub vasp: Account<'info, VASPEntry>,
+    #[account(seeds = [b"notabene_config"], bump)]
+    pub config: Account<'info, NotabeneConfig>,
+    #[account(constraint = authority.key() == config.admin @ NotabeneError::Unauthorized)]
     pub authority: Signer<'info>,
 }
 
@@ -259,4 +265,6 @@ pub struct TravelRuleEvaluated {
 pub enum NotabeneError {
     #[msg("Notabene instance already initialized")]
     AlreadyInitialized,
+    #[msg("Unauthorized: only admin can perform this action")]
+    Unauthorized,
 }

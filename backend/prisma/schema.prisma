@@ -178,3 +178,9 @@ model AdminUser {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 }
+
+model SystemConfig {
+  id        String   @id @default("singleton")
+  bankBalance Float  @default(50000)
+  updatedAt DateTime @updatedAt
+}

@@ -135,82 +135,90 @@ export class TranslationLayerService {
   }
 
   /**
-   * Derive ComplianceAttestation PDA: seeds = ["compliance_attestation", instruction_log.key(), attestation_id.as_bytes()]
+   * Derive ComplianceAttestation PDA: seeds = ["compliance", attestation_id.as_bytes()]
+   * Matches mock-jurisdiction-engine contract: EvaluateCompliance context
    */
-  private deriveComplianceAttestationPda(instructionLogPda: PublicKey, attestationId: string): [PublicKey, number] {
+  private deriveComplianceAttestationPda(_instructionLogPda: PublicKey, attestationId: string): [PublicKey, number] {
     return PublicKey.findProgramAddressSync(
-      [Buffer.from('compliance_attestation'), instructionLogPda.toBuffer(), Buffer.from(attestationId)],
-      this.getProgramPublicKey(),
+      [Buffer.from('compliance'), Buffer.from(attestationId)],
+      this.MOCK_JURISDICTION_ENGINE_PROGRAM_ID,
     );
   }
 
   /**
-   * Derive TravelRuleCheck PDA: seeds = ["travel_rule_check", instruction_log.key(), check_id.as_bytes()]
+   * Derive TravelRuleCheck PDA: seeds = ["travel_rule", check_id.as_bytes()]
+   * Matches mock-notabene contract: EvaluateTransfer context
    */
-  private deriveTravelRuleCheckPda(instructionLogPda: PublicKey, checkId: string): [PublicKey, number] {
+  private deriveTravelRuleCheckPda(_instructionLogPda: PublicKey, checkId: string): [PublicKey, number] {
     return PublicKey.findProgramAddressSync(
-      [Buffer.from('travel_rule_check'), instructionLogPda.toBuffer(), Buffer.from(checkId)],
-      this.getProgramPublicKey(),
+      [Buffer.from('travel_rule'), Buffer.from(checkId)],
+      this.MOCK_NOTABENE_PROGRAM_ID,
     );
   }
 
   /**
-   * Derive JurisdictionRules PDA: seeds = ["jurisdiction_rules", jurisdiction.as_bytes()]
+   * Derive JurisdictionRules PDA: seeds = ["jurisdiction", jurisdiction.as_bytes()]
+   * Matches mock-jurisdiction-engine contract: RegisterJurisdiction context
    */
   private deriveJurisdictionRulesPda(jurisdiction: string): [PublicKey, number] {
     return PublicKey.findProgramAddressSync(
-      [Buffer.from('jurisdiction_rules'), Buffer.from(jurisdiction)],
-      this.getProgramPublicKey(),
+      [Buffer.from('jurisdiction'), Buffer.from(jurisdiction)],
+      this.MOCK_JURISDICTION_ENGINE_PROGRAM_ID,
     );
   }
 
   /**
    * Derive NotabeneConfig PDA: seeds = ["notabene_config"]
+   * Matches mock-notabene contract: Initialize context
    */
   private deriveNotabeneConfigPda(): [PublicKey, number] {
     return PublicKey.findProgramAddressSync(
       [Buffer.from('notabene_config')],
-      this.getProgramPublicKey(),
+      this.MOCK_NOTABENE_PROGRAM_ID,
     );
   }
 
   /**
-   * Derive RoutingDecision PDA: seeds = ["routing_decision", instruction_log.key(), routing_id.as_bytes()]
+   * Derive RoutingDecision PDA: seeds = ["routing", routing_id.as_bytes()]
+   * Matches mock-mesh contract: RecordRouting context
    */
-  private deriveRoutingDecisionPda(instructionLogPda: PublicKey, routingId: string): [PublicKey, number] {
+  private deriveRoutingDecisionPda(_instructionLogPda: PublicKey, routingId: string): [PublicKey, number] {
     return PublicKey.findProgramAddressSync(
-      [Buffer.from('routing_decision'), instructionLogPda.toBuffer(), Buffer.from(routingId)],
-      this.getProgramPublicKey(),
+      [Buffer.from('routing'), Buffer.from(routingId)],
+      this.MOCK_MESH_PROGRAM_ID,
     );
   }
 
   /**
    * Derive MeshConfig PDA: seeds = ["mesh_config"]
+   * Matches mock-mesh contract: Initialize context
    */
   private deriveMeshConfigPda(): [PublicKey, number] {
     return PublicKey.findProgramAddressSync(
       [Buffer.from('mesh_config')],
-      this.getProgramPublicKey(),
+      this.MOCK_MESH_PROGRAM_ID,
     );
   }
 
   /**
-   * Derive GLEntry PDA: seeds = ["gl_entry", instruction_log.key(), gl_entry_id.as_bytes()]
+   * Derive GLEntry PDA: seeds = ["gl_entry", gl_entry_id.as_bytes()]
+   * Matches mock-finstar contract: RecordBookBack context
    */
-  private deriveGLEntryPda(instructionLogPda: PublicKey, glEntryId: string): [PublicKey, number] {
+  private deriveGLEntryPda(_instructionLogPda: PublicKey, glEntryId: string): [PublicKey, number] {
     return PublicKey.findProgramAddressSync(
-      [Buffer.from('gl_entry'), instructionLogPda.toBuffer(), Buffer.from(glEntryId)],
-      this.getProgramPublicKey(),
+      [Buffer.from('gl_entry'), Buffer.from(glEntryId)],
+      this.MOCK_FINSTAR_PROGRAM_ID,
     );
   }
 
   /**
    * Derive FinstarConfig PDA: seeds = ["finstar_config"]
+   * Matches mock-finstar contract: Initialize context
    */
   private deriveFinstarConfigPda(): [PublicKey, number] {
     return PublicKey.findProgramAddressSync(
       [Buffer.from('finstar_config')],
-      this.getProgramPublicKey(),
+      this.MOCK_FINSTAR_PROGRAM_ID,
     );
   }
 
@@ -321,7 +329,7 @@ export class TranslationLayerService {
       programId,
       keys: [
         { pubkey: instructionLogPda, isSigner: false, isWritable: true }, // instruction_log (init)
-        { pubkey: tlConfigPda, isSigner: false, isWritable: false },       // tl_config
+        { pubkey: tlConfigPda, isSigner: false, isWritable: true },       // tl_config (mut — increments total_instructions)
         { pubkey: authority.publicKey, isSigner: true, isWritable: true }, // initiator (signer, payer)
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // system_program
       ],
@@ -379,16 +387,15 @@ export class TranslationLayerService {
     const instruction = new TransactionInstruction({
       programId,
       keys: [
-        { pubkey: instructionLogPda, isSigner: false, isWritable: true },            // instruction_log
-        { pubkey: complianceAttestationPda, isSigner: false, isWritable: true },     // compliance_attestation (init)
-        { pubkey: travelRuleCheckPda, isSigner: false, isWritable: true },          // travel_rule_check (init)
+        { pubkey: instructionLogPda, isSigner: false, isWritable: true },            // instruction_log (mut)
+        { pubkey: complianceAttestationPda, isSigner: false, isWritable: true },     // compliance_attestation (init by CPI)
         { pubkey: jurisdictionRulesPda, isSigner: false, isWritable: false },       // jurisdiction_rules
-        { pubkey: notabeneConfigPda, isSigner: false, isWritable: false },          // notabene_config
+        { pubkey: this.MOCK_JURISDICTION_ENGINE_PROGRAM_ID, isSigner: false, isWritable: false }, // jurisdiction_program
+        { pubkey: travelRuleCheckPda, isSigner: false, isWritable: true },          // travel_rule_check (init by CPI)
+        { pubkey: notabeneConfigPda, isSigner: false, isWritable: true },           // notabene_config (mut — increments total_checks)
+        { pubkey: this.MOCK_NOTABENE_PROGRAM_ID, isSigner: false, isWritable: false }, // notabene_program
         { pubkey: authority.publicKey, isSigner: true, isWritable: true },          // authority (signer, payer)
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },    // system_program
-        // Remaining accounts for CPI
-        { pubkey: this.MOCK_JURISDICTION_ENGINE_PROGRAM_ID, isSigner: false, isWritable: false },
-        { pubkey: this.MOCK_NOTABENE_PROGRAM_ID, isSigner: false, isWritable: false },
       ],
       data: instructionData,
     });
@@ -442,16 +449,15 @@ export class TranslationLayerService {
     const instruction = new TransactionInstruction({
       programId,
       keys: [
-        { pubkey: instructionLogPda, isSigner: false, isWritable: true },        // instruction_log
-        { pubkey: routingDecisionPda, isSigner: false, isWritable: true },       // routing_decision (init)
-        { pubkey: meshConfigPda, isSigner: false, isWritable: false },           // mesh_config
-        { pubkey: glEntryPda, isSigner: false, isWritable: true },               // gl_entry (init)
-        { pubkey: finstarConfigPda, isSigner: false, isWritable: false },        // finstar_config
+        { pubkey: instructionLogPda, isSigner: false, isWritable: true },        // instruction_log (mut)
+        { pubkey: routingDecisionPda, isSigner: false, isWritable: true },       // routing_decision (init by CPI)
+        { pubkey: meshConfigPda, isSigner: false, isWritable: true },            // mesh_config (mut — increments total_routings)
+        { pubkey: this.MOCK_MESH_PROGRAM_ID, isSigner: false, isWritable: false }, // mesh_program
+        { pubkey: glEntryPda, isSigner: false, isWritable: true },               // gl_entry (init by CPI)
+        { pubkey: finstarConfigPda, isSigner: false, isWritable: true },         // finstar_config (mut — increments total_entries)
+        { pubkey: this.MOCK_FINSTAR_PROGRAM_ID, isSigner: false, isWritable: false }, // finstar_program
         { pubkey: authority.publicKey, isSigner: true, isWritable: true },       // authority (signer, payer)
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // system_program
-        // Remaining accounts for CPI
-        { pubkey: this.MOCK_MESH_PROGRAM_ID, isSigner: false, isWritable: false },
-        { pubkey: this.MOCK_FINSTAR_PROGRAM_ID, isSigner: false, isWritable: false },
       ],
       data: instructionData,
     });

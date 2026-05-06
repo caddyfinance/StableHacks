@@ -4,7 +4,7 @@ import { FinstarService } from './finstar.service';
 import { Roles } from '../auth/roles.guard';
 
 @ApiTags('Finstar')
-@Controller('api/finstar')
+@Controller('finstar')
 export class FinstarController {
   private service: FinstarService;
 

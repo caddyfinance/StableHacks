@@ -72,6 +72,7 @@ pub mod mock_jurisdiction_engine {
 
         if amount > rules.consent_required_above {
             rules_applied.push("consent_required");
+            result = ComplianceResult::ReviewRequired;
         }
 
         let travel_rule_status = if amount >= rules.travel_rule_threshold {
@@ -235,6 +236,9 @@ pub struct EvaluateCompliance<'info> {
 pub struct UpdateJurisdiction<'info> {
     #[account(mut)]
     pub rules: Account<'info, JurisdictionRules>,
+    #[account(seeds = [b"jurisdiction_config"], bump)]
+    pub config: Account<'info, JurisdictionEngineConfig>,
+    #[account(constraint = authority.key() == config.admin @ JurisdictionError::Unauthorized)]
     pub authority: Signer<'info>,
 }
 
@@ -266,4 +270,6 @@ pub enum JurisdictionError {
     AlreadyInitialized,
     #[msg("Jurisdiction is not active")]
     JurisdictionInactive,
+    #[msg("Unauthorized: only admin can perform this action")]
+    Unauthorized,
 }

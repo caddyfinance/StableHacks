@@ -2,6 +2,7 @@ import { Injectable, Inject, BadRequestException, ForbiddenException, NotFoundEx
 import { PublicKey } from '@solana/web3.js';
 import nacl from 'tweetnacl';
 import bs58 from 'bs58';
+import { randomUUID, createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsService } from '../events/events.service';
 import { SasService } from '../sas/sas.service';
@@ -17,13 +18,32 @@ export class VaultsService {
   private vaultProgram: VaultProgramService;
   private solstice: SolsticeService;
   private translationLayer: TranslationLayerService;
-  private bankBalance = 50000; // Simulated AMINA Bank USD balance
   private readonly PROTOCOL_BUFFER_BPS = 1000; // 10% — mirrors PROTOCOL_LIQUIDITY_BUFFER_BPS in the contract
   private readonly useTranslationLayer = process.env.USE_TRANSLATION_LAYER !== 'false';
 
   /** deployable = idle - (totalNAV * bufferBps / 10000); floor at 0 */
   private getDeployableBalance(idleBalance: number, totalNAV: number, bufferBps: number): number {
     return Math.max(0, idleBalance - (totalNAV * bufferBps) / 10000);
+  }
+
+  /** Get persistent bank balance from DB, initialize if missing */
+  private async getBankBalanceValue(): Promise<number> {
+    const config = await this.prisma.systemConfig.upsert({
+      where: { id: 'singleton' },
+      update: {},
+      create: { id: 'singleton', bankBalance: 50000 },
+    });
+    return config.bankBalance;
+  }
+
+  /** Adjust persistent bank balance */
+  private async adjustBankBalance(delta: number): Promise<number> {
+    const config = await this.prisma.systemConfig.upsert({
+      where: { id: 'singleton' },
+      update: { bankBalance: { increment: delta } },
+      create: { id: 'singleton', bankBalance: 50000 + delta },
+    });
+    return config.bankBalance;
   }
 
   constructor(
@@ -219,8 +239,7 @@ export class VaultsService {
     }
 
     // Allow multiple vaults per credential (each is segregated)
-    const count = await this.prisma.vault.count();
-    const vaultId = `VLT-${String(count + 1).padStart(3, '0')}`;
+    const vaultId = `VLT-${randomUUID().slice(0, 8).toUpperCase()}`;
 
     // Track deployment steps for the frontend (5-step segregated deployment)
     const steps: { step: string; status: string; detail?: string; txSignature?: string; address?: string }[] = [];
@@ -904,19 +923,23 @@ export class VaultsService {
     const looksLikeTxSig = sourceReference && /^[1-9A-HJ-NP-Za-km-z]{80,}$/.test(sourceReference);
     const txSig = isOnChain || looksLikeTxSig ? sourceReference : undefined;
 
-    const deposit = await this.prisma.deposit.create({
-      data: {
-        vaultId, amount,
-        sourceWallet: sourceWallet || callerWallet || 'unknown',
-        sourceReference: sourceReference || `SRC-${Date.now()}`,
-        sourceType: sourceType || 'Approved Custody-Linked Wallet',
-        jurisdictionTag: jurisdictionTag || 'CH',
-      },
-    });
+    const [deposit, updated] = await this.prisma.$transaction(async (tx) => {
+      const dep = await tx.deposit.create({
+        data: {
+          vaultId, amount,
+          sourceWallet: sourceWallet || callerWallet || 'unknown',
+          sourceReference: sourceReference || `SRC-${Date.now()}`,
+          sourceType: sourceType || 'Approved Custody-Linked Wallet',
+          jurisdictionTag: jurisdictionTag || 'CH',
+        },
+      });
 
-    const updated = await this.prisma.vault.update({
-      where: { vaultId },
-      data: { idleBalance: { increment: amount }, totalDeposited: { increment: amount }, totalNAV: { increment: amount } },
+      const upd = await tx.vault.update({
+        where: { vaultId },
+        data: { idleBalance: { increment: amount }, totalDeposited: { increment: amount }, totalNAV: { increment: amount } },
+      });
+
+      return [dep, upd] as const;
     });
 
     const actor = isOnChain ? (callerWallet || sourceWallet || 'client') : 'operations';
@@ -962,6 +985,7 @@ export class VaultsService {
   }
 
   async allocate(vaultId: string, strategyId: string, amount: number) {
+    await this.events.emit({ vaultId, actionType: 'ALLOCATION_INITIATED', actor: 'portfolio_manager', role: 'Portfolio Manager', asset: 'USDC', amount, strategy: strategyId, result: 'pending', reason: `Allocation initiated: ${amount} USDC to ${strategyId}` });
     const vault = await this.prisma.vault.findUnique({
       where: { vaultId },
       include: { mandate: true, allocations: true },
@@ -1029,8 +1053,7 @@ export class VaultsService {
       });
 
       if (!existing) {
-        const cnt = await this.prisma.consentRequest.count();
-        const requestId = `CONS-${String(cnt + 1).padStart(3, '0')}`;
+        const requestId = `CONS-${randomUUID().slice(0, 8).toUpperCase()}`;
 
         await this.prisma.consentRequest.create({
           data: { requestId, vaultId, actionType: 'ALLOCATION', amount, details: { strategyId, strategyName: strategy.name }, initiator: 'portfolio_manager', status: 'pending' },
@@ -1042,9 +1065,12 @@ export class VaultsService {
       }
     }
 
-    // Execute
-    const allocation = await this.prisma.allocation.create({ data: { vaultId, strategyId, amount, status: 'active' } });
-    await this.prisma.vault.update({ where: { vaultId }, data: { idleBalance: { decrement: amount } } });
+    // Execute atomically
+    const allocation = await this.prisma.$transaction(async (tx) => {
+      const alloc = await tx.allocation.create({ data: { vaultId, strategyId, amount, status: 'active' } });
+      await tx.vault.update({ where: { vaultId }, data: { idleBalance: { decrement: amount } } });
+      return alloc;
+    });
 
     await this.events.emit({ vaultId, actionType: 'ALLOCATION_EXECUTED', actor: 'portfolio_manager', role: 'Portfolio Manager', asset: vault.baseAsset, amount, strategy: strategyId, result: 'success', reason: `Allocated ${amount.toLocaleString()} ${vault.baseAsset} to ${strategy.name}` });
 
@@ -1072,6 +1098,7 @@ export class VaultsService {
    * The admin/PM must approve and process it via processWithdrawal().
    */
   async redeem(vaultId: string, amount: number, destinationWallet: string, callerWallet?: string, txSignature?: string) {
+    await this.events.emit({ vaultId, actionType: 'WITHDRAWAL_INITIATED', actor: callerWallet || 'client', role: 'Client Representative', asset: 'USDC', amount, result: 'pending', reason: `Withdrawal initiated: ${amount} USDC to ${destinationWallet}` });
     await this.verifyVaultOwnership(vaultId, callerWallet, true);
     const vault = await this.prisma.vault.findUnique({ where: { vaultId }, include: { mandate: true } });
     if (!vault) throw new NotFoundException('Vault not found');
@@ -1081,8 +1108,7 @@ export class VaultsService {
     }
 
     // Create a pending withdrawal request
-    const cnt = await this.prisma.consentRequest.count();
-    const requestId = `WDR-${String(cnt + 1).padStart(3, '0')}`;
+    const requestId = `WDR-${randomUUID().slice(0, 8).toUpperCase()}`;
 
     await this.prisma.consentRequest.create({
       data: {
@@ -1189,15 +1215,19 @@ export class VaultsService {
       }
     }
 
-    // Update DB
-    const updated = await this.prisma.vault.update({
-      where: { vaultId: request.vaultId },
-      data: { idleBalance: { decrement: request.amount }, totalNAV: { decrement: request.amount } },
-    });
+    // Update DB atomically
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const v = await tx.vault.update({
+        where: { vaultId: request.vaultId },
+        data: { idleBalance: { decrement: request.amount }, totalNAV: { decrement: request.amount } },
+      });
 
-    await this.prisma.consentRequest.update({
-      where: { requestId },
-      data: { status: 'approved', consentedBy: 'admin', consentedAt: new Date() },
+      await tx.consentRequest.update({
+        where: { requestId },
+        data: { status: 'approved', consentedBy: 'admin', consentedAt: new Date() },
+      });
+
+      return v;
     });
 
     await this.events.emit({
@@ -1400,9 +1430,10 @@ export class VaultsService {
     return updated;
   }
 
-  /** Get simulated AMINA Bank USD balance */
-  getBankBalance() {
-    return { balance: this.bankBalance, currency: 'USD' };
+  /** Get AMINA Bank USD balance (persisted) */
+  async getBankBalance() {
+    const balance = await this.getBankBalanceValue();
+    return { balance, currency: 'USD' };
   }
 
   /**
@@ -1410,11 +1441,13 @@ export class VaultsService {
    * Records the event in the audit trail.
    */
   async onramp(recipientWallet: string, amount: number, callerWallet?: string) {
-    if (amount > this.bankBalance) {
+    await this.events.emit({ vaultId: undefined, actionType: 'ONRAMP_INITIATED', actor: callerWallet || 'admin', role: 'Client Representative', asset: 'USD', amount, result: 'pending', reason: `Fiat on-ramp initiated: ${amount} USD → USDC` });
+    const currentBalance = await this.getBankBalanceValue();
+    if (amount > currentBalance) {
       throw new BadRequestException('Insufficient AMINA Bank balance');
     }
     const result = await this.vaultProgram.sendUsdc(recipientWallet, amount);
-    this.bankBalance -= amount;
+    await this.adjustBankBalance(-amount);
 
     await this.events.emit({
       actionType: 'ONRAMP_COMPLETED',
@@ -1435,6 +1468,7 @@ export class VaultsService {
    * Records the event in the audit trail.
    */
   async offramp(senderWallet: string, amount: number, callerWallet?: string, txSignature?: string) {
+    await this.events.emit({ vaultId: undefined, actionType: 'OFFRAMP_INITIATED', actor: callerWallet || 'admin', role: 'Client Representative', asset: 'USDC', amount, result: 'pending', reason: `Fiat off-ramp initiated: ${amount} USDC → USD` });
     const aminaWallet = this.vaultProgram.getAminaBankWallet();
 
     await this.events.emit({
@@ -1448,7 +1482,7 @@ export class VaultsService {
       txSignature,
     });
 
-    this.bankBalance += amount;
+    await this.adjustBankBalance(amount);
     return { message: `Off-ramp of ${amount.toLocaleString()} USDC completed`, status: 'success', aminaWallet, txSignature };
   }
 
@@ -1510,6 +1544,350 @@ export class VaultsService {
       after: { idleBalance: correctIdle, totalNAV: correctNAV },
       breakdown: { totalDeposited, activeDeployed, onChainDeployed, totalWithdrawn },
     };
+  }
+
+  /**
+   * Generate Proof of Reserves using Merkle tree.
+   * Each vault becomes a leaf: SHA256(vaultId:totalBalance)
+   * Returns Merkle root, total reserves, and per-vault proof paths.
+   */
+  async getProofOfReserves() {
+    const vaults = await this.prisma.vault.findMany({
+      where: { status: 'active' },
+      include: { allocations: { where: { status: 'active' } } },
+      orderBy: { vaultId: 'asc' },
+    });
+
+    if (vaults.length === 0) {
+      return {
+        merkleRoot: null,
+        totalReserves: 0,
+        vaultCount: 0,
+        timestamp: new Date().toISOString(),
+        vaults: [],
+      };
+    }
+
+    // Calculate total balance for each vault (idle + allocated)
+    const vaultBalances = vaults.map((v) => {
+      const allocatedBalance = v.allocations.reduce((s, a) => s + a.amount, 0);
+      const totalBalance = v.idleBalance + allocatedBalance;
+      return {
+        vaultId: v.vaultId,
+        idleBalance: v.idleBalance,
+        allocatedBalance,
+        totalBalance,
+        baseAsset: v.baseAsset,
+      };
+    });
+
+    // Build Merkle tree
+    const leaves = vaultBalances.map((vb) => {
+      const leafData = `${vb.vaultId}:${vb.totalBalance}`;
+      return createHash('sha256').update(leafData).digest('hex');
+    });
+
+    // Build tree levels bottom-up
+    const { root, proofs } = this.buildMerkleTree(leaves);
+
+    // Aggregate totals
+    const totalReserves = vaultBalances.reduce((s, vb) => s + vb.totalBalance, 0);
+
+    // Emit audit event
+    await this.events.emit({
+      actionType: 'PROOF_OF_RESERVES_GENERATED',
+      actor: 'system',
+      role: 'Compliance',
+      result: 'success',
+      reason: `Proof of Reserves generated: ${vaultBalances.length} vaults, total reserves: ${totalReserves.toLocaleString()} USDC, Merkle root: ${root}`,
+    });
+
+    return {
+      merkleRoot: root,
+      totalReserves,
+      vaultCount: vaultBalances.length,
+      timestamp: new Date().toISOString(),
+      vaults: vaultBalances.map((vb, index) => ({
+        vaultId: vb.vaultId,
+        totalBalance: vb.totalBalance,
+        idleBalance: vb.idleBalance,
+        allocatedBalance: vb.allocatedBalance,
+        baseAsset: vb.baseAsset,
+        leafHash: leaves[index],
+        proof: proofs[index],
+      })),
+    };
+  }
+
+  /**
+   * Build Merkle tree from leaves and generate proof paths for each leaf.
+   * Returns the root hash and an array of proofs (one per leaf).
+   */
+  private buildMerkleTree(leaves: string[]): {
+    root: string;
+    proofs: Array<{ hash: string; position: 'left' | 'right' }[]>;
+  } {
+    if (leaves.length === 0) {
+      return { root: '', proofs: [] };
+    }
+
+    // Store proof paths for each original leaf index
+    const proofs: Array<{ hash: string; position: 'left' | 'right' }[]> = leaves.map(() => []);
+
+    let currentLevel = [...leaves];
+    let leafIndexMapping = leaves.map((_, i) => i); // Track original leaf indices
+
+    // Build tree bottom-up
+    while (currentLevel.length > 1) {
+      const nextLevel: string[] = [];
+      const nextIndexMapping: number[] = [];
+
+      // Process pairs
+      for (let i = 0; i < currentLevel.length; i += 2) {
+        const left = currentLevel[i];
+        const right = i + 1 < currentLevel.length ? currentLevel[i + 1] : currentLevel[i]; // Duplicate last if odd
+
+        const leftIndices = leafIndexMapping.slice(
+          i * Math.pow(2, Math.log2(leaves.length / currentLevel.length)),
+          (i + 1) * Math.pow(2, Math.log2(leaves.length / currentLevel.length))
+        );
+        const rightIndices = i + 1 < currentLevel.length
+          ? leafIndexMapping.slice(
+              (i + 1) * Math.pow(2, Math.log2(leaves.length / currentLevel.length)),
+              (i + 2) * Math.pow(2, Math.log2(leaves.length / currentLevel.length))
+            )
+          : leftIndices;
+
+        // Compute parent hash
+        const parent = createHash('sha256').update(left + right).digest('hex');
+        nextLevel.push(parent);
+
+        // Add sibling to proof paths for all leaves under left child
+        const leftLeaves = this.getLeafIndicesInRange(i, currentLevel.length, leaves.length);
+        leftLeaves.forEach((leafIdx) => {
+          proofs[leafIdx].push({ hash: right, position: 'right' });
+        });
+
+        // Add sibling to proof paths for all leaves under right child (if different from left)
+        if (i + 1 < currentLevel.length && right !== left) {
+          const rightLeaves = this.getLeafIndicesInRange(i + 1, currentLevel.length, leaves.length);
+          rightLeaves.forEach((leafIdx) => {
+            proofs[leafIdx].push({ hash: left, position: 'left' });
+          });
+        }
+
+        nextIndexMapping.push(...leftIndices, ...rightIndices);
+      }
+
+      currentLevel = nextLevel;
+      leafIndexMapping = nextIndexMapping;
+    }
+
+    return { root: currentLevel[0], proofs };
+  }
+
+  /**
+   * Helper to determine which original leaf indices are under a given node position.
+   */
+  private getLeafIndicesInRange(nodeIndex: number, levelSize: number, totalLeaves: number): number[] {
+    const leavesPerNode = Math.ceil(totalLeaves / levelSize);
+    const startIdx = nodeIndex * leavesPerNode;
+    const endIdx = Math.min(startIdx + leavesPerNode, totalLeaves);
+    const indices: number[] = [];
+    for (let i = startIdx; i < endIdx; i++) {
+      indices.push(i);
+    }
+    return indices;
+  }
+
+  /**
+   * Generate comprehensive regulatory report containing:
+   * 1. Summary: total AUM, deposits, yield, vaults, reporting period
+   * 2. Per-vault NAV statements: vaultId, owner, deposits, NAV, yield, unrealized gains
+   * 3. Yield attribution by strategy: strategyId, name, allocated, yield, weighted APY
+   * 4. Fund flow summary: inflows, outflows, net flow
+   * 5. Compliance metrics: total events, events by type, failed events
+   */
+  async getRegulatoryReport(from?: string, to?: string) {
+    // Default to last 30 days if no date range provided
+    const toDate = to ? new Date(to) : new Date();
+    const fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    // Fetch all vaults with related data
+    const vaults = await this.prisma.vault.findMany({
+      include: {
+        allocations: {
+          include: { strategy: true },
+          where: { status: 'active' },
+        },
+        deposits: {
+          where: {
+            createdAt: { gte: fromDate, lte: toDate },
+          },
+        },
+        consentRequests: {
+          where: {
+            actionType: 'WITHDRAWAL',
+            status: 'approved',
+            consentedAt: { gte: fromDate, lte: toDate },
+          },
+        },
+      },
+    });
+
+    // Fetch compliance events within the period
+    const complianceEvents = await this.prisma.complianceEvent.findMany({
+      where: {
+        timestamp: { gte: fromDate, lte: toDate },
+      },
+    });
+
+    // 1. Summary metrics
+    const totalAUM = vaults.reduce((sum, v) => sum + v.totalNAV, 0);
+    const totalDeposits = vaults.reduce((sum, v) => sum + v.totalDeposited, 0);
+    const totalYieldEarned = vaults.reduce((sum, v) => {
+      const vaultYield = v.allocations.reduce((s, a) => s + a.yieldAccrued, 0);
+      return sum + vaultYield;
+    }, 0);
+    const activeVaultCount = vaults.filter(v => v.status === 'active').length;
+
+    // 2. Per-vault NAV statements
+    const vaultStatements = vaults.map(vault => {
+      const yieldEarned = vault.allocations.reduce((s, a) => s + a.yieldAccrued, 0);
+      const unrealizedGains = vault.totalNAV - vault.totalDeposited;
+
+      return {
+        vaultId: vault.vaultId,
+        ownerWallet: vault.ownerWallet,
+        totalDeposited: vault.totalDeposited,
+        currentNAV: vault.totalNAV,
+        yieldEarned,
+        unrealizedGains,
+        baseAsset: vault.baseAsset,
+        status: vault.status,
+      };
+    });
+
+    // 3. Yield attribution by strategy
+    const strategyMap = new Map<string, {
+      strategyId: string;
+      strategyName: string;
+      totalAllocated: number;
+      totalYieldGenerated: number;
+      allocationCount: number;
+      currentYield: number;
+    }>();
+
+    vaults.forEach(vault => {
+      vault.allocations.forEach(allocation => {
+        const existing = strategyMap.get(allocation.strategyId) || {
+          strategyId: allocation.strategyId,
+          strategyName: allocation.strategy.name,
+          totalAllocated: 0,
+          totalYieldGenerated: 0,
+          allocationCount: 0,
+          currentYield: allocation.strategy.currentYield,
+        };
+
+        existing.totalAllocated += allocation.amount;
+        existing.totalYieldGenerated += allocation.yieldAccrued;
+        existing.allocationCount += 1;
+
+        strategyMap.set(allocation.strategyId, existing);
+      });
+    });
+
+    const yieldAttribution = Array.from(strategyMap.values()).map(strat => {
+      // Weighted APY calculation: if yield was generated, calculate effective APY
+      // This is simplified - real calculation would need time-weighted average
+      const effectiveAPY = strat.totalAllocated > 0
+        ? (strat.totalYieldGenerated / strat.totalAllocated) * 100
+        : 0;
+
+      return {
+        strategyId: strat.strategyId,
+        strategyName: strat.strategyName,
+        totalAllocated: strat.totalAllocated,
+        totalYieldGenerated: strat.totalYieldGenerated,
+        weightedAPY: effectiveAPY,
+        allocationCount: strat.allocationCount,
+        currentYield: strat.currentYield,
+      };
+    });
+
+    // 4. Fund flow summary
+    const totalInflows = vaults.reduce((sum, v) => {
+      return sum + v.deposits.reduce((s, d) => s + d.amount, 0);
+    }, 0);
+
+    const totalOutflows = vaults.reduce((sum, v) => {
+      return sum + v.consentRequests.reduce((s, c) => s + c.amount, 0);
+    }, 0);
+
+    const netFlow = totalInflows - totalOutflows;
+
+    // 5. Compliance metrics
+    const totalEvents = complianceEvents.length;
+    const eventsByType = complianceEvents.reduce((acc, event) => {
+      acc[event.actionType] = (acc[event.actionType] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const failedEvents = complianceEvents.filter(e => e.result === 'failure').length;
+    const successEvents = complianceEvents.filter(e => e.result === 'success').length;
+    const pendingEvents = complianceEvents.filter(e => e.result === 'pending').length;
+
+    const report = {
+      summary: {
+        totalAUM,
+        totalDeposits,
+        totalYieldEarned,
+        activeVaultCount,
+        totalVaultCount: vaults.length,
+        reportingPeriod: {
+          from: fromDate.toISOString(),
+          to: toDate.toISOString(),
+        },
+        generatedAt: new Date().toISOString(),
+      },
+      vaultStatements,
+      yieldAttribution,
+      fundFlowSummary: {
+        totalInflows,
+        totalOutflows,
+        netFlow,
+        reportingPeriod: {
+          from: fromDate.toISOString(),
+          to: toDate.toISOString(),
+        },
+      },
+      complianceMetrics: {
+        totalEvents,
+        eventsByType,
+        eventsByResult: {
+          success: successEvents,
+          failure: failedEvents,
+          pending: pendingEvents,
+        },
+        failureRate: totalEvents > 0 ? (failedEvents / totalEvents) * 100 : 0,
+      },
+    };
+
+    // Emit audit event for report generation
+    await this.events.emit({
+      actionType: 'REGULATORY_REPORT_GENERATED',
+      actor: 'compliance_officer',
+      role: 'Compliance Officer',
+      result: 'success',
+      reason: [
+        `Regulatory report generated for period ${fromDate.toISOString().split('T')[0]} to ${toDate.toISOString().split('T')[0]}.`,
+        `Total AUM: ${totalAUM.toLocaleString()}. Active vaults: ${activeVaultCount}. Total yield: ${totalYieldEarned.toLocaleString()}.`,
+        `Fund flows - Inflows: ${totalInflows.toLocaleString()}, Outflows: ${totalOutflows.toLocaleString()}, Net: ${netFlow.toLocaleString()}.`,
+        `Compliance events: ${totalEvents} total, ${failedEvents} failures, ${successEvents} successes.`,
+      ].join(' '),
+    });
+
+    return report;
   }
 
 }

@@ -1,9 +1,10 @@
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::pubkey;
 
 declare_id!("5uPg5pi46gXErKcYWyqEAn2uSU68VZSUgvGTPZuVGwyA");
 
 /// SAS (Solana Attestation Service) Program ID
-pub const SAS_PROGRAM_ID: &str = "22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG";
+pub const SAS_PROGRAM_ID: Pubkey = pubkey!("22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG");
 
 /// Protocol-mandated minimum liquidity buffer: 10% of total NAV must remain idle at all times.
 /// This floor is inviolable — no mandate can set liquidityBufferBps below this value.
@@ -64,7 +65,7 @@ pub mod amina_vault {
 
         // Verify the SAS attestation account exists and is owned by the SAS program
         require!(
-            sas_attestation.owner == &SAS_PROGRAM_ID.parse::<Pubkey>().unwrap(),
+            sas_attestation.owner == &SAS_PROGRAM_ID,
             VaultError::InvalidSasAttestation
         );
 
@@ -105,7 +106,7 @@ pub mod amina_vault {
         let sas_attestation = &ctx.accounts.sas_attestation;
 
         require!(
-            sas_attestation.owner == &SAS_PROGRAM_ID.parse::<Pubkey>().unwrap(),
+            sas_attestation.owner == &SAS_PROGRAM_ID,
             VaultError::InvalidSasAttestation
         );
 
@@ -320,9 +321,9 @@ pub mod amina_vault {
         let vault = &mut ctx.accounts.vault;
         require!(!vault.paused, VaultError::VaultPaused);
 
-        vault.idle_balance = vault.idle_balance.checked_add(amount).unwrap();
-        vault.total_deposited = vault.total_deposited.checked_add(amount).unwrap();
-        vault.total_nav = vault.total_nav.checked_add(amount).unwrap();
+        vault.idle_balance = vault.idle_balance.checked_add(amount).ok_or(error!(VaultError::Overflow))?;
+        vault.total_deposited = vault.total_deposited.checked_add(amount).ok_or(error!(VaultError::Overflow))?;
+        vault.total_nav = vault.total_nav.checked_add(amount).ok_or(error!(VaultError::Overflow))?;
 
         emit!(DepositRecorded {
             vault_id: vault.vault_id.clone(),
@@ -358,7 +359,7 @@ pub mod amina_vault {
         let deployable = vault.idle_balance.saturating_sub(required_buffer);
         require!(amount <= deployable, VaultError::LiquidityBufferViolation);
 
-        vault.idle_balance = vault.idle_balance.checked_sub(amount).ok_or(VaultError::InsufficientBalance)?;
+        vault.idle_balance = vault.idle_balance.checked_sub(amount).ok_or(error!(VaultError::InsufficientBalance))?;
 
         emit!(AllocationExecuted {
             vault_id: vault.vault_id.clone(),
@@ -387,13 +388,14 @@ pub mod amina_vault {
         require!(vault.idle_balance >= amount, VaultError::InsufficientBalance);
 
         // Buffer check on post-withdrawal state (NAV also shrinks, so recalculate against post-NAV)
-        let post_idle = vault.idle_balance.checked_sub(amount).ok_or(VaultError::InsufficientBalance)?;
-        let post_nav  = vault.total_nav.checked_sub(amount).ok_or(VaultError::InsufficientBalance)?;
+        let post_idle = vault.idle_balance.checked_sub(amount).ok_or(error!(VaultError::InsufficientBalance))?;
+        let post_nav  = vault.total_nav.checked_sub(amount).ok_or(error!(VaultError::InsufficientBalance))?;
         let post_required = (post_nav as u128 * mandate.liquidity_buffer_bps as u128 / 10000) as u64;
         require!(post_idle >= post_required, VaultError::LiquidityBufferViolation);
 
         vault.idle_balance = post_idle;
         vault.total_nav = post_nav;
+        vault.total_deposited = vault.total_deposited.saturating_sub(amount);
 
         emit!(RedemptionExecuted {
             vault_id: vault.vault_id.clone(),
@@ -432,7 +434,7 @@ pub mod amina_vault {
         amount: u64,
     ) -> Result<()> {
         let vault = &mut ctx.accounts.vault;
-        vault.idle_balance = vault.idle_balance.checked_add(amount).unwrap();
+        vault.idle_balance = vault.idle_balance.checked_add(amount).ok_or(error!(VaultError::Overflow))?;
 
         emit!(UnwindExecuted {
             vault_id: vault.vault_id.clone(),
@@ -619,13 +621,14 @@ pub struct CreateVault<'info> {
 #[derive(Accounts)]
 pub struct AttachMandate<'info> {
     #[account(
-        init_if_needed,
+        init,
         payer = authority,
         space = 8 + 32 + 512 + 2 + 8 + 1 + 1 + 4 + 64,
         seeds = [b"mandate", vault.key().as_ref()],
         bump,
     )]
     pub mandate: Account<'info, Mandate>,
+    #[account(has_one = authority)]
     pub vault: Account<'info, Vault>,
     #[account(mut)]
     pub authority: Signer<'info>,
@@ -643,6 +646,7 @@ pub struct DepositFunds<'info> {
 pub struct AllocateToStrategy<'info> {
     #[account(mut, has_one = authority)]
     pub vault: Account<'info, Vault>,
+    #[account(seeds = [b"mandate", vault.key().as_ref()], bump)]
     pub mandate: Account<'info, Mandate>,
     pub authority: Signer<'info>,
 }
@@ -651,6 +655,7 @@ pub struct AllocateToStrategy<'info> {
 pub struct UpdateMandate<'info> {
     #[account(mut, seeds = [b"mandate", vault.key().as_ref()], bump)]
     pub mandate: Account<'info, Mandate>,
+    #[account(has_one = authority)]
     pub vault: Account<'info, Vault>,
     #[account(mut)]
     pub authority: Signer<'info>,
@@ -835,6 +840,8 @@ pub enum VaultError {
     AlreadyInitialized,
     #[msg("Liquidity buffer BPS cannot be set below protocol minimum (1000 = 10%)")]
     BelowProtocolMinimum,
+    #[msg("Arithmetic overflow")]
+    Overflow,
 }
 
 // ─── Vault Helper Methods ────────────────────────────────────────

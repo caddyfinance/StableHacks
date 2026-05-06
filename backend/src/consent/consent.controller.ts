@@ -12,8 +12,10 @@ export class ConsentController {
   }
 
   @Get()
+  @Roles('admin', 'portfolio_manager', 'compliance_officer', 'client_representative')
   @ApiOperation({ summary: 'List all consent requests', description: 'Retrieve all pending and resolved consent requests. Consent requests are generated when vault operations exceed mandate thresholds and require client approval.' })
   @ApiOkResponse({ description: 'Returns array of all consent request records.' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions.' })
   findAll() {
     return this.service.findAll();
   }

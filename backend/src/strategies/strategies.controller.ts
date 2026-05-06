@@ -12,8 +12,10 @@ export class StrategiesController {
   }
 
   @Get()
+  @Roles('admin', 'portfolio_manager', 'compliance_officer', 'emergency_admin')
   @ApiOperation({ summary: 'List all yield strategies', description: 'Retrieve all available yield strategies on the platform, including their APY, risk tier, status, and allocation details. Used by portfolio managers to review investment options.' })
   @ApiOkResponse({ description: 'Returns array of all strategy records.' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions.' })
   findAll() {
     return this.service.findAll();
   }

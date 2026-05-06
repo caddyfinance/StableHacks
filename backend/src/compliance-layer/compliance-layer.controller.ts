@@ -4,11 +4,20 @@ import { ComplianceLayerService } from './compliance-layer.service';
 import { Roles } from '../auth/roles.guard';
 
 @ApiTags('Compliance Layer')
-@Controller('api/compliance')
+@Controller('compliance')
 export class ComplianceLayerController {
   private readonly logger = new Logger(ComplianceLayerController.name);
 
   constructor(private readonly complianceService: ComplianceLayerService) {}
+
+  // ─── Health Check ─────────────────────────────────────────────
+
+  @Get('health-check')
+  @Roles('admin', 'compliance_officer')
+  async runHealthCheck() {
+    this.logger.log('GET /api/compliance/health-check');
+    return this.complianceService.runHealthCheck();
+  }
 
   // ─── Travel Rule (Notabene) ───────────────────────────────────
 

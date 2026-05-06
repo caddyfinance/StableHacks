@@ -1,10 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { createHash } from 'crypto';
 import {
   Connection,
   PublicKey,
 } from '@solana/web3.js';
 import bs58 from 'bs58';
+import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * BorshReader utility for manual Borsh deserialization.
@@ -79,6 +80,116 @@ class BorshReader {
 @Injectable()
 export class ComplianceLayerService {
   private readonly logger = new Logger(ComplianceLayerService.name);
+
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+
+  async runHealthCheck(): Promise<{ overallScore: number; checks: Array<{ name: string; status: string; detail: string }> }> {
+    const checks: Array<{ name: string; status: string; detail: string }> = [];
+
+    const runCheck = async (
+      name: string,
+      fn: () => Promise<{ pass: boolean; detail: string }>,
+    ) => {
+      try {
+        const result = await fn();
+        checks.push({ name, status: result.pass ? 'pass' : 'fail', detail: result.detail });
+      } catch (error: any) {
+        checks.push({ name, status: 'fail', detail: `Error: ${error.message}` });
+      }
+    };
+
+    await runCheck('Database Connectivity', async () => {
+      const count = await this.prisma.adminUser.count();
+      return { pass: true, detail: `Database reachable — ${count} admin user(s) found` };
+    });
+
+    await runCheck('Active Credentials', async () => {
+      const count = await this.prisma.credential.count({ where: { status: 'active' } });
+      return {
+        pass: count > 0,
+        detail: count > 0 ? `${count} active credential(s) found` : 'No active credentials',
+      };
+    });
+
+    await runCheck('Active Vaults', async () => {
+      const count = await this.prisma.vault.count({ where: { status: 'active' } });
+      return {
+        pass: count > 0,
+        detail: count > 0 ? `${count} active vault(s) found` : 'No active vaults',
+      };
+    });
+
+    await runCheck('Mandate Enforcement', async () => {
+      const count = await this.prisma.mandate.count({
+        where: { allowedStrategies: { isEmpty: false } },
+      });
+      return {
+        pass: count > 0,
+        detail: count > 0 ? `${count} mandate(s) with allowed strategies` : 'No mandates with allowed strategies',
+      };
+    });
+
+    await runCheck('Consent Configuration', async () => {
+      const count = await this.prisma.mandate.count({
+        where: { consentThreshold: { gt: 0 } },
+      });
+      return {
+        pass: count > 0,
+        detail: count > 0 ? `${count} mandate(s) with consent threshold configured` : 'No mandates with consent threshold',
+      };
+    });
+
+    await runCheck('Strategy Registry', async () => {
+      const count = await this.prisma.strategy.count({ where: { active: true } });
+      return {
+        pass: count > 0,
+        detail: count > 0 ? `${count} active strategy/strategies registered` : 'No active strategies',
+      };
+    });
+
+    await runCheck('Event Logging', async () => {
+      const count = await this.prisma.complianceEvent.count();
+      return {
+        pass: count > 0,
+        detail: count > 0 ? `${count} compliance event(s) logged` : 'No compliance events found',
+      };
+    });
+
+    await runCheck('Deposit Provenance', async () => {
+      const count = await this.prisma.deposit.count({
+        where: { sourceReference: { not: '' } },
+      });
+      return {
+        pass: count > 0,
+        detail: count > 0 ? `${count} deposit(s) with source reference` : 'No deposits with source reference',
+      };
+    });
+
+    await runCheck('Destination Whitelist', async () => {
+      const count = await this.prisma.mandate.count({
+        where: { approvedDestinations: { isEmpty: false } },
+      });
+      return {
+        pass: count > 0,
+        detail: count > 0 ? `${count} mandate(s) with approved destinations` : 'No mandates with approved destinations',
+      };
+    });
+
+    await runCheck('Translation Layer', async () => {
+      const count = await this.prisma.complianceEvent.count({
+        where: { actionType: { startsWith: 'TL_' } },
+      });
+      return {
+        pass: count > 0,
+        detail: count > 0 ? `${count} translation layer event(s) found` : 'No translation layer events found',
+      };
+    });
+
+    const passes = checks.filter((c) => c.status === 'pass').length;
+    const overallScore = Math.round((passes / checks.length) * 100);
+
+    return { overallScore, checks };
+  }
 
   private getConnection(): Connection {
     const rpc = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';

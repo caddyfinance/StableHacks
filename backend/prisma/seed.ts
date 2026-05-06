@@ -268,6 +268,90 @@ async function main() {
   });
 
   console.log('Seeded Translation Layer demo events');
+
+  // ── Abu Dhabi (ADGM) second vault ──────────────────────────────
+
+  const cred2 = await prisma.credential.create({
+    data: {
+      credentialId: 'SAS-VAULT-002',
+      clientReference: 'INST-3072',
+      jurisdiction: 'AE-AZ',
+      riskTier: 'Moderate',
+      productEligibility: 'Institutional Yield Vault',
+      walletAddress: '0xADBD9001ABUDHABI0000000000000000000000',
+      status: 'active',
+      revoked: false,
+      attestationPda: 'F6dD2YrN5iJjmPe5YhExMhBTbT1jLGYKsEF3rfrjK5Wm',
+      attestationTxSig: '5UeA2YcTdWJ6QqMLqYH3jMqS3RqweRh2GNxM6KTDvGYxDnJbEkSjbFJm3mG2HYvXkJTgrn7qN5LwfYrsh6ApGVqN',
+    },
+  });
+
+  console.log('Created credential:', cred2.credentialId);
+
+  const vault2 = await prisma.vault.create({
+    data: {
+      vaultId: 'VLT-002',
+      credentialId: cred2.credentialId,
+      clientReference: 'INST-3072',
+      ownerWallet: '0xADBD9001ABUDHABI0000000000000000000000',
+      baseAsset: 'USDC',
+      status: 'active',
+      paused: false,
+      idleBalance: 200000,
+      totalDeposited: 500000,
+      totalNAV: 500000,
+    },
+  });
+
+  console.log('Created vault:', vault2.vaultId);
+
+  await prisma.mandate.create({
+    data: {
+      vaultId: vault2.vaultId,
+      allowedStrategies: ['solstice-eusx-yield'],
+      blockedStrategies: [],
+      maxAllocationBps: { 'solstice-eusx-yield': 10000 },
+      liquidityBufferBps: 1500,
+      consentThreshold: 100000,
+      leverageAllowed: true,
+      approvedDestinations: [
+        '0xADBD-CUSTODY-01-ABUDHABI-000000000000000',
+        '0xADBD-CUSTODY-02-ABUDHABI-000000000000000',
+      ],
+      status: 'active',
+      version: 1,
+      lastUpdatedBy: 'admin',
+      onChainSynced: false,
+    },
+  });
+
+  console.log('Created mandate for vault:', vault2.vaultId);
+
+  await prisma.deposit.create({
+    data: {
+      vaultId: vault2.vaultId,
+      amount: 500000,
+      sourceWallet: '0xADBD-TREASURY-ABUDHABI-000000000000000',
+      sourceReference: 'ADGM-2026-001',
+      sourceType: 'Approved Custody-Linked Wallet',
+      screeningStatus: 'Clear',
+      jurisdictionTag: 'AE-AZ',
+    },
+  });
+
+  console.log('Deposited 500,000 USDC into vault VLT-002');
+
+  await prisma.complianceEvent.createMany({
+    data: [
+      { eventId: 'EVT-AE-001', vaultId: vault2.vaultId, actionType: 'CREDENTIAL_ISSUED', actor: 'admin@amina.bank', role: 'Admin', result: 'success', reason: 'Credential issued for INST-3072 (Abu Dhabi, ADGM)' },
+      { eventId: 'EVT-AE-002', vaultId: vault2.vaultId, actionType: 'VAULT_CREATED', actor: 'admin@amina.bank', role: 'Admin', result: 'success', reason: 'Segregated vault created for INST-3072 (Abu Dhabi)' },
+      { eventId: 'EVT-AE-003', vaultId: vault2.vaultId, actionType: 'MANDATE_ATTACHED', actor: 'admin@amina.bank', role: 'Admin', result: 'success', reason: 'Mandate attached: 100% cap, 15% buffer, 100K consent, leverage allowed (Abu Dhabi FSRA rules)' },
+      { eventId: 'EVT-AE-004', vaultId: vault2.vaultId, actionType: 'DEPOSIT_RECORDED', actor: 'admin@amina.bank', role: 'Admin', asset: 'USDC', amount: 500000, result: 'success', reason: 'Deposit: 500,000 USDC from ADGM treasury wallet' },
+    ],
+  });
+
+  console.log('Seeded Abu Dhabi compliance events');
+
   console.log('Seed complete!');
 }
 

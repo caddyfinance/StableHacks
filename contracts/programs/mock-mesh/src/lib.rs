@@ -230,6 +230,9 @@ pub struct RecordRouting<'info> {
 pub struct SuspendVenue<'info> {
     #[account(mut)]
     pub venue: Account<'info, VenueEntry>,
+    #[account(seeds = [b"mesh_config"], bump)]
+    pub config: Account<'info, MeshConfig>,
+    #[account(constraint = authority.key() == config.admin @ MeshError::Unauthorized)]
     pub authority: Signer<'info>,
 }
 
@@ -272,4 +275,6 @@ pub struct VenueSuspended {
 pub enum MeshError {
     #[msg("Mesh instance already initialized")]
     AlreadyInitialized,
+    #[msg("Unauthorized: only admin can perform this action")]
+    Unauthorized,
 }

@@ -13,13 +13,16 @@ export class CredentialsController {
   }
 
   @Get()
+  @Roles('admin', 'compliance_officer')
   @ApiOperation({ summary: 'List all credentials', description: 'Retrieve all issued verifiable credentials across the institutional vault platform. Returns KYC/AML credential records for all clients.' })
   @ApiOkResponse({ description: 'Returns array of all credential records.' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions. Admin or compliance officer role required.' })
   findAll() {
     return this.service.findAll();
   }
 
   @Get('wallet/:address')
+  @Roles('admin', 'portfolio_manager', 'client_representative')
   @ApiOperation({ summary: 'Get credentials by wallet address', description: 'Look up verifiable credentials associated with a specific Solana wallet address. Used to verify a client\'s compliance status before vault operations.' })
   @ApiParam({ name: 'address', description: 'Solana wallet address to look up credentials for' })
   @ApiOkResponse({ description: 'Returns credentials bound to the specified wallet.' })
@@ -28,6 +31,7 @@ export class CredentialsController {
   }
 
   @Get('lookup/:clientReference')
+  @Roles('admin', 'client_representative')
   @ApiOperation({ summary: 'Verify credential by client reference', description: 'Look up and verify a credential using the client reference identifier. Used for cross-referencing client identity with external systems.' })
   @ApiParam({ name: 'clientReference', description: 'Unique client reference identifier' })
   @ApiOkResponse({ description: 'Returns the credential matching the client reference.' })
@@ -36,13 +40,16 @@ export class CredentialsController {
   }
 
   @Put('bind-wallet')
+  @Roles('admin', 'client_representative')
   @ApiOperation({ summary: 'Bind wallet to credential', description: 'Associate a Solana wallet address with an existing verifiable credential. This links on-chain identity to the off-chain KYC/AML credential.' })
   @ApiOkResponse({ description: 'Wallet successfully bound to the credential.' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions. Admin or client representative role required.' })
   bindWallet(@Body() body: { credentialId: string; walletAddress: string }) {
     return this.service.bindWallet(body.credentialId, body.walletAddress);
   }
 
   @Get('verify-onchain/:walletAddress')
+  @Roles('admin', 'portfolio_manager', 'compliance_officer')
   @ApiOperation({ summary: 'Verify on-chain credential status', description: 'Check the on-chain verification status of a credential associated with the given wallet address. Validates that the credential is recorded and active on the Solana blockchain.' })
   @ApiParam({ name: 'walletAddress', description: 'Solana wallet address to verify on-chain' })
   @ApiOkResponse({ description: 'Returns on-chain verification result.' })
@@ -51,6 +58,7 @@ export class CredentialsController {
   }
 
   @Get(':id/validate')
+  @Roles('admin', 'portfolio_manager', 'compliance_officer')
   @ApiOperation({ summary: 'Validate credential by ID', description: 'Check whether a specific credential is currently valid, including expiration and revocation status. Used as a gate before permitting vault operations.' })
   @ApiParam({ name: 'id', description: 'Credential identifier' })
   @ApiOkResponse({ description: 'Returns validation result (valid/invalid) with reason.' })

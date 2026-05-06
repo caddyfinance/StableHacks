@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD, Reflector } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR, Reflector } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
 import { CredentialsModule } from './credentials/credentials.module';
 import { VaultsModule } from './vaults/vaults.module';
@@ -16,6 +16,7 @@ import { FinstarModule } from './finstar/finstar.module';
 import { ComplianceLayerModule } from './compliance-layer/compliance-layer.module';
 import { OperationsModule } from './operations/operations.module';
 import { RolesGuard } from './auth/roles.guard';
+import { LoggingInterceptor } from './common/logging.interceptor';
 
 @Module({
   imports: [
@@ -40,6 +41,10 @@ import { RolesGuard } from './auth/roles.guard';
       provide: APP_GUARD,
       useFactory: (reflector: Reflector) => new RolesGuard(reflector),
       inject: [Reflector],
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: LoggingInterceptor,
     },
   ],
 })
