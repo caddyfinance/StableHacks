@@ -228,7 +228,7 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
   const [expanded, setExpanded] = useState(false);
   const oc = vault.onChainVerification;
   const isOnChainVerified = oc?.vaultPdaExists || !!vault.onChainAddress;
-  const isProgramVerified = oc?.programExists && oc?.programExecutable;
+  const isProgramVerified = !!(oc?.programExists && oc?.programExecutable);
 
   const onChainDeposits = vault.deposits.filter(d => d.onChainVerified);
   const onChainAllocations = vault.allocations.filter(a => a.onChainVerified);
