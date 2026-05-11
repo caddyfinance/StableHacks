@@ -3,7 +3,7 @@ import { api } from '../../lib/api';
 import { useStore } from '../../store/useStore';
 import Card from '../../components/Card';
 import StatusBadge from '../../components/StatusBadge';
-import { Landmark, FileText, ArrowDownToLine, ArrowUpFromLine, RefreshCw, Copy, Check } from 'lucide-react';
+import { Landmark, FileText, ArrowDownToLine, ArrowUpFromLine, RefreshCw, Copy, Check, Vault } from 'lucide-react';
 
 const fmt = (v: any) => {
   if (v === null || v === undefined || isNaN(v)) return '0.00';
@@ -41,11 +41,16 @@ function CopyButton({ text }: { text: string }) {
 }
 
 export default function FinstarLedgerPage() {
-  const { activeVaultId } = useStore();
+  const { activeVaultId, setActiveVaultId } = useStore();
+  const [vaults, setVaults] = useState<any[]>([]);
   const [config, setConfig] = useState<any>(null);
   const [ledger, setLedger] = useState<any>(null);
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.getVaults().then(setVaults).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -73,12 +78,28 @@ export default function FinstarLedgerPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold text-ink-900">Finstar Core Banking Ledger</h1>
-        <p className="text-sm text-slate-700 mt-1">
-          Layer 1 — HBL ASP/BSP general ledger book-back proof
-          {activeVaultId && <span className="ml-2 text-slate-500">— Vault: <span className="text-ink-900 font-mono">{activeVaultId}</span></span>}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-ink-900">Finstar Core Banking Ledger</h1>
+          <p className="text-sm text-slate-700 mt-1">
+            Layer 1 — HBL ASP/BSP general ledger book-back proof
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Vault className="w-4 h-4 text-slate-400" />
+          <select
+            value={activeVaultId || ''}
+            onChange={(e) => setActiveVaultId(e.target.value)}
+            className="px-3 py-1.5 text-xs border border-slate-200 rounded-xl bg-white text-ink-900 focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600 transition-colors min-w-[180px]"
+          >
+            <option value="">Select vault...</option>
+            {vaults.map((v: any) => (
+              <option key={v.vaultId} value={v.vaultId}>
+                {v.vaultId} — {v.clientReference || v.credentialId?.slice(0, 12)}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Config Summary */}
@@ -113,7 +134,7 @@ export default function FinstarLedgerPage() {
         <div className="bg-slate-100 border border-slate-200 rounded-lg p-6 text-center">
           <Landmark className="w-8 h-8 text-slate-400 mx-auto mb-3" />
           <p className="text-sm text-slate-700 font-medium">No vault selected</p>
-          <p className="text-xs text-slate-500 mt-1">Select a vault from the Dashboard to view its Finstar GL ledger.</p>
+          <p className="text-xs text-slate-500 mt-1">Select a vault from the dropdown above to view its Finstar GL ledger.</p>
         </div>
       )}
 

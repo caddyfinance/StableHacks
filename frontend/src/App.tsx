@@ -43,7 +43,7 @@ import PitchMode from './components/PitchMode';
 // Role → allowed routes
 const roleAccess: Record<Role, string[]> = {
   admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance', '/amina/audit-log', '/amina/transparency', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger', '/amina/operations', '/amina/providers', '/amina/wallet-controllers', '/amina/transfer-checks'],
-  portfolio_manager: ['/amina', '/amina/mandate', '/amina/execution', '/amina/compliance', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger', '/amina/providers', '/amina/transfer-checks'],
+  portfolio_manager: ['/amina', '/amina/mandate', '/amina/funding', '/amina/execution', '/amina/compliance', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger', '/amina/providers', '/amina/transfer-checks'],
   compliance_officer: ['/amina', '/amina/compliance', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger', '/amina/providers', '/amina/wallet-controllers', '/amina/transfer-checks'],
   emergency_admin: ['/amina', '/amina/emergency', '/amina/compliance', '/amina/architecture', '/amina/operations'],
   client_representative: [],
@@ -94,6 +94,7 @@ function AccessDenied({ role, route }: { role: Role; route: string }) {
     ],
     portfolio_manager: [
       { label: 'Mandate Details', path: '/amina/mandate' },
+      { label: 'Vault Funding', path: '/amina/funding' },
       { label: 'Execution', path: '/amina/execution' },
       { label: 'Compliance', path: '/amina/compliance' },
       { label: 'Architecture', path: '/amina/architecture' },

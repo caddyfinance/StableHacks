@@ -452,6 +452,26 @@ export default function VaultFactoryPage() {
           {/* Success summary after completion */}
           {!submitting && lastCreated && (
             <>
+            {lastCreated.status === 'failed' ? (
+              <div className="mt-4 pt-4 border-t border-slate-200/30">
+                <div className="flex items-center gap-2 text-error-700 mb-3">
+                  <XCircle className="w-5 h-5" />
+                  <span className="text-sm font-medium">
+                    Vault deployment failed — {lastCreated.vaultId}
+                  </span>
+                </div>
+                <div className="bg-error-50 border border-error-200/60 rounded-[14px] p-4 text-xs text-error-700">
+                  One or more deployment steps failed. The vault was not provisioned and no on-chain resources were created. Please review the failed step above and retry.
+                </div>
+                <button
+                  onClick={() => { setLastCreated(null); setLiveSteps([]); }}
+                  className="text-xs text-slate-500 hover:text-ink-900 transition-colors mt-3"
+                >
+                  Dismiss
+                </button>
+              </div>
+            ) : (
+            <>
             <div className="mt-4 pt-4 border-t border-slate-200/30">
               <div className="flex items-center gap-2 text-success-700 mb-3">
                 <CheckCircle className="w-5 h-5" />
@@ -544,8 +564,8 @@ export default function VaultFactoryPage() {
             </button>
             </div>
 
-            {/* Mandate acceptance step — shown when vault is still in 'initiated' state */}
-            {lastCreated.status !== 'active' && (
+            {/* Mandate acceptance step — shown when vault is in 'initiated' state */}
+            {lastCreated.status === 'initiated' && (
               <div className="mt-4 pt-4 border-t border-slate-200/30">
                 <div className="flex items-start gap-3 bg-teal-50 border border-teal-200/60 rounded-[14px] p-4">
                   <div className="w-9 h-9 rounded-[10px] bg-teal-100 flex items-center justify-center flex-shrink-0">
@@ -595,6 +615,8 @@ export default function VaultFactoryPage() {
                   </div>
                 </div>
               </div>
+            )}
+            </>
             )}
             </>
           )}

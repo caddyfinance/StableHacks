@@ -949,16 +949,27 @@ export class SolsticeService {
     aminaBankWallet: string;
     eusxAta: string;
     onChainVerified: boolean;
-  }> {
+    vaultAllocatedAmount: number;
+    onChainYield: number;
+  } | null> {
+    const allocations = await this.prisma.allocation.findMany({
+      where: { vaultId, strategyId: STRATEGY_ID },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, amount: true, yieldAccrued: true, status: true, txSignature: true, createdAt: true },
+    });
+
+    const hasActiveAllocation = allocations.some(a => a.status === 'active' || a.status === 'cooldown');
+    if (!hasActiveAllocation) {
+      return null;
+    }
+
     const connection = this.getConnection();
     const authority = this.getAminaBankKeypair();
     const user = authority.publicKey;
     const userEusxAta = await getAssociatedTokenAddress(EUSX_MINT, user);
 
-    // On-chain balance
     const eusxBalance = await this.getTokenBalance(connection, userEusxAta);
 
-    // Exchange rate
     let exchangeRate = 1;
     try {
       const poolState = await this.getYieldPoolState();
@@ -967,19 +978,32 @@ export class SolsticeService {
 
     const usxValue = eusxBalance * exchangeRate;
 
-    // DB allocation records for this vault + strategy
-    const allocations = await this.prisma.allocation.findMany({
-      where: { vaultId, strategyId: STRATEGY_ID },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, amount: true, yieldAccrued: true, status: true, txSignature: true, createdAt: true },
+    const totalAllocatedAcrossAllVaults = await this.prisma.allocation.aggregate({
+      _sum: { amount: true },
+      where: { strategyId: STRATEGY_ID, status: { in: ['active', 'cooldown'] } },
     });
+    const globalAllocated = totalAllocatedAcrossAllVaults._sum.amount || 0;
+
+    const thisVaultAllocated = allocations
+      .filter(a => a.status === 'active' || a.status === 'cooldown')
+      .reduce((s, a) => s + a.amount, 0);
+
+    const vaultShare = globalAllocated > 0 ? thisVaultAllocated / globalAllocated : 1;
+    const vaultEusxBalance = eusxBalance * vaultShare;
+    const vaultUsxValue = vaultEusxBalance * exchangeRate;
+    const onChainYield = Math.max(0, vaultUsxValue - thisVaultAllocated);
 
     return {
-      vaultId, eusxBalance, usxValue, exchangeRate,
+      vaultId,
+      eusxBalance: vaultEusxBalance,
+      usxValue: vaultUsxValue,
+      exchangeRate,
       allocations,
       aminaBankWallet: user.toBase58(),
       eusxAta: userEusxAta.toBase58(),
       onChainVerified: true,
+      vaultAllocatedAmount: thisVaultAllocated,
+      onChainYield,
     };
   }
 

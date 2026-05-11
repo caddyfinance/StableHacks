@@ -223,6 +223,8 @@ export default function ExecutionPage() {
           txSignature: res.txSignature,
         });
         notify('success', `Locked ${parsed} USX into Solstice — on-chain confirmed`);
+        setAmount('');
+        setSelectedStrategy('');
         loadData();
       } else {
         // DB-only allocation for other strategies
@@ -234,6 +236,8 @@ export default function ExecutionPage() {
         if (res.status === 201) {
           setOutcome({ type: 'approved', strategyName: strat?.name || selectedStrategy, amount: parsed, reason: data.message || 'Deployed successfully', txSignature: data.allocation?.id });
           notify('success', 'Capital deployed');
+          setAmount('');
+          setSelectedStrategy('');
           loadData();
         } else if (res.status === 403) {
           setOutcome({ type: 'blocked', strategyName: strat?.name || selectedStrategy, amount: parsed, reason: data.reason || 'Blocked by mandate' });
@@ -266,6 +270,8 @@ export default function ExecutionPage() {
           : `Pulled ${fmt(res.totalUnwind || pullAmount)} USDC back to idle balance`;
         setOutcome({ type: 'approved', strategyName: strat?.name || selectedStrategy, amount: res.totalUnwind || pullAmount, reason, txSignature: res.withdrawTx || res.unlockTx });
         notify('success', 'Capital pulled from strategy');
+        setAmount('');
+        setSelectedStrategy('');
       }
       loadData();
     } catch (err: any) {

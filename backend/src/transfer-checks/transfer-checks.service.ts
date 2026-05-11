@@ -23,12 +23,55 @@ export class TransferChecksService {
     });
   }
 
-  async findAll(filters?: { vaultId?: string; transferType?: string; overallStatus?: string }) {
+  async findAll(filters?: {
+    vaultId?: string;
+    transferType?: string;
+    overallStatus?: string;
+    kytStatus?: string;
+    search?: string;
+    minAmount?: number;
+    maxAmount?: number;
+    page?: number;
+    limit?: number;
+  }) {
     const where: any = {};
-    if (filters?.vaultId) where.vaultId = filters.vaultId;
+    if (filters?.vaultId) where.vaultId = { contains: filters.vaultId, mode: 'insensitive' };
     if (filters?.transferType) where.transferType = filters.transferType;
     if (filters?.overallStatus) where.overallStatus = filters.overallStatus;
-    return this.prisma.transferCheck.findMany({ where, orderBy: { checkedAt: 'desc' } });
+    if (filters?.kytStatus) where.kytStatus = filters.kytStatus;
+    if (filters?.minAmount !== undefined || filters?.maxAmount !== undefined) {
+      where.amount = {};
+      if (filters.minAmount !== undefined) where.amount.gte = filters.minAmount;
+      if (filters.maxAmount !== undefined) where.amount.lte = filters.maxAmount;
+    }
+    if (filters?.search) {
+      const q = filters.search;
+      where.OR = [
+        { fromAddress: { contains: q, mode: 'insensitive' } },
+        { toAddress: { contains: q, mode: 'insensitive' } },
+        { fromController: { contains: q, mode: 'insensitive' } },
+        { toController: { contains: q, mode: 'insensitive' } },
+        { vaultId: { contains: q, mode: 'insensitive' } },
+        { transferId: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 10;
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.prisma.transferCheck.findMany({ where, orderBy: { checkedAt: 'desc' }, skip, take: limit }),
+      this.prisma.transferCheck.count({ where }),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async createTransferCheck(data: {

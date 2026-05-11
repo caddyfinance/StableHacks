@@ -172,13 +172,22 @@ export const api = {
   getWalletControllers: () => request<any[]>('/wallet-controllers'),
   getWalletController: (address: string) => request<any>(`/wallet-controllers/${address}`),
   createWalletController: (data: any) => request<any>('/wallet-controllers', { method: 'POST', body: JSON.stringify(data) }),
+  syncWalletControllers: () => request<any>('/wallet-controllers/sync', { method: 'POST' }),
 
   // Transfer Checks
-  getTransferChecks: (vaultId?: string, transferType?: string) => {
-    const params = new URLSearchParams();
-    if (vaultId) params.set('vaultId', vaultId);
-    if (transferType) params.set('transferType', transferType);
-    return request<any[]>(`/transfers/checks?${params.toString()}`);
+  getTransferChecks: (params?: { vaultId?: string; transferType?: string; overallStatus?: string; kytStatus?: string; search?: string; minAmount?: number; maxAmount?: number; page?: number; limit?: number }) => {
+    const p = new URLSearchParams();
+    if (params?.vaultId) p.set('vaultId', params.vaultId);
+    if (params?.transferType) p.set('transferType', params.transferType);
+    if (params?.overallStatus) p.set('overallStatus', params.overallStatus);
+    if (params?.kytStatus) p.set('kytStatus', params.kytStatus);
+    if (params?.search) p.set('search', params.search);
+    if (params?.minAmount !== undefined) p.set('minAmount', String(params.minAmount));
+    if (params?.maxAmount !== undefined) p.set('maxAmount', String(params.maxAmount));
+    if (params?.page) p.set('page', String(params.page));
+    if (params?.limit) p.set('limit', String(params.limit));
+    const qs = p.toString();
+    return request<any>(`/transfers/checks${qs ? `?${qs}` : ''}`);
   },
   getTransferChecksByTransfer: (transferId: string) => request<any[]>(`/transfers/checks/${transferId}`),
 

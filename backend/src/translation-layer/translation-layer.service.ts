@@ -291,14 +291,14 @@ export class TranslationLayerService {
 
     // Map instruction type to enum
     const typeMap: Record<string, number> = {
-      Deposit: 0,
-      Allocate: 1,
-      Redeem: 2,
-      Unwind: 3,
-      Pause: 4,
-      MandateUpdate: 5,
+      deposit: 0,
+      allocate: 1,
+      redeem: 2,
+      unwind: 3,
+      pause: 4,
+      mandateupdate: 5,
     };
-    const typeValue = typeMap[instructionType];
+    const typeValue = typeMap[instructionType.toLowerCase()];
     if (typeValue === undefined) {
       throw new Error(`Invalid instruction type: ${instructionType}`);
     }

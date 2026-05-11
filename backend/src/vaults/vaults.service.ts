@@ -10,6 +10,7 @@ import { VaultProgramService } from '../vault-program/vault-program.service';
 import { SolsticeService } from '../solstice/solstice.service';
 import { TranslationLayerService } from '../translation-layer/translation-layer.service';
 import { TransferChecksService } from '../transfer-checks/transfer-checks.service';
+import { WalletControllersService } from '../wallet-controllers/wallet-controllers.service';
 
 @Injectable()
 export class VaultsService {
@@ -19,15 +20,13 @@ export class VaultsService {
   private vaultProgram: VaultProgramService;
   private solstice: SolsticeService;
   private translationLayer: TranslationLayerService;
-  private readonly PROTOCOL_BUFFER_BPS = 1000; // 10% — mirrors PROTOCOL_LIQUIDITY_BUFFER_BPS in the contract
+  private readonly PROTOCOL_BUFFER_BPS = 1000;
   private readonly useTranslationLayer = process.env.USE_TRANSLATION_LAYER !== 'false';
 
-  /** deployable = idle - (totalNAV * bufferBps / 10000); floor at 0 */
   private getDeployableBalance(idleBalance: number, totalNAV: number, bufferBps: number): number {
     return Math.max(0, idleBalance - (totalNAV * bufferBps) / 10000);
   }
 
-  /** Get persistent bank balance from DB, initialize if missing */
   private async getBankBalanceValue(): Promise<number> {
     const config = await this.prisma.systemConfig.upsert({
       where: { id: 'singleton' },
@@ -37,7 +36,6 @@ export class VaultsService {
     return config.bankBalance;
   }
 
-  /** Adjust persistent bank balance */
   private async adjustBankBalance(delta: number): Promise<number> {
     const config = await this.prisma.systemConfig.upsert({
       where: { id: 'singleton' },
@@ -48,6 +46,7 @@ export class VaultsService {
   }
 
   private transferChecks: TransferChecksService;
+  private walletControllers: WalletControllersService;
 
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
@@ -57,6 +56,7 @@ export class VaultsService {
     @Inject(SolsticeService) solstice: SolsticeService,
     @Inject(TranslationLayerService) translationLayer: TranslationLayerService,
     @Inject(TransferChecksService) transferChecks: TransferChecksService,
+    @Inject(WalletControllersService) walletControllers: WalletControllersService,
   ) {
     this.prisma = prisma;
     this.events = events;
@@ -65,6 +65,7 @@ export class VaultsService {
     this.solstice = solstice;
     this.translationLayer = translationLayer;
     this.transferChecks = transferChecks;
+    this.walletControllers = walletControllers;
   }
 
   /**
@@ -123,13 +124,18 @@ export class VaultsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Group vaults by the AMINA wallet that created them (ownerWallet comes from credential)
     const byOwner: Record<string, typeof vaults> = {};
     for (const v of vaults) {
       const key = v.ownerWallet || 'unknown';
       if (!byOwner[key]) byOwner[key] = [];
       byOwner[key].push(v);
     }
+
+    let bankWalletOnChainBalance = 0;
+    try {
+      const bankVerification = await this.vaultProgram.verifyVaultOnChain('__bank__', undefined);
+      bankWalletOnChainBalance = bankVerification.bankWalletBalance;
+    } catch { /* ignore */ }
 
     const vaultsByOwner = await Promise.all(
       Object.entries(byOwner).map(async ([wallet, walletVaults]) => ({
@@ -138,13 +144,11 @@ export class VaultsService {
         totalDeposited: walletVaults.reduce((s, v) => s + (v.totalDeposited || 0), 0),
         totalNAV: walletVaults.reduce((s, v) => s + (v.totalNAV || 0), 0),
         vaults: await Promise.all(walletVaults.map(async (v) => {
-          // Fetch on-chain Solstice position for this vault
-          let solsticePosition: { eusxBalance: number; usxValue: number; exchangeRate: number } | null = null;
+          let solsticePosition: { eusxBalance: number; usxValue: number; exchangeRate: number; vaultAllocatedAmount: number; onChainYield: number } | null = null;
           try {
             solsticePosition = await this.solstice.getPositionForVault(v.vaultId);
           } catch { /* no on-chain position */ }
 
-          // Compute all withdrawal requests (pending, approved, etc.)
           const withdrawals = v.consentRequests
             .filter((c) => c.actionType === 'WITHDRAWAL')
             .map((c) => ({
@@ -153,27 +157,60 @@ export class VaultsService {
               destinationWallet: (c.details as any)?.destinationWallet || (c.details as any)?.callerWallet || '',
               requestId: c.requestId,
               approvedAt: c.consentedAt,
+              txSignature: (c.details as any)?.txSignature || null,
               createdAt: c.createdAt,
             }));
           const totalWithdrawn = withdrawals.filter(w => w.status === 'approved').reduce((s, w) => s + w.amount, 0);
           const totalPendingWithdrawal = withdrawals.filter(w => w.status === 'pending').reduce((s, w) => s + w.amount, 0);
 
-          // Use on-chain position as source of truth for active Solstice allocations
           const allocationsWithOnChain = v.allocations.map((a) => {
             const isSolstice = a.strategyId === 'solstice-eusx-yield';
-            const onChainAmount = isSolstice && solsticePosition?.usxValue ? solsticePosition.usxValue : null;
+            const hasOnChainPosition = isSolstice && solsticePosition && solsticePosition.vaultAllocatedAmount > 0;
             return {
               strategyName: a.strategy?.name || a.strategyId,
               strategyId: a.strategyId,
-              amount: onChainAmount !== null && a.status === 'active' ? onChainAmount : a.amount,
+              amount: a.amount,
               yieldAccrued: a.yieldAccrued,
+              onChainYield: hasOnChainPosition ? solsticePosition.onChainYield : 0,
               status: a.status,
               txSignature: a.txSignature,
               onChainAddress: a.onChainAddress,
               createdAt: a.createdAt,
-              onChainVerified: onChainAmount !== null,
+              onChainVerified: !!a.txSignature || hasOnChainPosition,
             };
           });
+
+          const onChainDeposits = v.deposits.map((d) => ({
+            amount: d.amount,
+            sourceWallet: d.sourceWallet,
+            sourceReference: d.sourceReference,
+            sourceType: d.sourceType,
+            screeningStatus: d.screeningStatus,
+            jurisdictionTag: d.jurisdictionTag,
+            createdAt: d.createdAt,
+            onChainVerified: !!d.sourceReference || d.sourceType === 'On-Chain Transfer',
+          }));
+
+          const onChainEvents = v.events.slice(0, 20).map((e) => ({
+            eventId: e.eventId,
+            actionType: e.actionType,
+            amount: e.amount,
+            result: e.result,
+            txSignature: e.txSignature,
+            onChainAddress: e.onChainAddress,
+            compliancePda: e.compliancePda,
+            travelRulePda: e.travelRulePda,
+            routingPda: e.routingPda,
+            glEntryPda: e.glEntryPda,
+            translationLayerRef: e.translationLayerRef,
+            timestamp: e.timestamp,
+            onChainVerified: !!e.txSignature || !!e.onChainAddress,
+          }));
+
+          let onChainVerification: any = null;
+          try {
+            onChainVerification = await this.vaultProgram.verifyVaultOnChain(v.vaultId, v.programId || undefined);
+          } catch { /* ignore */ }
 
           return {
             vaultId: v.vaultId,
@@ -189,36 +226,25 @@ export class VaultsService {
             onChainAddress: v.onChainAddress,
             programId: v.programId,
             createdAt: v.createdAt,
+            onChainVerification,
             credential: {
               credentialId: v.credential.credentialId,
               clientReference: v.credential.clientReference,
               jurisdiction: v.credential.jurisdiction,
               riskTier: v.credential.riskTier,
+              attestationPda: v.credential.attestationPda,
             },
-            deposits: v.deposits.map((d) => ({
-              amount: d.amount,
-              sourceWallet: d.sourceWallet,
-              sourceReference: d.sourceReference,
-              sourceType: d.sourceType,
-              screeningStatus: d.screeningStatus,
-              jurisdictionTag: d.jurisdictionTag,
-              createdAt: d.createdAt,
-            })),
+            deposits: onChainDeposits,
             allocations: allocationsWithOnChain,
             withdrawals,
             solsticePosition: solsticePosition ? {
               eusxBalance: solsticePosition.eusxBalance,
               usxValue: solsticePosition.usxValue,
               exchangeRate: solsticePosition.exchangeRate,
+              vaultAllocatedAmount: solsticePosition.vaultAllocatedAmount,
+              onChainYield: solsticePosition.onChainYield,
             } : null,
-            recentEvents: v.events.slice(0, 20).map((e) => ({
-              eventId: e.eventId,
-              actionType: e.actionType,
-              amount: e.amount,
-              result: e.result,
-              txSignature: e.txSignature,
-              timestamp: e.timestamp,
-            })),
+            recentEvents: onChainEvents,
           };
         })),
       }))
@@ -226,6 +252,7 @@ export class VaultsService {
 
     return {
       aminaWallet,
+      bankWalletOnChainBalance,
       totalVaults: vaults.length,
       totalDeposited: vaults.reduce((s, v) => s + (v.totalDeposited || 0), 0),
       totalNAV: vaults.reduce((s, v) => s + (v.totalNAV || 0), 0),
@@ -431,6 +458,61 @@ export class VaultsService {
       onChainAddress: deployedProgramId || programResult?.vaultPda || sasResult?.onChainAddress,
     });
 
+    // Auto-register wallet controllers for the new vault
+    const vaultName = `${credential.clientReference} — ${vaultId}`;
+    try {
+      await this.walletControllers.autoRegister({
+        address: credential.walletAddress,
+        controllerName: `${credential.clientReference} — Client Wallet`,
+        controllerType: 'CLIENT_ACCOUNT',
+        permittedUse: 'Vault ownership, deposit initiation, mandate acceptance',
+        source: 'vault-creation',
+      });
+
+      if (deployedProgramId) {
+        await this.walletControllers.autoRegister({
+          address: deployedProgramId,
+          controllerName: `${vaultId} — Program Instance`,
+          controllerType: 'SEGREGATED_VAULT',
+          permittedUse: 'Segregated program — enforces mandate rules on-chain',
+          vaultId,
+          vaultName,
+          bankNumber: 'AMINA-CH-001',
+          accountNumber: `VLT-${vaultId}`,
+          source: 'vault-creation',
+        });
+      }
+
+      if (programResult?.vaultPda) {
+        await this.walletControllers.autoRegister({
+          address: programResult.vaultPda,
+          controllerName: `${vaultId} — Vault PDA`,
+          controllerType: 'SEGREGATED_VAULT',
+          permittedUse: 'On-chain vault state, asset custody',
+          vaultId,
+          vaultName,
+          bankNumber: 'AMINA-CH-001',
+          accountNumber: `VLT-${vaultId}`,
+          source: 'vault-creation',
+        });
+      }
+
+      const bankWallet = this.vaultProgram.getAminaBankWallet();
+      if (bankWallet) {
+        await this.walletControllers.autoRegister({
+          address: bankWallet,
+          controllerName: 'Amina Bank — Treasury',
+          controllerType: 'BANK_TREASURY',
+          permittedUse: 'Vault program deployment, on-chain administration',
+          bankNumber: 'AMINA-CH-001',
+          accountNumber: 'TREASURY-001',
+          source: 'vault-creation',
+        });
+      }
+    } catch (e: any) {
+      console.warn(`Failed to auto-register wallet controllers: ${e.message}`);
+    }
+
     return {
       ...vault,
       programId: deployedProgramId || this.vaultProgram.getProgramId(),
@@ -457,26 +539,22 @@ export class VaultsService {
 
     const strategyExposures: Record<string, { amount: number; yield: number; strategyId: string }> = {};
 
-    // For Solstice strategy, always read deployed amount from on-chain (eUSX balance * exchange rate)
-    // This ensures the position shows even if DB allocations are out of sync
     try {
       const position = await this.solstice.getPositionForVault(vaultId);
-      if (position.eusxBalance > 0) {
+      if (position && position.vaultAllocatedAmount > 0) {
         strategyExposures['Solstice eUSX Yield'] = {
-          amount: position.usxValue,
-          yield: activeAllocations.filter((a) => a.strategyId === 'solstice-eusx-yield').reduce((s, a) => s + a.yieldAccrued, 0),
+          amount: position.vaultAllocatedAmount,
+          yield: position.onChainYield + activeAllocations.filter((a) => a.strategyId === 'solstice-eusx-yield').reduce((s, a) => s + a.yieldAccrued, 0),
           strategyId: 'solstice-eusx-yield',
         };
       }
     } catch { /* on-chain read failed, fall through to DB */ }
 
-    // All strategies (including Solstice fallback) from DB
     activeAllocations.forEach((a) => {
       const key = a.strategy.name;
       if (!strategyExposures[key]) {
         strategyExposures[key] = { amount: 0, yield: 0, strategyId: a.strategyId };
       }
-      // Only add DB amounts for non-Solstice (Solstice uses on-chain above)
       if (a.strategyId !== 'solstice-eusx-yield') {
         strategyExposures[key].amount += a.amount;
         strategyExposures[key].yield += a.yieldAccrued;
@@ -1328,13 +1406,12 @@ export class VaultsService {
 
     // ─── Solstice: use on-chain eUSX balance as source of truth ──
     if (strategyId === 'solstice-eusx-yield') {
-      // Read on-chain position to determine actual deployed amount
       const position = await this.solstice.getPositionForVault(vaultId);
-      if (position.eusxBalance <= 0) {
+      if (!position || position.eusxBalance <= 0) {
         throw new BadRequestException('No on-chain eUSX position to unwind');
       }
 
-      const onChainAmount = position.usxValue;
+      const onChainAmount = position.vaultAllocatedAmount;
 
       await this.events.emit({
         vaultId, actionType: 'UNWIND_INITIATED', actor: 'portfolio_manager', role: 'Portfolio Manager',
@@ -1576,10 +1653,9 @@ export class VaultsService {
     let onChainDeployed = 0;
     try {
       const position = await this.solstice.getPositionForVault(vaultId);
-      onChainDeployed = position.usxValue || 0;
+      onChainDeployed = position?.vaultAllocatedAmount || 0;
     } catch { /* no on-chain position */ }
 
-    // Correct idle = total deposited - what's deployed - what's been withdrawn
     const deployedAmount = onChainDeployed > 0 ? onChainDeployed : activeDeployed;
     const correctIdle = totalDeposited - deployedAmount - totalWithdrawn;
     const correctNAV = correctIdle + deployedAmount;

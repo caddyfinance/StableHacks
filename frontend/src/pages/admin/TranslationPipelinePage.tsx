@@ -5,7 +5,7 @@ import Card from '../../components/Card';
 import StatusBadge from '../../components/StatusBadge';
 import {
   ArrowRight, CheckCircle, Copy, Filter, GitBranch, PlayCircle,
-  ShieldCheck, Send, ExternalLink, AlertCircle,
+  ShieldCheck, Send, ExternalLink, AlertCircle, Vault,
 } from 'lucide-react';
 
 const fmt = (v: any) => {
@@ -27,11 +27,16 @@ const openSolanaExplorer = (address: string) => {
 };
 
 export default function TranslationPipelinePage() {
-  const { activeVaultId, notify } = useStore();
+  const { activeVaultId, setActiveVaultId, notify } = useStore();
+  const [vaults, setVaults] = useState<any[]>([]);
   const [config, setConfig] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [selectedInstruction, setSelectedInstruction] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.getVaults().then(setVaults).catch(() => {});
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -40,8 +45,8 @@ export default function TranslationPipelinePage() {
       setConfig(cfg);
 
       if (activeVaultId) {
-        const hist = await api.tlGetHistory(activeVaultId).catch(() => []);
-        setHistory(hist);
+        const hist = await api.tlGetHistory(activeVaultId).catch(() => ({ data: [] }));
+        setHistory(Array.isArray(hist) ? hist : (hist?.data || []));
       }
     } catch {
       notify('error', 'Failed to load translation layer data');
@@ -123,11 +128,28 @@ export default function TranslationPipelinePage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold text-ink-900">Translation Layer Pipeline</h1>
-        <p className="text-sm text-slate-700 mt-1">
-          AMINA Layer 2 — Instruction routing and compliance orchestration
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-ink-900">Translation Layer Pipeline</h1>
+          <p className="text-sm text-slate-700 mt-1">
+            AMINA Layer 2 — Instruction routing and compliance orchestration
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Vault className="w-4 h-4 text-slate-400" />
+          <select
+            value={activeVaultId || ''}
+            onChange={(e) => { setActiveVaultId(e.target.value); setSelectedInstruction(null); }}
+            className="px-3 py-1.5 text-xs border border-slate-200 rounded-xl bg-white text-ink-900 focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600 transition-colors min-w-[180px]"
+          >
+            <option value="">Select vault...</option>
+            {vaults.map((v: any) => (
+              <option key={v.vaultId} value={v.vaultId}>
+                {v.vaultId} — {v.clientReference || v.credentialId?.slice(0, 12)}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Config Summary Card */}
@@ -184,7 +206,7 @@ export default function TranslationPipelinePage() {
         <Card title="Instruction History" subtitle="No vault selected">
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <Filter className="w-12 h-12 text-slate-300 mb-3" />
-            <p className="text-sm text-slate-700 font-medium">Select a vault from the dashboard</p>
+            <p className="text-sm text-slate-700 font-medium">Select a vault from the dropdown above</p>
             <p className="text-xs text-slate-500 mt-1">to view translation layer history</p>
           </div>
         </Card>

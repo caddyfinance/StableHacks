@@ -274,7 +274,10 @@ model WalletController {
   chainalysisLink    String?
   explorerLink       String?
   vaultId            String?
+  vaultName          String?
   providerId         String?
+  bankNumber         String?
+  accountNumber      String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }

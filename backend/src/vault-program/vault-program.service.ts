@@ -325,13 +325,24 @@ export class VaultProgramService {
 
       this.logger.log(`Program instance deployed: ${deployedId} for wallet ${clientWallet}`);
 
-      // ─── Verify deployed program on-chain ─────────────────────
+      // ─── Verify deployed program on-chain (with retry for RPC propagation lag) ──
       const connection = this.getConnection();
       const deployedPubkey = new PublicKey(deployedId);
-      const accountInfo = await connection.getAccountInfo(deployedPubkey);
+      let accountInfo: Awaited<ReturnType<Connection['getAccountInfo']>> = null;
+      const maxRetries = 5;
+      const retryDelayMs = 2000;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        accountInfo = await connection.getAccountInfo(deployedPubkey);
+        if (accountInfo) break;
+        if (attempt < maxRetries) {
+          this.logger.log(`On-chain verification attempt ${attempt}/${maxRetries} — account not found yet, retrying in ${retryDelayMs}ms...`);
+          await new Promise((r) => setTimeout(r, retryDelayMs));
+        }
+      }
 
       if (!accountInfo) {
-        throw new Error(`Deployed program account not found on-chain: ${deployedId}`);
+        throw new Error(`Deployed program account not found on-chain after ${maxRetries} retries: ${deployedId}`);
       }
 
       this.logger.log(`On-chain verification — program ${deployedId}: owner=${accountInfo.owner.toBase58()}, executable=${accountInfo.executable}, data=${accountInfo.data.length} bytes`);
@@ -754,5 +765,60 @@ export class VaultProgramService {
       if (error.logs) this.logger.error(`Program logs: ${error.logs.join('\n')}`);
       throw error;
     }
+  }
+
+  async verifyVaultOnChain(vaultId: string, programId?: string): Promise<{
+    vaultPdaExists: boolean;
+    vaultPda: string | null;
+    programExists: boolean;
+    programExecutable: boolean;
+    vaultDataLength: number | null;
+    ownerWalletBalance: number;
+    bankWalletBalance: number;
+    bankWallet: string;
+  }> {
+    const result = {
+      vaultPdaExists: false,
+      vaultPda: null as string | null,
+      programExists: false,
+      programExecutable: false,
+      vaultDataLength: null as number | null,
+      ownerWalletBalance: 0,
+      bankWalletBalance: 0,
+      bankWallet: '',
+    };
+
+    try {
+      const connection = this.getConnection();
+      const authority = this.getAminaBankKeypair();
+      result.bankWallet = authority.publicKey.toBase58();
+
+      try {
+        const usdcMint = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
+        const { getAssociatedTokenAddress } = await import('@solana/spl-token');
+        const bankAta = await getAssociatedTokenAddress(usdcMint, authority.publicKey);
+        const bankBalance = await connection.getTokenAccountBalance(bankAta);
+        result.bankWalletBalance = (bankBalance.value.uiAmount || 0);
+      } catch { /* no bank ATA */ }
+
+      const pid = programId ? new PublicKey(programId) : (this.isConfigured() ? this.getProgramPublicKey() : null);
+      if (!pid) return result;
+
+      const programInfo = await connection.getAccountInfo(pid);
+      result.programExists = !!programInfo;
+      result.programExecutable = programInfo?.executable || false;
+
+      const [vaultPda] = this.deriveVaultPda(vaultId, programId);
+      result.vaultPda = vaultPda.toBase58();
+
+      const vaultAccount = await connection.getAccountInfo(vaultPda);
+      result.vaultPdaExists = !!vaultAccount;
+      result.vaultDataLength = vaultAccount?.data?.length || null;
+
+    } catch (e: any) {
+      this.logger.warn(`On-chain verification failed for vault ${vaultId}: ${e.message}`);
+    }
+
+    return result;
   }
 }

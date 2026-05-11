@@ -1,22 +1,27 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsService } from '../events/events.service';
 import { SasService } from '../sas/sas.service';
+import { WalletControllersService } from '../wallet-controllers/wallet-controllers.service';
 
 @Injectable()
 export class CredentialsService {
   private prisma: PrismaService;
   private events: EventsService;
   private sas: SasService;
+  private walletControllers: WalletControllersService;
+  private readonly logger = new Logger(CredentialsService.name);
 
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
     @Inject(EventsService) events: EventsService,
     @Inject(SasService) sas: SasService,
+    @Inject(WalletControllersService) walletControllers: WalletControllersService,
   ) {
     this.prisma = prisma;
     this.events = events;
     this.sas = sas;
+    this.walletControllers = walletControllers;
   }
 
   async findAll() {
@@ -113,6 +118,18 @@ export class CredentialsService {
       onChainAddress: attestationPda,
     });
 
+    try {
+      await this.walletControllers.autoRegister({
+        address: walletAddress,
+        controllerName: `${credential.clientReference} — Client Wallet`,
+        controllerType: 'CLIENT_ACCOUNT',
+        permittedUse: 'Vault ownership, deposit initiation, mandate acceptance',
+        source: 'wallet-bind',
+      });
+    } catch (e: any) {
+      this.logger.warn(`Failed to auto-register wallet on bind: ${e.message}`);
+    }
+
     return {
       success: true,
       authenticated: true,
@@ -180,6 +197,18 @@ export class CredentialsService {
       txSignature: attestationTxSig,
       onChainAddress: attestationPda,
     });
+
+    try {
+      await this.walletControllers.autoRegister({
+        address: data.walletAddress,
+        controllerName: `${data.clientReference} — Client Wallet`,
+        controllerType: 'CLIENT_ACCOUNT',
+        permittedUse: 'Vault ownership, deposit initiation, mandate acceptance',
+        source: 'credential-issue',
+      });
+    } catch (e: any) {
+      this.logger.warn(`Failed to auto-register wallet on credential issue: ${e.message}`);
+    }
 
     return { ...credential, attestationPda, attestationTxSig };
   }

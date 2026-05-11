@@ -7,9 +7,9 @@ import {
   RefreshCw, ExternalLink, Search, Eye, ChevronDown, ChevronUp,
   ShieldCheck, Wallet, ArrowRight, ArrowDownToLine, ArrowUpFromLine, TrendingUp,
   Building2, Lock, CheckCircle, Copy, ArrowLeft, Timer,
+  Link2, AlertCircle, Shield, Globe,
 } from 'lucide-react';
 
-// ─── Types ───────────────────────────────────────────────────────
 interface DepositEntry {
   amount: number;
   sourceWallet: string;
@@ -18,6 +18,7 @@ interface DepositEntry {
   screeningStatus: string;
   jurisdictionTag: string;
   createdAt: string;
+  onChainVerified: boolean;
 }
 
 interface AllocationEntry {
@@ -25,10 +26,12 @@ interface AllocationEntry {
   strategyId: string;
   amount: number;
   yieldAccrued: number;
+  onChainYield?: number;
   status: string;
   txSignature?: string;
   onChainAddress?: string;
   createdAt: string;
+  onChainVerified: boolean;
 }
 
 interface EventEntry {
@@ -37,13 +40,22 @@ interface EventEntry {
   amount?: number;
   result: string;
   txSignature?: string;
+  onChainAddress?: string;
+  compliancePda?: string;
+  travelRulePda?: string;
+  routingPda?: string;
+  glEntryPda?: string;
+  translationLayerRef?: string;
   timestamp: string;
+  onChainVerified: boolean;
 }
 
 interface WithdrawalEntry {
   amount: number;
   destinationWallet: string;
   requestId: string;
+  status: string;
+  txSignature?: string;
   approvedAt?: string;
 }
 
@@ -51,6 +63,19 @@ interface SolsticePosition {
   eusxBalance: number;
   usxValue: number;
   exchangeRate: number;
+  vaultAllocatedAmount: number;
+  onChainYield: number;
+}
+
+interface OnChainVerification {
+  vaultPdaExists: boolean;
+  vaultPda: string | null;
+  programExists: boolean;
+  programExecutable: boolean;
+  vaultDataLength: number | null;
+  ownerWalletBalance: number;
+  bankWalletBalance: number;
+  bankWallet: string;
 }
 
 interface VaultEntry {
@@ -66,11 +91,13 @@ interface VaultEntry {
   onChainAddress?: string;
   programId?: string;
   createdAt: string;
+  onChainVerification: OnChainVerification | null;
   credential: {
     credentialId: string;
     clientReference: string;
     jurisdiction: string;
     riskTier: string;
+    attestationPda?: string;
   };
   deposits: DepositEntry[];
   allocations: AllocationEntry[];
@@ -89,13 +116,13 @@ interface OwnerGroup {
 
 interface TransparencyData {
   aminaWallet: string;
+  bankWalletOnChainBalance: number;
   totalVaults: number;
   totalDeposited: number;
   totalNAV: number;
   vaultsByOwner: OwnerGroup[];
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────
 const fmt = (v: number) =>
   v != null && !isNaN(v) ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
 
@@ -108,17 +135,15 @@ const fmtTime = (iso: string) => {
       month: 'short', day: 'numeric', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
     });
-  } catch { return iso || '—'; }
+  } catch { return iso || '\u2014'; }
 };
 
 const actionLabel = (at: string) =>
-  at?.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || '—';
+  at?.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || '\u2014';
 
 const EXPLORER_BASE = 'https://explorer.solana.com';
 const explorerLink = (sig: string) => `${EXPLORER_BASE}/tx/${sig}?cluster=devnet`;
 const addrLink = (addr: string) => `${EXPLORER_BASE}/address/${addr}?cluster=devnet`;
-
-// ─── Sub-components ──────────────────────────────────────────────
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -134,9 +159,20 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-/** Visual node in the fund flow graph */
-function FlowNode({ icon: Icon, label, sublabel, color, href, address }: {
-  icon: any; label: string; sublabel?: string; color: string; href?: string; address?: string;
+function OnChainBadge({ verified, label }: { verified: boolean; label?: string }) {
+  return verified ? (
+    <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-success-100 text-success-700 border border-success-700/20 font-semibold">
+      <CheckCircle className="w-2.5 h-2.5" /> {label || 'On-Chain'}
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200 font-medium">
+      DB Only
+    </span>
+  );
+}
+
+function FlowNode({ icon: Icon, label, sublabel, color, href, address, verified }: {
+  icon: any; label: string; sublabel?: string; color: string; href?: string; address?: string; verified?: boolean;
 }) {
   const colorMap: Record<string, string> = {
     green: 'bg-success-100 border-success-700/30 text-success-700',
@@ -147,7 +183,10 @@ function FlowNode({ icon: Icon, label, sublabel, color, href, address }: {
   };
   return (
     <div className={`rounded-[12px] border px-3 py-2.5 min-w-[130px] text-center ${colorMap[color] || colorMap.slate}`}>
-      <Icon className="w-4 h-4 mx-auto mb-1" />
+      <div className="flex items-center justify-center gap-1">
+        <Icon className="w-4 h-4" />
+        {verified && <CheckCircle className="w-2.5 h-2.5 text-success-700" />}
+      </div>
       <p className="text-[11px] font-semibold leading-tight">{label}</p>
       {sublabel && <p className="text-[10px] opacity-70 mt-0.5 font-mono">{sublabel}</p>}
       {address && (
@@ -187,38 +226,41 @@ function FlowConnector({ label, amount, reverse }: { label?: string; amount?: st
 
 function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: string }) {
   const [expanded, setExpanded] = useState(false);
-  const deployedAllocations = vault.allocations.filter(a => a.status === 'active' || a.status === 'cooldown');
-  const activeAllocations = vault.allocations.filter(a => a.status === 'active');
-  const cooldownAllocations = vault.allocations.filter(a => a.status === 'cooldown');
-  const unwoundAllocations = vault.allocations.filter(a => a.status === 'unwound');
+  const oc = vault.onChainVerification;
+  const isOnChainVerified = oc?.vaultPdaExists || !!vault.onChainAddress;
+  const isProgramVerified = oc?.programExists && oc?.programExecutable;
+
+  const onChainDeposits = vault.deposits.filter(d => d.onChainVerified);
+  const onChainAllocations = vault.allocations.filter(a => a.onChainVerified);
+  const onChainEvents = vault.recentEvents.filter(e => e.onChainVerified);
+  const deployedAllocations = onChainAllocations.filter(a => a.status === 'active' || a.status === 'cooldown');
+  const cooldownAllocations = onChainAllocations.filter(a => a.status === 'cooldown');
+  const unwoundAllocations = onChainAllocations.filter(a => a.status === 'unwound');
   const totalDeployed = deployedAllocations.reduce((s, a) => s + (a.amount || 0), 0);
-  const totalAllocated = activeAllocations.reduce((s, a) => s + (a.amount || 0), 0);
-  const totalCooldown = cooldownAllocations.reduce((s, a) => s + (a.amount || 0), 0);
-  const totalYield = vault.allocations.reduce((s, a) => s + (a.yieldAccrued || 0), 0);
+  const totalYield = onChainAllocations.reduce((s, a) => s + (a.yieldAccrued || 0) + (a.onChainYield || 0), 0);
   const totalWithdrawn = vault.totalWithdrawn || 0;
   const totalPendingWithdrawal = (vault as any).totalPendingWithdrawal || 0;
-  const totalUnwound = unwoundAllocations.reduce((s, a) => s + (a.amount || 0), 0);
-  const uniqueSourceWallets = [...new Set(vault.deposits.map(d => d.sourceWallet))];
-  const approvedWithdrawals = (vault.withdrawals || []).filter(w => (w as any).status === 'approved');
-  const pendingWithdrawals = (vault.withdrawals || []).filter(w => (w as any).status === 'pending');
+  const uniqueSourceWallets = [...new Set(onChainDeposits.map(d => d.sourceWallet))];
+  const approvedWithdrawals = (vault.withdrawals || []).filter(w => w.status === 'approved');
+  const pendingWithdrawals = (vault.withdrawals || []).filter(w => w.status === 'pending');
   const uniqueDestWallets = [...new Set(approvedWithdrawals.map(w => w.destinationWallet).filter(Boolean))];
-  const hasWithdrawalActivity = totalWithdrawn > 0 || totalPendingWithdrawal > 0 || totalUnwound > 0 || cooldownAllocations.length > 0 || unwoundAllocations.length > 0 || pendingWithdrawals.length > 0;
+  const hasWithdrawalActivity = totalWithdrawn > 0 || totalPendingWithdrawal > 0 || unwoundAllocations.length > 0 || cooldownAllocations.length > 0 || pendingWithdrawals.length > 0;
 
   return (
     <div className="border border-slate-200 rounded-[14px] bg-white overflow-hidden">
-      {/* Vault Header */}
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors"
       >
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-teal-100 border border-teal-300/40 flex items-center justify-center">
-            <Lock className="w-3.5 h-3.5 text-teal-700" />
+          <div className={`w-8 h-8 rounded-full ${isOnChainVerified ? 'bg-teal-100 border border-teal-300/40' : 'bg-slate-100 border border-slate-200'} flex items-center justify-center`}>
+            <Lock className={`w-3.5 h-3.5 ${isOnChainVerified ? 'text-teal-700' : 'text-slate-500'}`} />
           </div>
           <div className="text-left">
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-ink-900 font-mono">{vault.vaultId}</span>
               <StatusBadge status={vault.paused ? 'paused' : vault.status} />
+              {isOnChainVerified && <OnChainBadge verified />}
             </div>
             <p className="text-[11px] text-slate-500">
               {vault.clientReference} &middot; {vault.credential.jurisdiction} &middot; {vault.credential.riskTier}
@@ -227,11 +269,7 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
         </div>
         <div className="flex items-center gap-5">
           <div className="text-right">
-            <p className="text-[10px] uppercase text-slate-400">Deposited</p>
-            <p className="text-sm font-mono font-semibold text-ink-900">${fmt(vault.totalDeposited)}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] uppercase text-slate-400">NAV</p>
+            <p className="text-[10px] uppercase text-slate-400">On-Chain NAV</p>
             <p className="text-sm font-mono font-semibold text-teal-700">${fmt(vault.totalNAV)}</p>
           </div>
           {expanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
@@ -241,55 +279,88 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
       {expanded && (
         <div className="border-t border-slate-200 px-4 py-5 space-y-5 bg-slate-50/50">
 
-          {/* ─── Visual Fund Flow Graph ─────────────────────────── */}
+          {/* On-Chain Verification Status */}
+          {oc && (
+            <div className="bg-white border border-slate-200 rounded-[12px] p-4">
+              <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-3">On-Chain Verification</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className={`rounded-md p-2.5 text-center border ${oc.vaultPdaExists ? 'bg-success-50 border-success-200' : 'bg-slate-50 border-slate-200'}`}>
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    {oc.vaultPdaExists ? <CheckCircle className="w-3.5 h-3.5 text-success-700" /> : <AlertCircle className="w-3.5 h-3.5 text-slate-400" />}
+                    <p className="text-[10px] font-semibold text-ink-900">Vault PDA</p>
+                  </div>
+                  <p className="text-[9px] font-mono text-slate-500">{oc.vaultPda ? truncate(oc.vaultPda, 16) : 'Not found'}</p>
+                  {oc.vaultPda && <a href={addrLink(oc.vaultPda)} target="_blank" rel="noreferrer" className="text-[8px] text-teal-700 hover:underline block mt-0.5">View on Explorer</a>}
+                </div>
+                <div className={`rounded-md p-2.5 text-center border ${oc.programExists ? 'bg-success-50 border-success-200' : 'bg-slate-50 border-slate-200'}`}>
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    {oc.programExists ? <CheckCircle className="w-3.5 h-3.5 text-success-700" /> : <AlertCircle className="w-3.5 h-3.5 text-slate-400" />}
+                    <p className="text-[10px] font-semibold text-ink-900">Program</p>
+                  </div>
+                  <p className="text-[9px] font-mono text-slate-500">{vault.programId ? truncate(vault.programId, 16) : 'Not deployed'}</p>
+                  {oc.programExecutable && <p className="text-[8px] text-success-700 font-medium mt-0.5">Executable</p>}
+                </div>
+                <div className={`rounded-md p-2.5 text-center border ${oc.vaultPdaExists ? 'bg-teal-50 border-teal-200' : 'bg-slate-50 border-slate-200'}`}>
+                  <p className="text-[10px] font-semibold text-ink-900 mb-1">Data Size</p>
+                  <p className="text-sm font-mono text-ink-900">{oc.vaultDataLength || 0} bytes</p>
+                  <p className="text-[8px] text-slate-400 mt-0.5">On-chain account data</p>
+                </div>
+                <div className="rounded-md p-2.5 text-center border bg-slate-50 border-slate-200">
+                  <p className="text-[10px] font-semibold text-ink-900 mb-1">Bank Balance</p>
+                  <p className="text-sm font-mono text-ink-900">${fmt(oc.bankWalletBalance)}</p>
+                  <p className="text-[8px] text-slate-400 mt-0.5">On-chain USDC custody</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Fund Flow Graph - only on-chain verified flows */}
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-3">Fund Flow Graph</p>
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-3">On-Chain Fund Flow</p>
             <div className="bg-white border border-slate-200 rounded-[14px] p-5 overflow-x-auto space-y-4">
-              {/* ── Deposit Flow (left to right) ── */}
               <div>
                 <p className="text-[9px] uppercase tracking-wider text-success-700 font-semibold mb-2 flex items-center gap-1">
                   <ArrowDownToLine className="w-3 h-3" /> Deposit Flow
                 </p>
                 <div className="flex items-center gap-1 min-w-[700px]">
-                  {/* Source wallets */}
                   <div className="flex flex-col gap-2 shrink-0">
                     {uniqueSourceWallets.length > 0 ? uniqueSourceWallets.map((w, i) => {
-                      const deposits = vault.deposits.filter(d => d.sourceWallet === w);
+                      const deposits = onChainDeposits.filter(d => d.sourceWallet === w);
                       const total = deposits.reduce((s, d) => s + d.amount, 0);
                       return (
                         <FlowNode key={i} icon={Wallet} label="Source Wallet" sublabel={`$${fmt(total)}`}
-                          color="green" address={w} href={addrLink(w)} />
+                          color="green" address={w} href={addrLink(w)} verified />
                       );
                     }) : (
-                      <FlowNode icon={Wallet} label="No Deposits" color="slate" />
+                      <FlowNode icon={Wallet} label="No On-Chain Deposits" color="slate" />
                     )}
                   </div>
 
                   <FlowConnector label="Deposit" amount={vault.totalDeposited > 0 ? `$${fmt(vault.totalDeposited)}` : undefined} />
 
-                  {/* AMINA Custody */}
-                  <FlowNode icon={Building2} label="AMINA Bank" sublabel={`Custodian`}
-                    color="teal" address={aminaWallet} href={addrLink(aminaWallet)} />
+                  <FlowNode icon={Building2} label="AMINA Bank" sublabel={`$${fmt(oc?.bankWalletBalance || 0)} on-chain`}
+                    color="teal" address={aminaWallet} href={addrLink(aminaWallet)} verified />
 
                   <FlowConnector label="Segregated" />
 
-                  {/* Vault */}
-                  <FlowNode icon={Lock} label={vault.vaultId} sublabel={`Idle: $${fmt(vault.idleBalance)}`}
-                    color="teal" address={vault.onChainAddress || undefined} href={vault.onChainAddress ? addrLink(vault.onChainAddress) : undefined} />
+                  <FlowNode icon={Lock} label={vault.vaultId} sublabel={`NAV: $${fmt(vault.totalNAV)}`}
+                    color="teal"
+                    address={oc?.vaultPda || vault.onChainAddress || undefined}
+                    href={(oc?.vaultPda || vault.onChainAddress) ? addrLink(oc?.vaultPda || vault.onChainAddress!) : undefined}
+                    verified={isOnChainVerified} />
 
                   {deployedAllocations.length > 0 && (
                     <>
                       <FlowConnector label="Deploy" amount={totalDeployed > 0 ? `$${fmt(totalDeployed)}` : undefined} />
-
-                      {/* Deployed strategy nodes (active + cooldown) */}
                       <div className="flex flex-col gap-2 shrink-0">
                         {deployedAllocations.map((a, i) => (
                           <div key={i} className="flex items-center gap-2">
                             <FlowNode icon={a.status === 'cooldown' ? Timer : TrendingUp}
                               label={a.strategyName.length > 20 ? a.strategyName.slice(0, 18) + '...' : a.strategyName}
-                              sublabel={`$${fmt(a.amount)}${a.yieldAccrued > 0 ? ` (+${fmt(a.yieldAccrued)})` : ''}${a.status === 'cooldown' ? ' [cooldown]' : (a as any).onChainVerified ? ' [on-chain]' : ''}`}
+                              sublabel={`$${fmt(a.amount)}${(a.onChainYield || 0) > 0 ? ` (+${fmt(a.onChainYield || 0)} yield)` : (a.yieldAccrued > 0 ? ` (+${fmt(a.yieldAccrued)})` : '')}${a.status === 'cooldown' ? ' [cooldown]' : ''}`}
                               color={a.status === 'cooldown' ? 'orange' : 'blue'}
-                              address={a.onChainAddress || undefined} href={a.onChainAddress ? addrLink(a.onChainAddress) : undefined} />
+                              address={a.onChainAddress || undefined} href={a.onChainAddress ? addrLink(a.onChainAddress) : undefined}
+                              verified />
                             {a.txSignature && (
                               <a href={explorerLink(a.txSignature)} target="_blank" rel="noreferrer"
                                 className="text-slate-400 hover:text-teal-700 shrink-0">
@@ -302,19 +373,21 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
                     </>
                   )}
 
-                  {/* On-chain Solstice position badge */}
-                  {vault.solsticePosition && vault.solsticePosition.eusxBalance > 0 && (
+                  {vault.solsticePosition && vault.solsticePosition.vaultAllocatedAmount > 0 && (
                     <div className="ml-2 bg-info-100 border border-info-700/20 rounded-[10px] px-2.5 py-1.5 text-[10px] text-info-700 shrink-0">
-                      <p className="font-semibold">On-Chain Position</p>
+                      <p className="font-semibold flex items-center gap-1"><CheckCircle className="w-2.5 h-2.5" /> On-Chain Position</p>
                       <p className="font-mono">{vault.solsticePosition.eusxBalance.toFixed(4)} eUSX</p>
                       <p className="font-mono text-[9px]">{'\u2248'}${fmt(vault.solsticePosition.usxValue)}</p>
                       <p className="text-[9px] opacity-70">Rate: {vault.solsticePosition.exchangeRate.toFixed(6)}</p>
+                      <p className="text-[9px] font-medium mt-1">Deployed: ${fmt(vault.solsticePosition.vaultAllocatedAmount)}</p>
+                      {vault.solsticePosition.onChainYield > 0 && (
+                        <p className="text-[9px] text-success-700 font-medium">Yield: +${fmt(vault.solsticePosition.onChainYield)}</p>
+                      )}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* ── Withdrawal Flow (left to right, mirrors deposit) ── */}
               {hasWithdrawalActivity && (
                 <div>
                   <div className="border-t border-slate-200 my-3" />
@@ -322,8 +395,6 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
                     <ArrowUpFromLine className="w-3 h-3" /> Withdrawal Flow
                   </p>
                   <div className="flex items-center gap-1 min-w-[700px]">
-
-                    {/* Strategy positions being withdrawn */}
                     <div className="flex flex-col gap-2 shrink-0">
                       {cooldownAllocations.map((a, i) => (
                         <div key={`cd-${i}`} className="flex items-center gap-2">
@@ -331,7 +402,8 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
                             label={a.strategyName.length > 18 ? a.strategyName.slice(0, 16) + '...' : a.strategyName}
                             sublabel={`$${fmt(a.amount)} cooldown`}
                             color="orange"
-                            address={a.onChainAddress || undefined} href={a.onChainAddress ? addrLink(a.onChainAddress) : undefined} />
+                            address={a.onChainAddress || undefined} href={a.onChainAddress ? addrLink(a.onChainAddress) : undefined}
+                            verified />
                           {a.txSignature && (
                             <a href={explorerLink(a.txSignature)} target="_blank" rel="noreferrer"
                               className="text-slate-400 hover:text-teal-700 shrink-0"><ExternalLink className="w-3 h-3" /></a>
@@ -344,7 +416,8 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
                             label={a.strategyName.length > 18 ? a.strategyName.slice(0, 16) + '...' : a.strategyName}
                             sublabel={`$${fmt(a.amount)} unwound`}
                             color="green"
-                            address={a.onChainAddress || undefined} href={a.onChainAddress ? addrLink(a.onChainAddress) : undefined} />
+                            address={a.onChainAddress || undefined} href={a.onChainAddress ? addrLink(a.onChainAddress) : undefined}
+                            verified />
                           {a.txSignature && (
                             <a href={explorerLink(a.txSignature)} target="_blank" rel="noreferrer"
                               className="text-slate-400 hover:text-teal-700 shrink-0"><ExternalLink className="w-3 h-3" /></a>
@@ -356,28 +429,28 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
                       )}
                     </div>
 
-                    <FlowConnector label="Unwind" amount={(totalCooldown + totalUnwound) > 0 ? `$${fmt(totalCooldown + totalUnwound)}` : undefined} />
+                    <FlowConnector label="Unwind" />
 
-                    {/* Vault idle */}
-                    <FlowNode icon={Lock} label={vault.vaultId} sublabel={`Idle: $${fmt(vault.idleBalance)}`}
-                      color="teal" address={vault.onChainAddress || undefined} href={vault.onChainAddress ? addrLink(vault.onChainAddress) : undefined} />
+                    <FlowNode icon={Lock} label={vault.vaultId} sublabel={`NAV: $${fmt(vault.totalNAV)}`}
+                      color="teal"
+                      address={oc?.vaultPda || vault.onChainAddress || undefined}
+                      href={(oc?.vaultPda || vault.onChainAddress) ? addrLink(oc?.vaultPda || vault.onChainAddress!) : undefined}
+                      verified={isOnChainVerified} />
 
                     <FlowConnector label="Release" />
 
-                    {/* AMINA Bank */}
                     <FlowNode icon={Building2} label="AMINA Bank" sublabel="Custodian"
-                      color="teal" address={aminaWallet} href={addrLink(aminaWallet)} />
+                      color="teal" address={aminaWallet} href={addrLink(aminaWallet)} verified />
 
                     <FlowConnector label="Withdraw"
                       amount={(totalWithdrawn + totalPendingWithdrawal) > 0 ? `$${fmt(totalWithdrawn + totalPendingWithdrawal)}` : undefined} />
 
-                    {/* Destination wallets */}
                     <div className="flex flex-col gap-2 shrink-0">
                       {uniqueDestWallets.map((w, i) => {
                         const total = approvedWithdrawals.filter(wd => wd.destinationWallet === w).reduce((s, wd) => s + wd.amount, 0);
                         return (
                           <FlowNode key={`ap-${i}`} icon={Wallet} label="Client Wallet" sublabel={`$${fmt(total)} sent`}
-                            color="green" address={w} href={addrLink(w)} />
+                            color="green" address={w} href={addrLink(w)} verified />
                         );
                       })}
                       {pendingWithdrawals.map((w, i) => (
@@ -394,25 +467,24 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
             </div>
           </div>
 
-          {/* ─── Summary Stats ──────────────────────────────────── */}
+          {/* On-Chain Summary Stats */}
           <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
             <div className="bg-white border border-slate-200 rounded-[10px] p-2.5 text-center">
-              <p className="text-[10px] text-slate-400 uppercase">Total In</p>
-              <p className="text-sm font-mono font-semibold text-ink-900">${fmt(vault.totalDeposited)}</p>
+              <p className="text-[10px] text-slate-400 uppercase">On-Chain Deposits</p>
+              <p className="text-sm font-mono font-semibold text-ink-900">{onChainDeposits.length}</p>
             </div>
             <div className="bg-white border border-slate-200 rounded-[10px] p-2.5 text-center">
               <p className="text-[10px] text-slate-400 uppercase">Deployed</p>
               <p className="text-sm font-mono font-semibold text-teal-700">${fmt(totalDeployed)}</p>
             </div>
             <div className="bg-white border border-slate-200 rounded-[10px] p-2.5 text-center">
-              <p className="text-[10px] text-slate-400 uppercase">Yield</p>
+              <p className="text-[10px] text-slate-400 uppercase">Yield (on-chain)</p>
               <p className="text-sm font-mono font-semibold text-success-700">+${fmt(totalYield)}</p>
             </div>
             <div className="bg-white border border-slate-200 rounded-[10px] p-2.5 text-center">
               <p className="text-[10px] text-slate-400 uppercase">Withdrawn</p>
               <p className="text-sm font-mono font-semibold text-warning-700">${fmt(totalWithdrawn)}</p>
               {totalPendingWithdrawal > 0 && <p className="text-[10px] font-mono text-warning-700/70">+${fmt(totalPendingWithdrawal)} pending</p>}
-              {totalCooldown > 0 && <p className="text-[10px] font-mono text-warning-700/70">${fmt(totalCooldown)} cooldown</p>}
             </div>
             <div className="bg-white border border-slate-200 rounded-[10px] p-2.5 text-center">
               <p className="text-[10px] text-slate-400 uppercase">Idle</p>
@@ -424,12 +496,20 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
             </div>
           </div>
 
-          {/* ─── On-chain Addresses ─────────────────────────────── */}
-          {(vault.onChainAddress || vault.programId) && (
+          {/* On-Chain Addresses */}
+          {(oc?.vaultPda || vault.onChainAddress || vault.programId || vault.credential.attestationPda) && (
             <div className="flex flex-wrap gap-4 text-[11px]">
-              {vault.onChainAddress && (
+              {oc?.vaultPda && (
                 <div className="flex items-center gap-1">
-                  <span className="text-slate-500">Vault PDA:</span>
+                  <OnChainBadge verified label="Vault PDA" />
+                  <a href={addrLink(oc.vaultPda)} target="_blank" rel="noreferrer"
+                    className="font-mono text-teal-700 hover:underline">{truncate(oc.vaultPda, 20)}</a>
+                  <CopyButton text={oc.vaultPda} />
+                </div>
+              )}
+              {!oc?.vaultPda && vault.onChainAddress && (
+                <div className="flex items-center gap-1">
+                  <OnChainBadge verified label="Vault PDA" />
                   <a href={addrLink(vault.onChainAddress)} target="_blank" rel="noreferrer"
                     className="font-mono text-teal-700 hover:underline">{truncate(vault.onChainAddress, 20)}</a>
                   <CopyButton text={vault.onChainAddress} />
@@ -437,19 +517,29 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
               )}
               {vault.programId && (
                 <div className="flex items-center gap-1">
-                  <span className="text-slate-500">Program:</span>
+                  <OnChainBadge verified={isProgramVerified} label="Program" />
                   <a href={addrLink(vault.programId)} target="_blank" rel="noreferrer"
                     className="font-mono text-teal-700 hover:underline">{truncate(vault.programId, 20)}</a>
                   <CopyButton text={vault.programId} />
                 </div>
               )}
+              {vault.credential.attestationPda && (
+                <div className="flex items-center gap-1">
+                  <OnChainBadge verified label="SAS Attestation" />
+                  <a href={addrLink(vault.credential.attestationPda)} target="_blank" rel="noreferrer"
+                    className="font-mono text-teal-700 hover:underline">{truncate(vault.credential.attestationPda, 20)}</a>
+                  <CopyButton text={vault.credential.attestationPda} />
+                </div>
+              )}
             </div>
           )}
 
-          {/* ─── Recent Activity ────────────────────────────────── */}
-          {vault.recentEvents.length > 0 && (
+          {/* On-Chain Verified Events Only */}
+          {onChainEvents.length > 0 && (
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">Recent Activity</p>
+              <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-2">
+                On-Chain Activity <span className="font-normal text-slate-400">({onChainEvents.length} verified of {vault.recentEvents.length} total)</span>
+              </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
@@ -458,21 +548,49 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
                       <th className="text-left py-1.5 pr-3 font-semibold border-b border-slate-200">Action</th>
                       <th className="text-right py-1.5 pr-3 font-semibold border-b border-slate-200">Amount</th>
                       <th className="text-left py-1.5 pr-3 font-semibold border-b border-slate-200">Result</th>
+                      <th className="text-left py-1.5 pr-3 font-semibold border-b border-slate-200">On-Chain PDAs</th>
                       <th className="text-right py-1.5 font-semibold border-b border-slate-200">Tx</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {vault.recentEvents.map((e, i) => (
+                    {onChainEvents.map((e, i) => (
                       <tr key={i} className="hover:bg-white border-b border-slate-200/50 last:border-0">
                         <td className="py-1.5 pr-3 text-slate-500 whitespace-nowrap">{fmtTime(e.timestamp)}</td>
                         <td className="py-1.5 pr-3 text-ink-900">{actionLabel(e.actionType)}</td>
-                        <td className="py-1.5 pr-3 text-right font-mono">{e.amount ? `$${fmt(e.amount)}` : '—'}</td>
+                        <td className="py-1.5 pr-3 text-right font-mono">{e.amount ? `$${fmt(e.amount)}` : '\u2014'}</td>
                         <td className="py-1.5 pr-3"><StatusBadge status={e.result} /></td>
+                        <td className="py-1.5 pr-3">
+                          <div className="flex gap-1 flex-wrap">
+                            {e.compliancePda && (
+                              <a href={addrLink(e.compliancePda)} target="_blank" rel="noreferrer" className="text-[9px] px-1 py-0.5 bg-teal-50 text-teal-700 rounded font-mono hover:underline border border-teal-200">
+                                <Shield className="w-2 h-2 inline mr-0.5" />Compliance
+                              </a>
+                            )}
+                            {e.travelRulePda && (
+                              <a href={addrLink(e.travelRulePda)} target="_blank" rel="noreferrer" className="text-[9px] px-1 py-0.5 bg-blue-50 text-blue-700 rounded font-mono hover:underline border border-blue-200">
+                                <Globe className="w-2 h-2 inline mr-0.5" />Travel Rule
+                              </a>
+                            )}
+                            {e.routingPda && (
+                              <a href={addrLink(e.routingPda)} target="_blank" rel="noreferrer" className="text-[9px] px-1 py-0.5 bg-purple-50 text-purple-700 rounded font-mono hover:underline border border-purple-200">
+                                Routing
+                              </a>
+                            )}
+                            {e.glEntryPda && (
+                              <a href={addrLink(e.glEntryPda)} target="_blank" rel="noreferrer" className="text-[9px] px-1 py-0.5 bg-slate-50 text-slate-700 rounded font-mono hover:underline border border-slate-200">
+                                <Building2 className="w-2 h-2 inline mr-0.5" />GL Entry
+                              </a>
+                            )}
+                            {!e.compliancePda && !e.travelRulePda && !e.routingPda && !e.glEntryPda && (
+                              <span className="text-[9px] text-slate-400">{'\u2014'}</span>
+                            )}
+                          </div>
+                        </td>
                         <td className="py-1.5 text-right">
                           {e.txSignature ? (
                             <a href={explorerLink(e.txSignature)} target="_blank" rel="noreferrer"
                               className="text-teal-700 hover:underline font-mono">{truncate(e.txSignature, 12)}</a>
-                          ) : '—'}
+                          ) : '\u2014'}
                         </td>
                       </tr>
                     ))}
@@ -481,13 +599,18 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
               </div>
             </div>
           )}
+
+          {onChainEvents.length === 0 && vault.recentEvents.length > 0 && (
+            <div className="bg-slate-50 border border-slate-200 rounded-md p-3 text-center">
+              <p className="text-[10px] text-slate-500">{vault.recentEvents.length} events recorded but none have on-chain proof (tx signature) yet.</p>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-// ─── Main Page ───────────────────────────────────────────────────
 export default function TransparencyPage() {
   const { notify } = useStore();
   const [data, setData] = useState<TransparencyData | null>(null);
@@ -500,7 +623,6 @@ export default function TransparencyPage() {
     try {
       const res = await api.getTransparency();
       setData(res);
-      // Auto-expand all owners
       setExpandedOwners(new Set(res.vaultsByOwner.map((o: OwnerGroup) => o.ownerWallet)));
     } catch (err: any) {
       notify('error', err?.message || 'Failed to load transparency data');
@@ -537,6 +659,18 @@ export default function TransparencyPage() {
     });
   };
 
+  const totalOnChainEvents = useMemo(() => {
+    if (!data) return 0;
+    return data.vaultsByOwner.reduce((acc, g) =>
+      acc + g.vaults.reduce((va, v) => va + v.recentEvents.filter(e => e.onChainVerified).length, 0), 0);
+  }, [data]);
+
+  const totalEvents = useMemo(() => {
+    if (!data) return 0;
+    return data.vaultsByOwner.reduce((acc, g) =>
+      acc + g.vaults.reduce((va, v) => va + v.recentEvents.length, 0), 0);
+  }, [data]);
+
   if (loading) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[60vh]">
@@ -556,7 +690,6 @@ export default function TransparencyPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-[1200px] mx-auto">
-      {/* Page Header */}
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2.5 mb-1">
@@ -566,7 +699,7 @@ export default function TransparencyPage() {
             <h1 className="text-xl font-bold text-ink-900">Fund Segregation &amp; Transparency</h1>
           </div>
           <p className="text-sm text-slate-500 ml-[46px]">
-            Proof that all vault operations are non-commingled. Every deposit, allocation, and movement is traceable to its source.
+            All data verified on-chain. Only on-chain executed transactions and balances are shown.
           </p>
         </div>
         <button onClick={load}
@@ -575,22 +708,25 @@ export default function TransparencyPage() {
         </button>
       </div>
 
-      {/* KPI Summary */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* KPI Summary - On-Chain Verified */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Card title="" subtitle="">
           <div className="text-center py-1">
             <p className="text-[10px] uppercase tracking-wider text-slate-400 mb-1">AMINA Custody Wallet</p>
             <div className="flex items-center justify-center gap-1">
+              <OnChainBadge verified label="On-Chain" />
               <a href={addrLink(data.aminaWallet)} target="_blank" rel="noreferrer"
                 className="font-mono text-sm text-teal-700 hover:underline">{truncate(data.aminaWallet, 18)}</a>
               <CopyButton text={data.aminaWallet} />
             </div>
+            <p className="text-xs font-mono text-ink-900 mt-1">${fmt(data.bankWalletOnChainBalance)} USDC on-chain</p>
           </div>
         </Card>
         <Card title="" subtitle="">
           <div className="text-center py-1">
-            <p className="text-[10px] uppercase tracking-wider text-slate-400 mb-1">Total Vaults</p>
+            <p className="text-[10px] uppercase tracking-wider text-slate-400 mb-1">Segregated Vaults</p>
             <p className="text-2xl font-bold text-ink-900">{data.totalVaults}</p>
+            <p className="text-[10px] text-slate-400">Each with unique program</p>
           </div>
         </Card>
         <Card title="" subtitle="">
@@ -605,21 +741,25 @@ export default function TransparencyPage() {
             <p className="text-2xl font-bold font-mono text-teal-700">${fmt(data.totalNAV)}</p>
           </div>
         </Card>
+        <Card title="" subtitle="">
+          <div className="text-center py-1">
+            <p className="text-[10px] uppercase tracking-wider text-slate-400 mb-1">On-Chain Verified Events</p>
+            <p className="text-2xl font-bold text-success-700">{totalOnChainEvents}<span className="text-sm text-slate-400 font-normal">/{totalEvents}</span></p>
+          </div>
+        </Card>
       </div>
 
-      {/* Segregation Guarantee Banner */}
       <div className="bg-success-100/60 border border-success-700/20 rounded-[14px] px-5 py-3.5 flex items-start gap-3">
         <ShieldCheck className="w-5 h-5 text-success-700 mt-0.5 shrink-0" />
         <div>
-          <p className="text-sm font-semibold text-success-700">Non-Commingling Verified</p>
+          <p className="text-sm font-semibold text-success-700">Non-Commingling Verified On-Chain</p>
           <p className="text-xs text-success-700/80 mt-0.5">
-            Each vault below operates as a segregated account. Funds deposited into a vault can only move within that vault's
-            mandate-approved strategies. No cross-vault fund movement is permitted. All transactions are verifiable on Solana.
+            Each vault operates as a segregated on-chain program with a unique program ID. Funds deposited into a vault can only move within that vault's
+            mandate-approved strategies. No cross-vault fund movement is permitted. All transactions are verifiable on Solana devnet.
           </p>
         </div>
       </div>
 
-      {/* Search */}
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
@@ -631,14 +771,12 @@ export default function TransparencyPage() {
         />
       </div>
 
-      {/* Vaults by Owner Wallet */}
       {filtered.length === 0 ? (
         <div className="text-center py-12 text-slate-400 text-sm">No vaults match your search.</div>
       ) : (
         <div className="space-y-6">
           {filtered.map((group) => (
             <Card key={group.ownerWallet} title="" subtitle="">
-              {/* Owner Header */}
               <button
                 onClick={() => toggleOwner(group.ownerWallet)}
                 className="w-full flex items-center justify-between mb-4"

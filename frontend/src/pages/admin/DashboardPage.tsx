@@ -66,6 +66,7 @@ const fmt = (v: any) => {
 // ─── BANK ADMIN DASHBOARD ────────────────────────────────────────
 function AdminDashboard({ data }: { data: ReturnType<typeof useDashboardData> }) {
   const navigate = useNavigate();
+  const { activeSegment } = useStore();
   const { credentials, vaults, events, strategies, activeVaultId } = data;
 
   const activeVaults = vaults.filter((v: any) => v.status === 'active');
@@ -73,12 +74,28 @@ function AdminDashboard({ data }: { data: ReturnType<typeof useDashboardData> })
   const totalDeposited = vaults.reduce((s: number, v: any) => s + (v.totalDeposited || 0), 0);
   const activeCreds = credentials.filter((c: any) => c.status === 'active');
   const revokedCreds = credentials.filter((c: any) => c.status === 'revoked');
-  const clientsWithActiveVaults = new Set(activeVaults.map((v: any) => v.clientReference).filter(Boolean)).size;
+
+  const segmentVaults = activeSegment === 'individuals'
+    ? vaults
+    : activeSegment === 'corporates'
+      ? vaults.filter((v: any) => {
+          const cred = credentials.find((c: any) => c.credentialId === v.credentialId);
+          return cred?.productEligibility?.toLowerCase().includes('corporate') || cred?.clientReference?.startsWith('CORP');
+        })
+      : vaults.filter((v: any) => {
+          const cred = credentials.find((c: any) => c.credentialId === v.credentialId);
+          return cred?.productEligibility?.toLowerCase().includes('b2b') || cred?.clientReference?.startsWith('B2B');
+        });
+
+  const segmentActive = segmentVaults.filter((v: any) => v.status === 'active');
+  const segmentNAV = segmentVaults.reduce((s: number, v: any) => s + (v.totalNAV || 0), 0);
+  const segmentDeposited = segmentVaults.reduce((s: number, v: any) => s + (v.totalDeposited || 0), 0);
+  const clientsWithActiveVaults = new Set(segmentActive.map((v: any) => v.clientReference).filter(Boolean)).size;
 
   const statCards = [
     { label: 'Credentials Issued', value: credentials.length, sub: `${activeCreds.length} active, ${revokedCreds.length} revoked`, icon: Shield, color: 'text-teal-700' },
-    { label: 'Clients with Active Vaults', value: clientsWithActiveVaults, sub: `${activeVaults.length} vault${activeVaults.length !== 1 ? 's' : ''} — ${fmt(totalNAV)} USDC total NAV`, icon: Building2, color: 'text-teal-600' },
-    { label: 'Total Deposited', value: fmt(totalDeposited), sub: 'Across all vaults', icon: Banknote, color: 'text-success-700' },
+    { label: 'Clients with Active Vaults', value: clientsWithActiveVaults, sub: `${segmentActive.length} vault${segmentActive.length !== 1 ? 's' : ''} — ${fmt(segmentNAV)} USDC total NAV`, icon: Building2, color: 'text-teal-600' },
+    { label: 'Total Deposited', value: fmt(segmentDeposited), sub: 'Across segment vaults', icon: Banknote, color: 'text-success-700' },
     { label: 'Compliance Events', value: events.length, sub: `${events.filter((e: any) => e.result === 'failure').length} blocked`, icon: ClipboardCheck, color: 'text-warning-700' },
   ];
 
@@ -105,8 +122,8 @@ function AdminDashboard({ data }: { data: ReturnType<typeof useDashboardData> })
       </div>
 
       {/* Vault Overview Table */}
-      {vaults.length > 0 && (
-        <Card title="Vault Overview" subtitle={`${vaults.length} provisioned vault${vaults.length !== 1 ? 's' : ''}`}>
+      {segmentVaults.length > 0 && (
+        <Card title="Vault Overview" subtitle={`${segmentVaults.length} vault${segmentVaults.length !== 1 ? 's' : ''} in ${activeSegment} segment`}>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
@@ -120,7 +137,7 @@ function AdminDashboard({ data }: { data: ReturnType<typeof useDashboardData> })
                 </tr>
               </thead>
               <tbody>
-                {vaults.map((v: any) => (
+                {segmentVaults.map((v: any) => (
                   <tr key={v.vaultId} className="border-b border-slate-200/50 hover:bg-teal-50 transition-colors cursor-pointer" onClick={() => navigate('/amina/funding')}>
                     <td className="py-2.5 pr-3 font-mono text-ink-900">{v.vaultId}</td>
                     <td className="py-2.5 pr-3 text-ink-900">{v.clientReference || '—'}</td>
@@ -229,23 +246,38 @@ function PortfolioManagerDashboard({ data }: { data: ReturnType<typeof useDashbo
           <UserCheck className="w-5 h-5 text-teal-700" />
           <div>
             <p className="text-xs text-slate-500">Viewing portfolio for</p>
-            <p className="text-sm font-medium text-ink-900">{selectedClient === 'ALL' ? 'All Clients' : selectedClient}</p>
+            <p className="text-sm font-medium text-ink-900">{selectedClient === 'ALL' ? 'All Clients' : selectedClient || 'None'}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {clients.map((client) => (
-            <button
-              key={client}
-              onClick={() => setSelectedClient(client)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-all ease-amina duration-150 ${
-                selectedClient === client
-                  ? 'bg-teal-50 border-teal-700 text-teal-700'
-                  : 'bg-white border-slate-200 text-slate-500 hover:text-ink-900'
-              }`}
+        <div className="flex items-center gap-2 flex-wrap max-w-[70%]">
+          {clients.length <= 6 ? (
+            <>
+              {clients.map((client) => (
+                <button
+                  key={client}
+                  onClick={() => setSelectedClient(client)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-all ease-amina duration-150 ${
+                    selectedClient === client
+                      ? 'bg-teal-50 border-teal-700 text-teal-700'
+                      : 'bg-white border-slate-200 text-slate-500 hover:text-ink-900'
+                  }`}
+                >
+                  {client}
+                </button>
+              ))}
+            </>
+          ) : (
+            <select
+              value={selectedClient}
+              onChange={(e) => setSelectedClient(e.target.value)}
+              className="px-3 py-1.5 text-xs border border-slate-200 rounded-xl bg-white text-ink-900 focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600 transition-colors min-w-[200px]"
             >
-              {client}
-            </button>
-          ))}
+              <option value="">All Clients</option>
+              {clients.map((client) => (
+                <option key={client} value={client}>{client}</option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 
@@ -634,8 +666,14 @@ export default function AdminDashboardPage() {
         <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-[12px] p-1.5 shadow-1">
           {([
             { id: 'individuals' as Segment, label: 'Individuals', count: data.vaults.length },
-            { id: 'corporates' as Segment, label: 'Corporates', count: 0 },
-            { id: 'b2b2c' as Segment, label: 'B2B2C Partners', count: 0 },
+            { id: 'corporates' as Segment, label: 'Corporates', count: data.vaults.filter((v: any) => {
+              const cred = data.credentials.find((c: any) => c.credentialId === v.credentialId);
+              return cred?.productEligibility?.toLowerCase().includes('corporate') || cred?.clientReference?.startsWith('CORP');
+            }).length },
+            { id: 'b2b2c' as Segment, label: 'B2B2C Partners', count: data.vaults.filter((v: any) => {
+              const cred = data.credentials.find((c: any) => c.credentialId === v.credentialId);
+              return cred?.productEligibility?.toLowerCase().includes('b2b') || cred?.clientReference?.startsWith('B2B');
+            }).length },
           ]).map(seg => (
             <button
               key={seg.id}
