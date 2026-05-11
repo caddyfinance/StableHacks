@@ -171,7 +171,7 @@ export class VaultsService {
               strategyId: a.strategyId,
               amount: a.amount,
               yieldAccrued: a.yieldAccrued,
-              onChainYield: hasOnChainPosition ? solsticePosition.onChainYield : 0,
+              onChainYield: hasOnChainPosition ? solsticePosition!.onChainYield : 0,
               status: a.status,
               txSignature: a.txSignature,
               onChainAddress: a.onChainAddress,
