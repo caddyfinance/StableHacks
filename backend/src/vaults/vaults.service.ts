@@ -303,7 +303,7 @@ export class VaultsService {
       try {
         initResult = await this.vaultProgram.initializeProgram(
           deployedProgramId,
-          credential.walletAddress,
+          this.vaultProgram.getAminaBankWallet(),
         );
         steps.push({
           step: 'Initialize Program',
