@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, Logger } from '@nestjs/common';
+import { Controller, Get, Param, Query, Logger, Inject } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ComplianceLayerService } from './compliance-layer.service';
 import { Roles } from '../auth/roles.guard';
@@ -8,7 +8,7 @@ import { Roles } from '../auth/roles.guard';
 export class ComplianceLayerController {
   private readonly logger = new Logger(ComplianceLayerController.name);
 
-  constructor(private readonly complianceService: ComplianceLayerService) {}
+  constructor(@Inject(ComplianceLayerService) private readonly complianceService: ComplianceLayerService) {}
 
   // ─── Health Check ─────────────────────────────────────────────
 

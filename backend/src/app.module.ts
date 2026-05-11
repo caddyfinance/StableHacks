@@ -15,6 +15,10 @@ import { TranslationLayerModule } from './translation-layer/translation-layer.mo
 import { FinstarModule } from './finstar/finstar.module';
 import { ComplianceLayerModule } from './compliance-layer/compliance-layer.module';
 import { OperationsModule } from './operations/operations.module';
+import { ProvidersModule } from './providers/providers.module';
+import { WalletControllersModule } from './wallet-controllers/wallet-controllers.module';
+import { TransferChecksModule } from './transfer-checks/transfer-checks.module';
+import { ReportsModule } from './reports/reports.module';
 import { RolesGuard } from './auth/roles.guard';
 import { LoggingInterceptor } from './common/logging.interceptor';
 
@@ -35,6 +39,10 @@ import { LoggingInterceptor } from './common/logging.interceptor';
     FinstarModule,
     ComplianceLayerModule,
     OperationsModule,
+    ProvidersModule,
+    WalletControllersModule,
+    TransferChecksModule,
+    ReportsModule,
   ],
   providers: [
     {

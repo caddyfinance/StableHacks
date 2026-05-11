@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { X, ChevronRight, ChevronLeft, Presentation } from 'lucide-react';
+import { X, ChevronRight, ChevronLeft, Presentation, Play } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
-const PITCH_SLIDES = [
+const PITCH_SLIDES: { title: string; subtitle?: string; points: string[]; isDemo?: boolean }[] = [
   {
-    title: 'AMINA',
+    title: 'Caddy Finance',
     subtitle: 'Institutional Yield Vault Platform',
-    points: ['Segregated, non-pooled vaults for institutional clients', 'Built on Solana — real on-chain transactions', 'Three-layer architecture with full compliance'],
+    points: ['Segregated, non-pooled vaults for institutional clients', 'Built on Solana, real on-chain transactions', 'Bank-grade compliance: KYT, OFAC, Travel Rule on every movement'],
   },
   {
     title: 'The Problem',
@@ -14,9 +14,19 @@ const PITCH_SLIDES = [
     points: ['Banks cannot custody crypto assets in pooled structures', 'Regulatory requirements demand segregation and audit trails', 'No bridge between core banking and on-chain yield'],
   },
   {
+    title: 'Our Approach',
+    subtitle: 'Operationalise the bank\'s approval decision',
+    points: ['We do not try to replace legal and risk due diligence', 'Once Solstice is approved, the vault enforces which clients, vaults, managers, wallets, limits, and transfer checks are allowed', 'Bank-controlled provider state: approved, restricted, or revoked'],
+  },
+  {
     title: 'Three-Layer Architecture',
     subtitle: "AMINA's core IP",
     points: ['Layer 1: Finstar/HBL Core Banking — GL entries, settlement', 'Layer 2: Translation Layer — compliance, routing, attestation (on-chain PDAs)', 'Layer 3: Crypto Services (Caddy) — vault operations, yield protocols'],
+  },
+  {
+    title: 'Compliance Infrastructure',
+    subtitle: 'Bank-grade transfer controls',
+    points: ['Approved Provider Profile — bank evaluates, vault enforces', 'Wallet Controller Registry — who controls every address', 'Transfer Check Matrix — KYT + OFAC + Travel Rule per movement (never merged)', 'Exportable compliance report with full attribution'],
   },
   {
     title: 'Translation Layer',
@@ -25,13 +35,21 @@ const PITCH_SLIDES = [
   },
   {
     title: 'Live Demo',
-    subtitle: 'Real Solana devnet transactions',
-    points: ['Credential issuance → Vault creation → Mandate configuration', 'USDC deposit → Solstice eUSX yield deployment (on-chain)', 'Emergency controls → 24/7 operations dashboard'],
+    subtitle: 'What you are about to see — real Solana devnet',
+    isDemo: true,
+    points: [
+      'Issue SAS credential → create segregated vault → set mandate with 10% liquidity buffer',
+      'Deposit USDC → automatic KYT + OFAC + Travel Rule checks fire on-chain',
+      'Portfolio Manager deploys to Solstice → pre-execution checks enforce provider approval + mandate fit + exposure limit',
+      'Every wallet labelled with its controller — full attribution from source to destination',
+      'Translation Layer routes each instruction through 5 on-chain PDAs with compliance attestation',
+      'Export full compliance report — credential, mandate, providers, checks, explorer links',
+    ],
   },
   {
     title: 'Key Differentiators',
-    subtitle: 'Why AMINA wins',
-    points: ['Segregated Account Structure (SAS) — 1:1 client:vault', '10% mandatory liquidity buffer — protocol-level safety', 'Real yield via Solstice — not simulated', 'Multi-jurisdiction ready — Switzerland, Abu Dhabi, Hong Kong, Singapore'],
+    subtitle: 'Why Caddy Finance wins',
+    points: ['Segregated Account Structure (SAS) — 1:1 client:vault', '10% mandatory liquidity buffer — protocol-level safety', 'Real yield via Solstice — not simulated', 'Bank-controlled provider approval with exposure limits'],
   },
 ];
 
@@ -73,7 +91,7 @@ export default function PitchMode() {
         <div className="max-w-3xl w-full space-y-8">
           <div>
             <h1 className="text-5xl font-bold text-white tracking-tight">{current.title}</h1>
-            <p className="text-xl text-teal-400 mt-3">{current.subtitle}</p>
+            {current.subtitle && <p className="text-xl text-teal-400 mt-3">{current.subtitle}</p>}
           </div>
           <div className="space-y-4">
             {current.points.map((point, i) => (
@@ -85,6 +103,15 @@ export default function PitchMode() {
               </div>
             ))}
           </div>
+          {current.isDemo && (
+            <button
+              onClick={() => setDemoMode(false)}
+              className="mt-6 inline-flex items-center gap-3 px-6 py-3 bg-teal-500 hover:bg-teal-400 text-white font-semibold rounded-xl transition-colors shadow-lg shadow-teal-500/20"
+            >
+              <Play className="w-5 h-5" />
+              Start Live Demo
+            </button>
+          )}
         </div>
       </div>
 

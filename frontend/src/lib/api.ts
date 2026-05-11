@@ -160,4 +160,28 @@ export const api = {
   opsStatus: () => request<any[]>('/operations/status'),
   opsSLA: () => request<any>('/operations/sla'),
   opsAlerts: () => request<any[]>('/operations/alerts'),
+
+  // Providers
+  getProviders: () => request<any[]>('/providers'),
+  getProvider: (id: string) => request<any>(`/providers/${id}`),
+  getProviderMonitoring: (id: string) => request<any>(`/providers/${id}/monitoring`),
+  createProvider: (data: any) => request<any>('/providers', { method: 'POST', body: JSON.stringify(data) }),
+  updateProviderStatus: (id: string, status: string) => request<any>(`/providers/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+
+  // Wallet Controllers
+  getWalletControllers: () => request<any[]>('/wallet-controllers'),
+  getWalletController: (address: string) => request<any>(`/wallet-controllers/${address}`),
+  createWalletController: (data: any) => request<any>('/wallet-controllers', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Transfer Checks
+  getTransferChecks: (vaultId?: string, transferType?: string) => {
+    const params = new URLSearchParams();
+    if (vaultId) params.set('vaultId', vaultId);
+    if (transferType) params.set('transferType', transferType);
+    return request<any[]>(`/transfers/checks?${params.toString()}`);
+  },
+  getTransferChecksByTransfer: (transferId: string) => request<any[]>(`/transfers/checks/${transferId}`),
+
+  // Compliance Reports
+  getComplianceReport: (vaultId: string) => request<any>(`/reports/compliance/${vaultId}`),
 };

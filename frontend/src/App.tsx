@@ -24,6 +24,9 @@ import ArchitecturePage from './pages/admin/ArchitecturePage';
 import TranslationPipelinePage from './pages/admin/TranslationPipelinePage';
 import FinstarLedgerPage from './pages/admin/FinstarLedgerPage';
 import OperationsPage from './pages/admin/OperationsPage';
+import ProvidersPage from './pages/admin/ProvidersPage';
+import WalletControllersPage from './pages/admin/WalletControllersPage';
+import TransferChecksPage from './pages/admin/TransferChecksPage';
 
 // Client pages
 import VaultOverviewPage from './pages/client/VaultOverviewPage';
@@ -39,9 +42,9 @@ import PitchMode from './components/PitchMode';
 
 // Role → allowed routes
 const roleAccess: Record<Role, string[]> = {
-  admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance', '/amina/audit-log', '/amina/transparency', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger', '/amina/operations'],
-  portfolio_manager: ['/amina', '/amina/mandate', '/amina/execution', '/amina/compliance', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger'],
-  compliance_officer: ['/amina', '/amina/compliance', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger'],
+  admin: ['/amina', '/amina/credentials', '/amina/vault-factory', '/amina/mandate', '/amina/funding', '/amina/compliance', '/amina/audit-log', '/amina/transparency', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger', '/amina/operations', '/amina/providers', '/amina/wallet-controllers', '/amina/transfer-checks'],
+  portfolio_manager: ['/amina', '/amina/mandate', '/amina/execution', '/amina/compliance', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger', '/amina/providers', '/amina/transfer-checks'],
+  compliance_officer: ['/amina', '/amina/compliance', '/amina/architecture', '/amina/translation-pipeline', '/amina/finstar-ledger', '/amina/providers', '/amina/wallet-controllers', '/amina/transfer-checks'],
   emergency_admin: ['/amina', '/amina/emergency', '/amina/compliance', '/amina/architecture', '/amina/operations'],
   client_representative: [],
 };
@@ -79,6 +82,9 @@ function AccessDenied({ role, route }: { role: Role; route: string }) {
       { label: 'Mandate Details', path: '/amina/mandate' },
       { label: 'Vault Funding', path: '/amina/funding' },
       { label: 'Compliance', path: '/amina/compliance' },
+      { label: 'Providers', path: '/amina/providers' },
+      { label: 'Wallet Controllers', path: '/amina/wallet-controllers' },
+      { label: 'Transfer Checks', path: '/amina/transfer-checks' },
       { label: 'Audit Log', path: '/amina/audit-log' },
       { label: 'Transparency', path: '/amina/transparency' },
       { label: 'Architecture', path: '/amina/architecture' },
@@ -180,6 +186,9 @@ export default function App() {
         <Route path="translation-pipeline" element={<RequireRole route="/amina/translation-pipeline"><TranslationPipelinePage /></RequireRole>} />
         <Route path="finstar-ledger" element={<RequireRole route="/amina/finstar-ledger"><FinstarLedgerPage /></RequireRole>} />
         <Route path="operations" element={<RequireRole route="/amina/operations"><OperationsPage /></RequireRole>} />
+        <Route path="providers" element={<RequireRole route="/amina/providers"><ProvidersPage /></RequireRole>} />
+        <Route path="wallet-controllers" element={<RequireRole route="/amina/wallet-controllers"><WalletControllersPage /></RequireRole>} />
+        <Route path="transfer-checks" element={<RequireRole route="/amina/transfer-checks"><TransferChecksPage /></RequireRole>} />
       </Route>
 
       {/* Client routes */}

@@ -5,6 +5,7 @@ import {
   PublicKey,
   GetProgramAccountsFilter,
 } from '@solana/web3.js';
+import bs58 from 'bs58';
 
 /**
  * Service to read GLEntry and RegulatoryReport PDAs from the mock-finstar Anchor program.
@@ -239,7 +240,7 @@ export class FinstarService {
         {
           memcmp: {
             offset: 0,
-            bytes: discriminator.toString('base64'),
+            bytes: bs58.encode(discriminator),
           },
         },
       ];
@@ -291,7 +292,7 @@ export class FinstarService {
         {
           memcmp: {
             offset: 0,
-            bytes: discriminator.toString('base64'),
+            bytes: bs58.encode(discriminator),
           },
         },
       ];

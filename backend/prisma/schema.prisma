@@ -97,6 +97,8 @@ model Strategy {
   active        Boolean  @default(true)
   disabled      Boolean  @default(false)
   currentYield  Float    @default(0)
+  providerId    String?
+  provider      ProviderProfile? @relation("ProviderStrategies", fields: [providerId], references: [id])
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   allocations   Allocation[]
@@ -183,4 +185,96 @@ model SystemConfig {
   id        String   @id @default("singleton")
   bankBalance Float  @default(50000)
   updatedAt DateTime @updatedAt
+}
+
+// ─── Provider Approval Profile ───────────────────────────
+model ProviderProfile {
+  id                    String   @id @default(uuid())
+  providerName          String
+  strategy              String
+  status                String   @default("APPROVED") // APPROVED | RESTRICTED | BLOCKED
+  bankReviewStatus      String   @default("Completed")
+  providerType          String   @default("Approved External Yield Provider")
+  kytStatus             String   @default("Clear")
+  ofacSanctionsStatus   String   @default("Clear")
+  travelRuleTreatment   String   @default("External transfer edge review applied where applicable")
+  protocolDueDiligence  String   @default("Completed")
+  mandateFit            String[]
+  exposureLimit         Int      @default(60) // percentage of vault NAV
+  lastReviewDate        DateTime
+  nextReviewDate        DateTime
+  reviewNotes           String?
+  evidencePackUrl       String?
+  // Compliance Profile Fields 
+  jurisdictionTreatment String   @default("Bank-reviewed")
+  clientEligibility     String   @default("Institutional only")
+  vaultEligibility      String[]
+  destinationWallet     String   @default("Approved")
+  kytScreeningRequired  Boolean  @default(true)
+  ofacScreeningRequired Boolean  @default(true)
+  travelRuleRequired    Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  strategies            Strategy[] @relation("ProviderStrategies")
+  monitoringSnapshots   ProviderMonitoringSnapshot[]
+}
+
+// ─── Provider Monitoring Snapshot ────────────────────────
+model ProviderMonitoringSnapshot {
+  id                 String   @id @default(uuid())
+  providerId         String
+  provider           ProviderProfile @relation(fields: [providerId], references: [id])
+  bankApprovalStatus String   @default("Approved")
+  strategyStatus     String   @default("Available")
+  contractMonitoring String   @default("No new critical event")
+  kytExposure        String   @default("Clear")
+  ofacStatus         String   @default("Clear")
+  liquidityStatus    String   @default("Within approved range")
+  reviewStatus       String   @default("Current")
+  lastReviewed       DateTime
+  nextReview         DateTime
+  alerts             Json?
+  snapshotDate       DateTime @default(now())
+}
+
+// ─── Transfer Check Matrix ───────────────────────────────
+model TransferCheck {
+  id                   String   @id @default(uuid())
+  transferId           String
+  transferType         String   // DEPOSIT | ALLOCATION | REDEMPTION | UNWIND
+  vaultId              String
+  fromAddress          String
+  fromController       String
+  toAddress            String
+  toController         String
+  asset                String   @default("USDC")
+  amount               Float
+  kytStatus            String   @default("CLEAR") // CLEAR | FLAGGED | PENDING | NOT_REQUIRED
+  kytReference         String?
+  ofacStatus           String   @default("CLEAR") // CLEAR | FLAGGED | PENDING | NOT_REQUIRED
+  ofacReference        String?
+  travelRuleStatus     String   @default("NOT_REQUIRED") // CLEAR | REQUIRED | COMPLETE | PENDING | NOT_REQUIRED
+  travelRuleReference  String?
+  providerApproval     String?  // APPROVED | NOT_REQUIRED
+  mandateCheck         String?  // PASSED | FAILED | NOT_REQUIRED
+  overallStatus        String   @default("PASSED") // PASSED | BLOCKED | PENDING_REVIEW
+  txSignature          String?  // Solana tx signature if on-chain; null = bank/off-chain transfer
+  checkedAt            DateTime @default(now())
+  checkedBy            String?
+}
+
+// ─── Wallet Controller Registry ──────────────────────────
+model WalletController {
+  id                 String   @id @default(uuid())
+  address            String   @unique
+  controllerName     String
+  controllerType     String   // BANK_TREASURY | CLIENT_ACCOUNT | SEGREGATED_VAULT | PROVIDER_ADDRESS | REDEMPTION_WALLET | UNKNOWN
+  permittedUse       String
+  verificationStatus String   @default("VERIFIED") // VERIFIED | PENDING | UNVERIFIED
+  chainalysisLink    String?
+  explorerLink       String?
+  vaultId            String?
+  providerId         String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }

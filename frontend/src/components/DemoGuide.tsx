@@ -2,15 +2,17 @@ import { useState } from 'react';
 import { HelpCircle, X, ChevronRight, ChevronLeft } from 'lucide-react';
 
 const DEMO_STEPS = [
-  { title: 'Welcome to AMINA', desc: 'Institutional yield vault platform built on Solana. Three-layer architecture: Core Banking → Translation Layer → Crypto Services.' },
-  { title: '1. Issue Credential', desc: 'Navigate to Credentials page. Issue a SAS (Segregated Account Structure) credential for an institutional client.' },
+  { title: 'Welcome to AMINA', desc: 'Institutional yield vault platform built on Solana. We assume Solstice Finance is a bank-approved yield provider. Our product operationalises the bank\'s approval decision.' },
+  { title: '1. Issue Credential', desc: 'Navigate to Credentials page. Issue a SAS credential for an institutional client with on-chain attestation.' },
   { title: '2. Create Vault', desc: 'Go to Vault Factory. Create a segregated, non-pooled vault tied to the credential. Each vault is 1:1 with a client.' },
   { title: '3. Configure Mandate', desc: 'Set investment mandate — approved strategies, risk limits, destination whitelist, and the 10% liquidity buffer.' },
-  { title: '4. Fund Vault', desc: 'Deposit USDC into the vault. Funds are tracked with on-chain provenance and Finstar GL entries.' },
-  { title: '5. Deploy Capital', desc: 'Portfolio Manager deploys capital into Solstice eUSX yield vault. Real on-chain lock (USX → eUSX).' },
-  { title: '6. Translation Layer', desc: 'Every instruction routes through AMINA Layer 2: jurisdiction check, travel rule, compliance attestation, routing, GL book-back — all on-chain PDAs.' },
-  { title: '7. Compliance', desc: 'Run the 12-check compliance suite. View audit trail, perimeter classification, and Chainalysis integration points.' },
-  { title: '8. Emergency Controls', desc: '24/7 operations centre. Pause vaults, disable adapters, initiate strategy unwinds.' },
+  { title: '4. Provider Approval', desc: 'View the Providers page. Solstice is pre-approved by the bank. The vault enforces which clients, managers, wallets, and limits are allowed.' },
+  { title: '5. Fund Vault', desc: 'Deposit USDC. Each transfer triggers KYT + OFAC + Travel Rule checks (visible in Transfer Checks page). Wallet controller attribution tracked.' },
+  { title: '6. Deploy Capital', desc: 'Portfolio Manager can only deploy because: provider is APPROVED, mandate permits it, exposure limit not exceeded. See Pre-Execution Checks panel.' },
+  { title: '7. Transfer Checks', desc: 'Every movement shows three separate compliance checks (KYT, OFAC, Travel Rule) with wallet controller attribution. Not merged into one badge.' },
+  { title: '8. Translation Layer', desc: 'Every instruction routes through AMINA Layer 2: jurisdiction check, travel rule, compliance attestation, routing, GL book-back — all on-chain PDAs.' },
+  { title: '9. Compliance Report', desc: 'Export full compliance report showing: credential, mandate, provider approval, wallet controllers, all transfer checks, and explorer links.' },
+  { title: '10. Emergency Controls', desc: '24/7 operations centre. Pause vaults, disable adapters, restrict providers, initiate strategy unwinds.' },
 ];
 
 export default function DemoGuide() {

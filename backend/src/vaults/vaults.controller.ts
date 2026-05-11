@@ -19,7 +19,7 @@ export class VaultsController {
   }
 
   @Get()
-  @Roles('admin', 'portfolio_manager', 'compliance_officer')
+  @Roles('admin', 'portfolio_manager', 'compliance_officer', 'client_representative')
   @ApiOperation({ summary: 'List all vaults', description: 'Retrieve all institutional yield vaults managed on the platform. Returns vault metadata, balances, and status for each vault.' })
   @ApiOkResponse({ description: 'Returns array of all vault records.' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions.' })

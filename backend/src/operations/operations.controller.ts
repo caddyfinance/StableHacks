@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Inject } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiOkResponse, ApiForbiddenResponse } from '@nestjs/swagger';
 import { OperationsService } from './operations.service';
 import { Roles } from '../auth/roles.guard';
@@ -6,7 +6,7 @@ import { Roles } from '../auth/roles.guard';
 @ApiTags('Operations')
 @Controller('operations')
 export class OperationsController {
-  constructor(private readonly operations: OperationsService) {}
+  constructor(@Inject(OperationsService) private readonly operations: OperationsService) {}
 
   @Get('status')
   @Roles('admin', 'compliance_officer')

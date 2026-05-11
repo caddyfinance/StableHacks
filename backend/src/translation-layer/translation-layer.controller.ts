@@ -11,7 +11,7 @@ export class TranslationLayerController {
   private readonly logger = new Logger(TranslationLayerController.name);
 
   constructor(
-    private readonly translationLayerService: TranslationLayerService,
+    @Inject(TranslationLayerService) private readonly translationLayerService: TranslationLayerService,
     @Inject(EventsService) private readonly events: EventsService,
   ) {}
 

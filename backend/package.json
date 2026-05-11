@@ -38,6 +38,9 @@
     "tweetnacl": "^1.0.3",
     "uuid": "^9.0.0"
   },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "devDependencies": {
     "@nestjs/cli": "^10.3.0",
     "@nestjs/schematics": "^10.1.0",

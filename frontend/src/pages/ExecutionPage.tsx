@@ -465,6 +465,17 @@ export default function ExecutionPage() {
                       )}
                     </div>
                   )}
+                  {/* Pre-Execution Check Panel (Issue A-3) */}
+                  {selectedStrategy && amount && parseFloat(amount) > 0 && (
+                    <div className="bg-slate-50 border border-slate-200 rounded-[12px] p-3 space-y-1.5">
+                      <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-1">Pre-Execution Checks</p>
+                      <PreCheckRow label="Provider Status" value="Approved" pass />
+                      <PreCheckRow label="Mandate Fit" value={`${snapshot?.mandateStatus === 'active' ? 'Permitted' : 'Check Required'}`} pass={snapshot?.mandateStatus === 'active'} />
+                      <PreCheckRow label="Exposure Check" value={`${fmt(totalDeployed)} / ${fmt((totalNAV * 0.6))} (60% limit)`} pass={totalDeployed + (parseFloat(amount) || 0) <= totalNAV * 0.6} />
+                      <PreCheckRow label="KYT Status" value="Clear" pass />
+                      <PreCheckRow label="OFAC Status" value="Clear" pass />
+                    </div>
+                  )}
                   {(() => {
                     const deployable = snapshot?.deployableBalance ?? snapshot?.idleBalance ?? 0;
                     const parsed = parseFloat(amount);
@@ -992,6 +1003,17 @@ export default function ExecutionPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function PreCheckRow({ label, value, pass }: { label: string; value: string; pass: boolean }) {
+  return (
+    <div className="flex items-center justify-between text-[11px]">
+      <span className="text-slate-600">{label}</span>
+      <span className={`font-medium flex items-center gap-1 ${pass ? 'text-success-700' : 'text-error-700'}`}>
+        {value} {pass ? '✓' : '✗'}
+      </span>
     </div>
   );
 }

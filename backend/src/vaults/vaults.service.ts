@@ -9,6 +9,7 @@ import { SasService } from '../sas/sas.service';
 import { VaultProgramService } from '../vault-program/vault-program.service';
 import { SolsticeService } from '../solstice/solstice.service';
 import { TranslationLayerService } from '../translation-layer/translation-layer.service';
+import { TransferChecksService } from '../transfer-checks/transfer-checks.service';
 
 @Injectable()
 export class VaultsService {
@@ -46,6 +47,8 @@ export class VaultsService {
     return config.bankBalance;
   }
 
+  private transferChecks: TransferChecksService;
+
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
     @Inject(EventsService) events: EventsService,
@@ -53,6 +56,7 @@ export class VaultsService {
     @Inject(VaultProgramService) vaultProgram: VaultProgramService,
     @Inject(SolsticeService) solstice: SolsticeService,
     @Inject(TranslationLayerService) translationLayer: TranslationLayerService,
+    @Inject(TransferChecksService) transferChecks: TransferChecksService,
   ) {
     this.prisma = prisma;
     this.events = events;
@@ -60,6 +64,7 @@ export class VaultsService {
     this.vaultProgram = vaultProgram;
     this.solstice = solstice;
     this.translationLayer = translationLayer;
+    this.transferChecks = transferChecks;
   }
 
   /**
@@ -967,6 +972,22 @@ export class VaultsService {
       onChainAddress: isOnChain ? aminaBankWallet || vault.onChainAddress || undefined : undefined,
     });
 
+    // Auto-generate transfer check (Issue B-3)
+    try {
+      await this.transferChecks.createTransferCheck({
+        transferId: deposit.id,
+        transferType: 'DEPOSIT',
+        vaultId,
+        fromAddress: sourceWallet || callerWallet || 'unknown',
+        toAddress: vault.ownerWallet || vaultId,
+        asset: vault.baseAsset,
+        amount,
+        isExternal: true,
+        isProviderTransfer: false,
+        travelRuleThreshold: 1000,
+      });
+    } catch { /* non-blocking */ }
+
     // Route through translation layer for on-chain proof trail
     let translationLayerResult: any = null;
     if (this.useTranslationLayer) {
@@ -1003,6 +1024,33 @@ export class VaultsService {
     if (strategy.disabled) {
       await this.events.emit({ vaultId, actionType: 'ALLOCATION_BLOCKED', actor: 'portfolio_manager', role: 'Portfolio Manager', asset: vault.baseAsset, amount, strategy: strategyId, result: 'failure', reason: `Strategy ${strategy.name} is disabled by emergency admin` });
       throw new BadRequestException(`Strategy ${strategy.name} is disabled by emergency admin`);
+    }
+
+    // ─── Provider Approval Check (Issue A-4) ──────────────────────
+    if (strategy.providerId) {
+      const provider = await this.prisma.providerProfile.findUnique({ where: { id: strategy.providerId } });
+      if (provider && provider.status !== 'APPROVED') {
+        const reason = `Provider "${provider.providerName}" is ${provider.status}. Allocation blocked.`;
+        await this.events.emit({ vaultId, actionType: 'ALLOCATION_BLOCKED', actor: 'portfolio_manager', role: 'Portfolio Manager', asset: vault.baseAsset, amount, strategy: strategyId, result: 'failure', reason });
+        throw new ForbiddenException(reason);
+      }
+      if (provider) {
+        // Check mandate fit (vault risk tier must match provider's mandateFit)
+        const credential = await this.prisma.credential.findUnique({ where: { credentialId: vault.credentialId } });
+        if (credential && provider.mandateFit.length > 0 && !provider.mandateFit.includes(credential.riskTier)) {
+          const reason = `Vault risk tier "${credential.riskTier}" is not in provider's approved mandate fit: [${provider.mandateFit.join(', ')}]`;
+          await this.events.emit({ vaultId, actionType: 'ALLOCATION_BLOCKED', actor: 'portfolio_manager', role: 'Portfolio Manager', asset: vault.baseAsset, amount, strategy: strategyId, result: 'failure', reason });
+          throw new ForbiddenException(reason);
+        }
+        // Check exposure limit
+        const existingProviderAlloc = vault.allocations.filter(a => a.strategyId === strategyId && a.status === 'active').reduce((s, a) => s + a.amount, 0);
+        const maxExposure = (vault.totalNAV * provider.exposureLimit) / 100;
+        if (existingProviderAlloc + amount > maxExposure) {
+          const reason = `Allocation exceeds provider exposure limit of ${provider.exposureLimit}%. Max: ${maxExposure.toLocaleString()}, Current: ${existingProviderAlloc.toLocaleString()}, Requested: ${amount.toLocaleString()}`;
+          await this.events.emit({ vaultId, actionType: 'ALLOCATION_BLOCKED', actor: 'portfolio_manager', role: 'Portfolio Manager', asset: vault.baseAsset, amount, strategy: strategyId, result: 'failure', reason });
+          throw new ForbiddenException(reason);
+        }
+      }
     }
 
     if (!vault.mandate) throw new BadRequestException('No mandate attached to vault');
@@ -1073,6 +1121,22 @@ export class VaultsService {
     });
 
     await this.events.emit({ vaultId, actionType: 'ALLOCATION_EXECUTED', actor: 'portfolio_manager', role: 'Portfolio Manager', asset: vault.baseAsset, amount, strategy: strategyId, result: 'success', reason: `Allocated ${amount.toLocaleString()} ${vault.baseAsset} to ${strategy.name}` });
+
+    // Auto-generate transfer check for allocation (Issue B-3)
+    try {
+      await this.transferChecks.createTransferCheck({
+        transferId: allocation.id,
+        transferType: 'ALLOCATION',
+        vaultId,
+        fromAddress: vault.ownerWallet || vaultId,
+        toAddress: '0xSOLSTICE-PROVIDER-WALLET-0000000000000',
+        asset: vault.baseAsset,
+        amount,
+        isExternal: true,
+        isProviderTransfer: true,
+        travelRuleThreshold: 1000,
+      });
+    } catch { /* non-blocking */ }
 
     // Route through AMINA translation layer for on-chain proof trail
     let translationLayerResult: any = null;

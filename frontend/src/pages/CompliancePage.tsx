@@ -502,6 +502,23 @@ export default function CompliancePage() {
     notify('success', 'Compliance report downloaded');
   };
 
+  const handleExportFullReport = async () => {
+    if (!activeVaultId) return;
+    try {
+      const report = await api.getComplianceReport(activeVaultId);
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `AMINA-Full-Compliance-Report-${activeVaultId}-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      notify('success', 'Full compliance report (JSON) downloaded');
+    } catch (e: any) {
+      notify('error', 'Failed to generate full compliance report');
+    }
+  };
+
   if (!activeVaultId) {
     return (
       <div className="p-6 space-y-6">
@@ -653,7 +670,11 @@ export default function CompliancePage() {
           </button>
           <button onClick={handleExportReport} disabled={exporting} className="flex items-center gap-1.5 bg-white border border-slate-200 hover:border-teal-700 text-slate-700 hover:text-ink-900 text-xs font-medium rounded-[12px] px-3 py-2 transition-colors disabled:opacity-50">
             <FileText className="w-3.5 h-3.5" />
-            {exporting ? 'Generating...' : 'Export Report'}
+            {exporting ? 'Generating...' : 'Export PDF'}
+          </button>
+          <button onClick={handleExportFullReport} className="flex items-center gap-1.5 bg-white border border-slate-200 hover:border-teal-700 text-slate-700 hover:text-ink-900 text-xs font-medium rounded-[12px] px-3 py-2 transition-colors">
+            <FileText className="w-3.5 h-3.5" />
+            Full Report (JSON)
           </button>
         </div>
       </div>
