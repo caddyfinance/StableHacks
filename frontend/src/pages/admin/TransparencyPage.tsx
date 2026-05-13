@@ -90,8 +90,10 @@ interface VaultEntry {
   totalWithdrawn?: number;
   onChainAddress?: string;
   programId?: string;
+  programVerified?: boolean;
   createdAt: string;
   onChainVerification: OnChainVerification | null;
+  binaryVerification?: { verified: boolean; binaryMatch: boolean; patchedOffsets: number; error: string | null } | null;
   credential: {
     credentialId: string;
     clientReference: string;
@@ -227,8 +229,9 @@ function FlowConnector({ label, amount, reverse }: { label?: string; amount?: st
 function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: string }) {
   const [expanded, setExpanded] = useState(false);
   const oc = vault.onChainVerification;
+  const bv = vault.binaryVerification;
   const isOnChainVerified = oc?.vaultPdaExists || !!vault.onChainAddress;
-  const isProgramVerified = !!(oc?.programExists && oc?.programExecutable);
+  const isProgramVerified = bv?.verified ?? !!(oc?.programExists && oc?.programExecutable);
 
   const onChainDeposits = vault.deposits.filter(d => d.onChainVerified);
   const onChainAllocations = vault.allocations.filter(a => a.onChainVerified);

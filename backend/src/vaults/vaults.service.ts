@@ -93,6 +93,18 @@ export class VaultsService {
     }
   }
 
+  async updateProgramVerification(programId: string, verified: boolean) {
+    const vault = await this.prisma.vault.findFirst({ where: { programId } });
+    if (!vault) return;
+    await this.prisma.vault.update({
+      where: { vaultId: vault.vaultId },
+      data: {
+        programVerified: verified,
+        programVerifiedAt: verified ? new Date() : null,
+      },
+    });
+  }
+
   /**
    * Get all vaults accessible by a specific wallet.
    * Filters out vaults whose linked credential has been revoked.
@@ -226,6 +238,32 @@ export class VaultsService {
             onChainVerification = await this.vaultProgram.verifyVaultOnChain(v.vaultId, v.programId || undefined);
           } catch { /* ignore */ }
 
+          // Dynamic binary verification — proves deployed binary matches template
+          let binaryVerification: any = null;
+          if (v.programId) {
+            try {
+              const bv = await this.vaultProgram.verifyProgramInstance(v.programId);
+              binaryVerification = {
+                verified: bv.verified,
+                binaryMatch: bv.binaryMatch,
+                patchedOffsets: bv.patchedOffsets.length,
+                error: bv.error || null,
+              };
+              // Update persisted status if verification state changed
+              if (bv.verified && !v.programVerified) {
+                await this.prisma.vault.update({
+                  where: { vaultId: v.vaultId },
+                  data: { programVerified: true, programVerifiedAt: new Date() },
+                });
+              } else if (!bv.verified && v.programVerified) {
+                await this.prisma.vault.update({
+                  where: { vaultId: v.vaultId },
+                  data: { programVerified: false, programVerifiedAt: null },
+                });
+              }
+            } catch { /* ignore */ }
+          }
+
           return {
             vaultId: v.vaultId,
             clientReference: v.clientReference,
@@ -239,8 +277,10 @@ export class VaultsService {
             totalPendingWithdrawal,
             onChainAddress: v.onChainAddress,
             programId: v.programId,
+            programVerified: v.programVerified,
             createdAt: v.createdAt,
             onChainVerification,
+            binaryVerification,
             credential: {
               credentialId: v.credential.credentialId,
               clientReference: v.credential.clientReference,
@@ -458,7 +498,7 @@ export class VaultsService {
     });
 
     // Update vault record with on-chain addresses and unique program ID
-    const onChainData: Record<string, string> = {};
+    const onChainData: Record<string, any> = {};
     if (deployedProgramId) {
       onChainData.programId = deployedProgramId;
     }
@@ -471,6 +511,13 @@ export class VaultsService {
       if (!onChainData.onChainAddress) {
         onChainData.onChainAddress = sasResult.onChainAddress;
       }
+    }
+
+    // Persist binary verification result
+    const verifyStep = steps.find(s => s.step === 'Verify Contract');
+    if (verifyStep?.status === 'success') {
+      onChainData.programVerified = true;
+      onChainData.programVerifiedAt = new Date();
     }
 
     if (Object.keys(onChainData).length > 0) {

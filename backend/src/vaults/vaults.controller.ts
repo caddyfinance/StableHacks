@@ -344,8 +344,11 @@ export class VaultsController {
   })
   @ApiParam({ name: 'programId', description: 'On-chain program ID (base58) to verify' })
   @ApiOkResponse({ description: 'Verification result with binary match status and patch offsets.' })
-  verifyProgram(@Param('programId') programId: string) {
-    return this.vaultProgram.verifyProgramInstance(programId);
+  async verifyProgram(@Param('programId') programId: string) {
+    const result = await this.vaultProgram.verifyProgramInstance(programId);
+    // Persist verification state to the vault record
+    await this.service.updateProgramVerification(programId, result.verified);
+    return result;
   }
 
 }
