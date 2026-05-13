@@ -176,10 +176,10 @@ function StrategyTabs({ vault, strategies, activeAllocs, deployed }: { vault: an
 export default function VaultDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { notify, clientInfo, setActiveVaultId } = useStore();
+  const { notify, clientInfo, setActiveVaultId, credentialRevoked } = useStore();
   const { publicKey, sendTransaction, signMessage } = useWallet();
 
-  if (!clientInfo?.credentialId) return <NotVerified />;
+  if (!clientInfo?.credentialId) return <NotVerified revoked={credentialRevoked} />;
 
   const [vault, setVault] = useState<any>(null);
   const [snapshot, setSnapshot] = useState<any>(null);

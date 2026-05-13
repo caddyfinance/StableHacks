@@ -71,7 +71,7 @@ export class VaultsService {
   /**
    * Verify that a wallet is the owner of a vault.
    * Throws ForbiddenException if the wallet doesn't match.
-   * For user-facing operations, callerWallet is required.
+   * Also checks that the vault's linked credential is still active.
    */
   private async verifyVaultOwnership(vaultId: string, callerWallet: string | undefined, requireWallet: boolean) {
     if (!callerWallet) return; // Skip wallet check if no wallet header (demo mode or admin operations)
@@ -82,10 +82,20 @@ export class VaultsService {
         `Wallet ${callerWallet.slice(0, 8)}... is not the owner of vault ${vaultId}. Only the attested wallet can operate on this vault.`
       );
     }
+    // Verify the vault's credential is still active (not revoked)
+    const credential = await this.prisma.credential.findUnique({
+      where: { credentialId: vault.credentialId },
+    });
+    if (credential && (credential.revoked || credential.status !== 'active')) {
+      throw new ForbiddenException(
+        'Your credential has been revoked. Vault operations are suspended. Contact AMINA administration to request new access.'
+      );
+    }
   }
 
   /**
    * Get all vaults accessible by a specific wallet.
+   * Filters out vaults whose linked credential has been revoked.
    */
   async findByWallet(walletAddress: string) {
     const vaults = await this.prisma.vault.findMany({
@@ -93,8 +103,12 @@ export class VaultsService {
       include: { mandate: true, credential: true },
       orderBy: { createdAt: 'desc' },
     });
+    // Only return vaults whose credential is still active
+    const activeVaults = vaults.filter(
+      (v) => v.credential && !v.credential.revoked && v.credential.status === 'active',
+    );
     const aminaBankWallet = this.vaultProgram.getAminaBankWallet();
-    return vaults.map(v => ({ ...v, aminaBankWallet }));
+    return activeVaults.map(v => ({ ...v, aminaBankWallet }));
   }
 
   async findAll() {
@@ -334,8 +348,8 @@ export class VaultsService {
         );
         steps.push({
           step: 'Register Credential On-Chain',
-          status: credentialResult ? 'success' : 'skipped',
-          detail: credentialResult ? `Credential PDA: ${credentialResult.credentialPda}` : 'Program not configured',
+          status: credentialResult ? 'success' : 'failed',
+          detail: credentialResult ? `Credential PDA: ${credentialResult.credentialPda}` : 'Credential registration failed',
           txSignature: credentialResult?.txSignature !== 'existing' ? credentialResult?.txSignature : undefined,
           address: credentialResult?.credentialPda,
         });
@@ -387,6 +401,25 @@ export class VaultsService {
       }
     } else {
       steps.push({ step: 'Create SAS Attestation', status: 'skipped', detail: 'Skipped due to previous failure' });
+    }
+
+    // ─── Step 6: Verify Contract On-Chain (optional) ─────────────
+    if (!hasFailed() && deployedProgramId && process.env.VERIFY_CONTRACTS === 'true') {
+      try {
+        const verifyResult = await this.vaultProgram.verifyProgramInstance(deployedProgramId);
+        steps.push({
+          step: 'Verify Contract',
+          status: verifyResult.verified ? 'success' : 'failed',
+          detail: verifyResult.verified
+            ? `Binary verified: ${verifyResult.patchedOffsets.length} patched offsets match template`
+            : `Verification failed: ${verifyResult.error}`,
+          address: deployedProgramId,
+        });
+      } catch (e: any) {
+        steps.push({ step: 'Verify Contract', status: 'failed', detail: e.message });
+      }
+    } else if (!hasFailed() && deployedProgramId && process.env.VERIFY_CONTRACTS !== 'true') {
+      steps.push({ step: 'Verify Contract', status: 'skipped', detail: 'VERIFY_CONTRACTS not enabled' });
     }
 
     // If any step failed, do NOT create vault in DB — return failure with steps

@@ -19,9 +19,9 @@ interface Mandate {
 import NotVerified from '../../components/NotVerified';
 
 export default function RedemptionPage() {
-  const { activeVaultId, setActiveVaultId, notify, clientInfo } = useStore();
+  const { activeVaultId, setActiveVaultId, notify, clientInfo, credentialRevoked } = useStore();
 
-  if (!clientInfo?.credentialId) return <NotVerified />;
+  if (!clientInfo?.credentialId) return <NotVerified revoked={credentialRevoked} />;
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [mandate, setMandate] = useState<Mandate | null>(null);
   const [loading, setLoading] = useState(true);

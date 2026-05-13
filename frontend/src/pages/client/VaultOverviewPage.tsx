@@ -29,10 +29,10 @@ interface VaultRow {
 }
 
 export default function VaultOverviewPage() {
-  const { activeVaultId, setActiveVaultId, clientInfo } = useStore();
+  const { activeVaultId, setActiveVaultId, clientInfo, credentialRevoked } = useStore();
   const { publicKey } = useWallet();
 
-  if (!clientInfo?.credentialId) return <NotVerified />;
+  if (!clientInfo?.credentialId) return <NotVerified revoked={credentialRevoked} />;
 
   const [vaults, setVaults] = useState<VaultRow[]>([]);
   const [loading, setLoading] = useState(true);

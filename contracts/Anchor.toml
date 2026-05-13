@@ -2,6 +2,11 @@
 seeds = false
 skip-lint = false
 
+[toolchain]
+anchor_version = "0.29.0"
+solana_version = "1.17.34"
+docker_image = "backpackapp/build:v0.29.0"
+
 [programs.devnet]
 amina_vault = "5uPg5pi46gXErKcYWyqEAn2uSU68VZSUgvGTPZuVGwyA"
 mock_finstar = "7jH9Lhe9Ny3a8LxUsS3BCSHoDKmQZz5Vpu1py4pemisF"

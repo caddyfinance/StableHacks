@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { NavLink, Outlet, useNavigate, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -11,6 +12,7 @@ import {
   FileCheck,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
+import { api } from '../lib/api';
 
 const navItems = [
   { path: '/client', label: 'Overview', icon: LayoutDashboard, end: true },
@@ -24,7 +26,29 @@ const navItems = [
 
 export default function ClientLayout() {
   const navigate = useNavigate();
-  const { activeVaultId, clientInfo, notification, clearNotification, logout } = useStore();
+  const { activeVaultId, clientInfo, notification, clearNotification, logout, setClientInfo, setActiveVaultId, setCredentialRevoked } = useStore();
+  const checkedRef = useRef(false);
+
+  // Check credential validity on mount — if SAS is revoked, strip credential access
+  useEffect(() => {
+    if (checkedRef.current || !clientInfo?.walletAddress || !clientInfo?.credentialId) return;
+    checkedRef.current = true;
+
+    const checkCredentialStatus = async () => {
+      try {
+        const result = await api.lookupWallet(clientInfo.walletAddress);
+        if (!result.authenticated) {
+          // Credential revoked or no longer active — keep wallet but clear credential
+          setClientInfo({ walletAddress: clientInfo.walletAddress });
+          setActiveVaultId(null);
+          setCredentialRevoked(true);
+        }
+      } catch {
+        // Network error — don't revoke on transient failures
+      }
+    };
+    checkCredentialStatus();
+  }, [clientInfo?.walletAddress]);
 
   const handleLogout = () => {
     logout();

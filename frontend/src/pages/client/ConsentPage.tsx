@@ -25,9 +25,9 @@ function formatDate(iso: string): string {
 }
 
 export default function ConsentPage() {
-  const { activeVaultId, setActiveVaultId, notify, clientInfo } = useStore();
+  const { activeVaultId, setActiveVaultId, notify, clientInfo, credentialRevoked } = useStore();
 
-  if (!clientInfo?.credentialId) return <NotVerified />;
+  if (!clientInfo?.credentialId) return <NotVerified revoked={credentialRevoked} />;
 
   const [requests, setRequests] = useState<ConsentRequest[]>([]);
   const [loading, setLoading] = useState(true);

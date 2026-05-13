@@ -60,9 +60,9 @@ const fmt = (v: number) => v != null && !isNaN(v) ? v.toLocaleString(undefined, 
 const truncate = (s: string, len = 14) => s && s.length > len ? `${s.slice(0, 6)}...${s.slice(-4)}` : s;
 
 export default function ActivityPage() {
-  const { activeVaultId, setActiveVaultId, notify, clientInfo } = useStore();
+  const { activeVaultId, setActiveVaultId, notify, clientInfo, credentialRevoked } = useStore();
 
-  if (!clientInfo?.credentialId) return <NotVerified />;
+  if (!clientInfo?.credentialId) return <NotVerified revoked={credentialRevoked} />;
 
   const [events, setEvents] = useState<VaultEvent[]>([]);
   const [vaults, setVaults] = useState<any[]>([]);

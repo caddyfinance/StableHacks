@@ -1,10 +1,13 @@
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::pubkey;
 
 declare_id!("5uPg5pi46gXErKcYWyqEAn2uSU68VZSUgvGTPZuVGwyA");
 
-/// SAS (Solana Attestation Service) Program ID
-pub const SAS_PROGRAM_ID: Pubkey = pubkey!("22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG");
+pub const SAS_PROGRAM_ID: Pubkey = Pubkey::new_from_array([
+    0x0f, 0x5e, 0x9e, 0xd5, 0x37, 0x1e, 0x2c, 0x70,
+    0x89, 0x8c, 0xa9, 0xfd, 0x0e, 0x77, 0xc0, 0x06,
+    0x5c, 0xab, 0x5d, 0xa0, 0x2e, 0x56, 0x67, 0x8b,
+    0x27, 0x13, 0x38, 0x2a, 0xf3, 0x74, 0x59, 0xb7,
+]);
 
 /// Protocol-mandated minimum liquidity buffer: 10% of total NAV must remain idle at all times.
 /// This floor is inviolable — no mandate can set liquidityBufferBps below this value.

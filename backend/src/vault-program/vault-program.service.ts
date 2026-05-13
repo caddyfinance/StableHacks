@@ -550,7 +550,17 @@ export class VaultProgramService {
         return { credentialPda: credentialPda.toBase58(), txSignature: 'existing' };
       }
 
-      this.logger.log(`Registering credential on-chain: ${credentialId}, wallet=${clientWallet}, PDA=${credentialPda.toBase58()}, program=${targetProgramId.toBase58()}`);
+      // Resolve the on-chain wallet binding: if the credential wallet is not a
+      // valid Solana base58 address (e.g. Ethereum hex), use the authority key.
+      let walletPubkey: PublicKey;
+      try {
+        walletPubkey = new PublicKey(clientWallet);
+      } catch {
+        this.logger.warn(`Credential wallet "${clientWallet}" is not a valid Solana address — using authority as wallet binding`);
+        walletPubkey = authority.publicKey;
+      }
+
+      this.logger.log(`Registering credential on-chain: ${credentialId}, wallet=${walletPubkey.toBase58()}, PDA=${credentialPda.toBase58()}, program=${targetProgramId.toBase58()}`);
 
       const discriminator = this.getDiscriminator('issue_credential');
       const instructionData = Buffer.concat([
@@ -566,7 +576,7 @@ export class VaultProgramService {
         programId: targetProgramId,
         keys: [
           { pubkey: credentialPda, isSigner: false, isWritable: true },
-          { pubkey: new PublicKey(clientWallet), isSigner: false, isWritable: false },
+          { pubkey: walletPubkey, isSigner: false, isWritable: false },
           { pubkey: authority.publicKey, isSigner: true, isWritable: true },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
@@ -817,6 +827,134 @@ export class VaultProgramService {
 
     } catch (e: any) {
       this.logger.warn(`On-chain verification failed for vault ${vaultId}: ${e.message}`);
+    }
+
+    return result;
+  }
+
+  /**
+   * Verify that a deployed program instance matches the canonical template binary.
+   * Downloads the on-chain program binary, reverses the ID patch, and compares
+   * byte-for-byte against the verified template.
+   */
+  async verifyProgramInstance(programId: string): Promise<{
+    verified: boolean;
+    programId: string;
+    templateProgramId: string;
+    binaryMatch: boolean;
+    binarySize: number | null;
+    onChainSize: number | null;
+    patchedOffsets: number[];
+    error?: string;
+  }> {
+    const result = {
+      verified: false,
+      programId,
+      templateProgramId: TEMPLATE_PROGRAM_ID,
+      binaryMatch: false,
+      binarySize: null as number | null,
+      onChainSize: null as number | null,
+      patchedOffsets: [] as number[],
+      error: undefined as string | undefined,
+    };
+
+    try {
+      const connection = this.getConnection();
+      const programPubkey = new PublicKey(programId);
+
+      // 1. Verify the program account exists and is executable
+      const programAccount = await connection.getAccountInfo(programPubkey);
+      if (!programAccount) {
+        result.error = 'Program account not found on-chain';
+        return result;
+      }
+      if (!programAccount.executable) {
+        result.error = 'Account exists but is not executable';
+        return result;
+      }
+
+      // 2. Get the program data account (BPF Upgradeable Loader stores data separately)
+      // The program account data layout: [4 bytes state][32 bytes programdata address]
+      const programData = programAccount.data;
+      if (programData.length < 36) {
+        result.error = 'Program account data too short to contain programdata address';
+        return result;
+      }
+      const programDataAddress = new PublicKey(programData.subarray(4, 36));
+
+      let onChainBinary: Buffer;
+      const programDataAccount = await connection.getAccountInfo(programDataAddress);
+      if (programDataAccount && programDataAccount.data.length > 45) {
+        // BPF Upgradeable Loader programdata: first 45 bytes are metadata (4 state + 8 slot + 1 option + 32 authority)
+        onChainBinary = Buffer.from(programDataAccount.data.subarray(45));
+      } else {
+        result.error = 'Could not fetch program binary data from chain';
+        return result;
+      }
+
+      result.onChainSize = onChainBinary.length;
+
+      // 3. Load template binary
+      const templatePath = this.getTemplateBinaryPath();
+      const templateBinary = fs.readFileSync(templatePath);
+      result.binarySize = templateBinary.length;
+
+      if (onChainBinary.length !== templateBinary.length) {
+        result.error = `Binary size mismatch: on-chain=${onChainBinary.length}, template=${templateBinary.length}`;
+        return result;
+      }
+
+      // 4. Find the deployed program ID bytes in the on-chain binary
+      const deployedIdBytes = Buffer.from(programPubkey.toBytes());
+      const templateIdBytes = Buffer.from(bs58.decode(TEMPLATE_PROGRAM_ID));
+
+      // 5. Create a "normalized" on-chain binary by replacing the deployed ID with template ID
+      const normalizedBinary = Buffer.from(onChainBinary);
+
+      // Replace contiguous 32-byte occurrences
+      for (let i = 0; i <= normalizedBinary.length - 32; i++) {
+        if (normalizedBinary.subarray(i, i + 32).equals(deployedIdBytes)) {
+          templateIdBytes.copy(normalizedBinary, i);
+          result.patchedOffsets.push(i);
+          i += 31;
+        }
+      }
+
+      // Replace BPF lddw instruction immediates
+      const LDDW_OPCODE = 0x18;
+      for (let i = 0; i <= normalizedBinary.length - 16; i++) {
+        if (normalizedBinary[i] !== LDDW_OPCODE) continue;
+        const immLo = normalizedBinary.subarray(i + 4, i + 8);
+        const immHi = normalizedBinary.subarray(i + 12, i + 16);
+        const full64 = Buffer.concat([immLo, immHi]);
+
+        for (let c = 0; c < 4; c++) {
+          const deployedChunk = deployedIdBytes.subarray(c * 8, (c + 1) * 8);
+          if (full64.equals(deployedChunk)) {
+            const templateChunk = templateIdBytes.subarray(c * 8, (c + 1) * 8);
+            templateChunk.copy(normalizedBinary, i + 4, 0, 4);
+            templateChunk.copy(normalizedBinary, i + 12, 4, 8);
+            result.patchedOffsets.push(i);
+            break;
+          }
+        }
+      }
+
+      // 6. Compare normalized binary against template
+      result.binaryMatch = normalizedBinary.equals(templateBinary);
+      result.verified = result.binaryMatch;
+
+      if (!result.verified) {
+        // Find first difference for debugging
+        for (let i = 0; i < normalizedBinary.length; i++) {
+          if (normalizedBinary[i] !== templateBinary[i]) {
+            result.error = `Binary mismatch at byte offset ${i}`;
+            break;
+          }
+        }
+      }
+    } catch (e: any) {
+      result.error = e.message;
     }
 
     return result;

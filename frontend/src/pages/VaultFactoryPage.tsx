@@ -3,7 +3,7 @@ import { api } from '../lib/api';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import StatusBadge from '../components/StatusBadge';
-import { ExternalLink, CheckCircle, Loader2, Clock, XCircle, Shield, Key, FileCheck, Vault, Award, Zap } from 'lucide-react';
+import { ExternalLink, CheckCircle, Loader2, Clock, XCircle, Shield, Key, FileCheck, Vault, Award, Zap, ShieldCheck } from 'lucide-react';
 
 interface Credential {
   credentialId: string;
@@ -62,6 +62,7 @@ const DEPLOY_STEPS = [
   { key: 'Register Credential On-Chain', label: 'Register Credential', description: 'Creating credential PDA on the new program', icon: FileCheck, duration: 6000 },
   { key: 'Create Vault On-Chain', label: 'Create Vault On-Chain', description: 'Deploying vault PDA bound to credential holder', icon: Vault, duration: 6000 },
   { key: 'Create SAS Attestation', label: 'SAS Attestation', description: 'Creating Solana Attestation Service proof', icon: Award, duration: 6000 },
+  { key: 'Verify Contract', label: 'Verify Contract', description: 'Verifying binary integrity against canonical template', icon: ShieldCheck, duration: 4000 },
 ];
 
 type LiveStepStatus = 'pending' | 'in_progress' | 'success' | 'failed' | 'skipped';

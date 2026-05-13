@@ -79,6 +79,7 @@ export const api = {
   unwind: (id: string, data: any) => request<any>(`/vaults/${id}/unwind`, { method: 'POST', body: JSON.stringify(data) }),
   togglePause: (id: string) => request<any>(`/vaults/${id}/pause`, { method: 'POST' }),
   accrueYield: (id: string) => request<any>(`/vaults/${id}/accrue-yield`, { method: 'POST' }),
+  verifyProgram: (programId: string) => request<any>(`/vaults/verify-program/${programId}`),
 
   // Strategies
   getStrategies: () => request<any[]>('/strategies'),

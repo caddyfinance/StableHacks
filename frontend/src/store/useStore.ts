@@ -38,6 +38,7 @@ interface AppState {
   activeVaultId: string | null;
   adminUser: AdminUser | null;
   clientInfo: ClientInfo | null;
+  credentialRevoked: boolean;
   notification: { type: 'success' | 'error' | 'info'; message: string } | null;
   activeSegment: Segment;
   demoModeActive: boolean;
@@ -46,6 +47,7 @@ interface AppState {
   loginClient: (info: ClientInfo, vaultId: string | null) => void;
   login: (portal: Portal, role: Role) => void;
   setClientInfo: (info: ClientInfo) => void;
+  setCredentialRevoked: (revoked: boolean) => void;
   logout: () => void;
   setRole: (role: Role) => void;
   setActiveVaultId: (id: string | null) => void;
@@ -64,6 +66,7 @@ export const useStore = create<AppState>()(
       activeVaultId: null,
       adminUser: null,
       clientInfo: null,
+      credentialRevoked: false,
       notification: null,
       activeSegment: 'individuals',
       demoModeActive: false,
@@ -76,16 +79,18 @@ export const useStore = create<AppState>()(
       }),
       login: (portal, role) => set({ isAuthenticated: true, portal, currentRole: role }),
       setClientInfo: (info) => set({ clientInfo: info }),
+      setCredentialRevoked: (revoked) => set({ credentialRevoked: revoked }),
       loginClient: (info, vaultId) => set({
         isAuthenticated: true,
         portal: 'client',
         currentRole: 'client_representative',
         clientInfo: info,
         activeVaultId: vaultId,
+        credentialRevoked: false,
       }),
       logout: () => set({
         isAuthenticated: false, portal: null, currentRole: 'admin',
-        activeVaultId: null, clientInfo: null, adminUser: null,
+        activeVaultId: null, clientInfo: null, adminUser: null, credentialRevoked: false,
       }),
       setRole: (role) => {
         const rolePersonas: Record<Role, { id: string; email: string; name: string }> = {
@@ -124,6 +129,7 @@ export const useStore = create<AppState>()(
         activeVaultId: state.activeVaultId,
         adminUser: state.adminUser,
         clientInfo: state.clientInfo,
+        credentialRevoked: state.credentialRevoked,
         activeSegment: state.activeSegment,
         demoModeActive: state.demoModeActive,
       }) as unknown as AppState,

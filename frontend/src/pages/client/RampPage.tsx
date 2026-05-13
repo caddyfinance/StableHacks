@@ -16,9 +16,9 @@ const fmt = (v: number) => v != null && !isNaN(v) ? v.toLocaleString(undefined, 
 type Step = 'idle' | 'processing' | 'confirming' | 'done' | 'error';
 
 export default function RampPage() {
-  const { notify, clientInfo } = useStore();
+  const { notify, clientInfo, credentialRevoked } = useStore();
   const { publicKey, sendTransaction } = useWallet();
-  if (!clientInfo?.credentialId) return <NotVerified />;
+  if (!clientInfo?.credentialId) return <NotVerified revoked={credentialRevoked} />;
 
   const [tab, setTab] = useState<'onramp' | 'offramp'>('onramp');
   const [amount, setAmount] = useState('');

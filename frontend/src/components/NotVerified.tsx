@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { ShieldOff, ArrowRight } from 'lucide-react';
 
-export default function NotVerified() {
+export default function NotVerified({ revoked = false }: { revoked?: boolean }) {
   const { clientInfo, logout } = useStore();
   const navigate = useNavigate();
 
@@ -14,9 +14,13 @@ export default function NotVerified() {
         </div>
 
         <div>
-          <h2 className="text-xl font-bold text-ink-900 mb-2">Wallet Not Verified</h2>
+          <h2 className="text-xl font-bold text-ink-900 mb-2">
+            {revoked ? 'Credential Revoked' : 'Wallet Not Verified'}
+          </h2>
           <p className="text-sm text-slate-700">
-            This wallet does not have a valid SAS credential issued by AMINA. You cannot access vault operations without an active institutional credential.
+            {revoked
+              ? 'Your SAS credential has been revoked by AMINA. Vault access has been suspended. You may request a new credential to regain access.'
+              : 'This wallet does not have a valid SAS credential issued by AMINA. You cannot access vault operations without an active institutional credential.'}
           </p>
         </div>
 
@@ -32,17 +36,19 @@ export default function NotVerified() {
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-slate-500">Credential Status</span>
-              <span className="text-error-700 font-medium">Not Found</span>
+              <span className="text-error-700 font-medium">{revoked ? 'Revoked' : 'Not Found'}</span>
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-slate-500">On-Chain Attestation</span>
-              <span className="text-error-700 font-medium">None</span>
+              <span className="text-error-700 font-medium">{revoked ? 'Revoked' : 'None'}</span>
             </div>
           </div>
         )}
 
         <div className="bg-white border border-slate-200 rounded-[18px] p-4 text-left shadow-1">
-          <p className="text-xs text-slate-700 mb-3">To access the Client Portal:</p>
+          <p className="text-xs text-slate-700 mb-3">
+            {revoked ? 'To restore access:' : 'To access the Client Portal:'}
+          </p>
           <ol className="text-xs text-slate-700 space-y-1.5 list-decimal list-inside">
             <li>Contact AMINA administration to request institutional access</li>
             <li>AMINA will issue a SAS credential bound to your Solana wallet</li>

@@ -12,9 +12,9 @@ const fmt = (v: number) =>
   v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function ClientMandatePage() {
-  const { activeVaultId, setActiveVaultId, clientInfo } = useStore();
+  const { activeVaultId, setActiveVaultId, clientInfo, credentialRevoked } = useStore();
 
-  if (!clientInfo?.credentialId) return <NotVerified />;
+  if (!clientInfo?.credentialId) return <NotVerified revoked={credentialRevoked} />;
 
   const [loading, setLoading] = useState(true);
   const [mandate, setMandate] = useState<any>(null);

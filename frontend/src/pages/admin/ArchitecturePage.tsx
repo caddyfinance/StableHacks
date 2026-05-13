@@ -236,12 +236,12 @@ export default function ArchitecturePage() {
         { label: 'Book-Back', key: 'book_back', icon: CheckCircle },
       ],
       connectedPrograms: [
-        { name: 'Mock Translation Layer', role: 'Pipeline Orchestrator', color: 'bg-amber-100 text-amber-700' },
-        { name: 'Mock Notabene', role: 'Travel Rule / VASP', color: 'bg-blue-100 text-blue-700' },
-        { name: 'Mock Mesh', role: 'Venue Routing', color: 'bg-purple-100 text-purple-700' },
-        { name: 'Mock Jurisdiction Engine', role: 'Compliance Attestation', color: 'bg-rose-100 text-rose-700' },
+        { name: 'Translation Layer', role: 'Pipeline Orchestrator', color: 'bg-amber-100 text-amber-700' },
+        { name: 'Notabene', role: 'Travel Rule / VASP', color: 'bg-blue-100 text-blue-700' },
+        { name: 'Mesh', role: 'Venue Routing', color: 'bg-purple-100 text-purple-700' },
+        { name: 'Jurisdiction Engine', role: 'Compliance Attestation', color: 'bg-rose-100 text-rose-700' },
         { name: 'Amina Vault', role: 'Vault Operations (CPI)', color: 'bg-teal-100 text-teal-700' },
-        { name: 'Mock Finstar', role: 'Core Banking (CPI)', color: 'bg-slate-100 text-slate-700' },
+        { name: 'Finstar', role: 'Core Banking (CPI)', color: 'bg-slate-100 text-slate-700' },
       ],
       liveStats: [
         { label: 'Instructions Processed', value: stats.tlInstructionsProcessed, icon: FileText },

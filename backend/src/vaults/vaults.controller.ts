@@ -336,4 +336,16 @@ export class VaultsController {
     return this.service.reconcileBalance(id);
   }
 
+  @Get('verify-program/:programId')
+  @Roles('admin', 'portfolio_manager', 'compliance_officer', 'client_representative')
+  @ApiOperation({
+    summary: 'Verify program instance',
+    description: 'Verify that a deployed segregated program instance matches the canonical verified template binary. Downloads the on-chain binary, reverses the program ID patch, and compares byte-for-byte against the template.',
+  })
+  @ApiParam({ name: 'programId', description: 'On-chain program ID (base58) to verify' })
+  @ApiOkResponse({ description: 'Verification result with binary match status and patch offsets.' })
+  verifyProgram(@Param('programId') programId: string) {
+    return this.vaultProgram.verifyProgramInstance(programId);
+  }
+
 }
