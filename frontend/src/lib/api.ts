@@ -116,8 +116,8 @@ export const api = {
   // Translation Layer (Layer 2)
   tlSubmitInstruction: (data: { instructionType: string; vaultId: string; amount: number; jurisdiction: string; strategyId: string }) =>
     request<any>('/translation-layer/submit', { method: 'POST', body: JSON.stringify(data) }),
-  tlExecuteCompliance: (id: string) =>
-    request<any>(`/translation-layer/${id}/compliance`, { method: 'POST' }),
+  tlExecuteCompliance: (id: string, jurisdiction: string = 'CH') =>
+    request<any>(`/translation-layer/${id}/compliance`, { method: 'POST', body: JSON.stringify({ jurisdiction }) }),
   tlExecuteAction: (id: string) =>
     request<any>(`/translation-layer/${id}/action`, { method: 'POST' }),
   tlGetPipelineStatus: (id: string) =>
@@ -126,6 +126,10 @@ export const api = {
     request<any[]>(`/translation-layer/history/${vaultId}`),
   tlGetConfig: () =>
     request<any>('/translation-layer/config'),
+  tlGetActivity: (vaultId?: string) => {
+    const params = vaultId ? `?vaultId=${vaultId}` : '';
+    return request<any>(`/translation-layer/activity${params}`);
+  },
 
   // Finstar (Layer 1 — Core Banking)
   finstarGetConfig: () =>
@@ -136,6 +140,10 @@ export const api = {
     request<any>(`/finstar/entries/${entryId}`),
   finstarGetReports: (vaultId: string) =>
     request<any[]>(`/finstar/reports/${vaultId}`),
+  finstarGetActivity: (vaultId?: string) => {
+    const params = vaultId ? `?vaultId=${vaultId}` : '';
+    return request<any>(`/finstar/activity${params}`);
+  },
 
   // Compliance Layer (Notabene, Mesh, Jurisdiction Engine)
   complianceGetTravelRuleCheck: (checkId: string) =>

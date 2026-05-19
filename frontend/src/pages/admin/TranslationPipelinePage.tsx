@@ -6,6 +6,7 @@ import StatusBadge from '../../components/StatusBadge';
 import {
   ArrowRight, CheckCircle, Copy, Filter, GitBranch, PlayCircle,
   ShieldCheck, Send, ExternalLink, AlertCircle, Vault,
+  Activity, Layers, ArrowDownUp, BookOpen, TrendingUp,
 } from 'lucide-react';
 
 const fmt = (v: any) => {
@@ -33,6 +34,8 @@ export default function TranslationPipelinePage() {
   const [history, setHistory] = useState<any[]>([]);
   const [selectedInstruction, setSelectedInstruction] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [tlActivity, setTlActivity] = useState<any>(null);
+  const [finstarActivity, setFinstarActivity] = useState<any>(null);
 
   useEffect(() => {
     api.getVaults().then(setVaults).catch(() => {});
@@ -41,13 +44,21 @@ export default function TranslationPipelinePage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const cfg = await api.tlGetConfig().catch(() => ({ totalInstructions: 0, connectedPrograms: {} }));
-      setConfig(cfg);
+      const cfgRes = await api.tlGetConfig().catch(() => ({ data: { totalInstructions: 0, connectedPrograms: {} } }));
+      setConfig(cfgRes?.data || cfgRes);
 
       if (activeVaultId) {
-        const hist = await api.tlGetHistory(activeVaultId).catch(() => ({ data: [] }));
-        setHistory(Array.isArray(hist) ? hist : (hist?.data || []));
+        const histRes: any = await api.tlGetHistory(activeVaultId).catch(() => ({ data: [] }));
+        const histData = histRes?.data || histRes;
+        setHistory(Array.isArray(histData) ? histData : []);
       }
+
+      // Load L2 and L1 activity data
+      const tlAct = await api.tlGetActivity(activeVaultId || undefined).catch(() => ({ data: { summary: {}, activity: [] } }));
+      setTlActivity(tlAct?.data || tlAct);
+
+      const fsAct = await api.finstarGetActivity(activeVaultId || undefined).catch(() => ({ data: { summary: {}, activity: [] } }));
+      setFinstarActivity(fsAct?.data || fsAct);
     } catch {
       notify('error', 'Failed to load translation layer data');
     } finally {
@@ -79,9 +90,9 @@ export default function TranslationPipelinePage() {
     }
   };
 
-  const handleExecuteCompliance = async (id: string) => {
+  const handleExecuteCompliance = async (id: string, jurisdiction: string = 'CH') => {
     try {
-      await api.tlExecuteCompliance(id);
+      await api.tlExecuteCompliance(id, jurisdiction);
       notify('success', 'Compliance check executed');
       loadData();
     } catch {
@@ -173,6 +184,159 @@ export default function TranslationPipelinePage() {
           </div>
         </div>
       </Card>
+
+      {/* Layer Activity Summary — shows L3→L2→L1 value flow */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* L3 - Crypto Services */}
+        <Card title="" subtitle="">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center">
+              <Layers className="w-4 h-4 text-violet-700" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-ink-900">L3 — Crypto Services</p>
+              <p className="text-[10px] text-slate-500">Vault operations & DeFi</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-slate-600">Events Originated</span>
+              <span className="text-sm font-mono font-semibold text-ink-900">{tlActivity?.summary?.l3Events || 0}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-slate-600">Value Processed</span>
+              <span className="text-sm font-mono font-semibold text-ink-900">{fmt(tlActivity?.summary?.totalValueProcessed || 0)} USDC</span>
+            </div>
+            <div className="mt-2 pt-2 border-t border-slate-100">
+              <p className="text-[10px] text-slate-500">Deposits, allocations, unwinds → dispatched to L2</p>
+            </div>
+          </div>
+        </Card>
+
+        {/* L2 - Translation Layer */}
+        <Card title="" subtitle="">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center">
+              <ArrowDownUp className="w-4 h-4 text-teal-700" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-ink-900">L2 — Translation Layer</p>
+              <p className="text-[10px] text-slate-500">Compliance orchestration</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-slate-600">Compliance Checks</span>
+              <span className="text-sm font-mono font-semibold text-ink-900">{tlActivity?.summary?.l2Events || 0}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-slate-600">Instructions Routed</span>
+              <span className="text-sm font-mono font-semibold text-ink-900">{tlActivity?.summary?.l1Events || 0}</span>
+            </div>
+            <div className="mt-2 pt-2 border-t border-slate-100">
+              <p className="text-[10px] text-slate-500">Jurisdiction checks, travel rule, routing → GL book-back</p>
+            </div>
+          </div>
+        </Card>
+
+        {/* L1 - Finstar Core Banking */}
+        <Card title="" subtitle="">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+              <BookOpen className="w-4 h-4 text-amber-700" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-ink-900">L1 — Finstar Ledger</p>
+              <p className="text-[10px] text-slate-500">Core banking & GL entries</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-slate-600">GL Entries Posted</span>
+              <span className="text-sm font-mono font-semibold text-ink-900">{finstarActivity?.summary?.glEntriesPosted || 0}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-slate-600">Total Credits</span>
+              <span className="text-sm font-mono font-semibold text-emerald-700">+{fmt(finstarActivity?.summary?.totalCredits || 0)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-slate-600">Total Debits</span>
+              <span className="text-sm font-mono font-semibold text-red-600">-{fmt(finstarActivity?.summary?.totalDebits || 0)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-slate-600">Net Position</span>
+              <span className="text-sm font-mono font-bold text-ink-900">{fmt(finstarActivity?.summary?.netPosition || 0)} USDC</span>
+            </div>
+            <div className="mt-2 pt-2 border-t border-slate-100">
+              <p className="text-[10px] text-slate-500">SWIFT-tagged, regulatory-compliant double-entry bookings</p>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Cross-Layer Activity Feed */}
+      {(tlActivity?.activity?.length > 0 || finstarActivity?.activity?.length > 0) && (
+        <Card title="Cross-Layer Activity Feed" subtitle="Real-time L3→L2→L1 instruction flow with value capture">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                  <th className="text-left py-2 pr-3 font-semibold">Time</th>
+                  <th className="text-left py-2 pr-3 font-semibold">Layer</th>
+                  <th className="text-left py-2 pr-3 font-semibold">Action</th>
+                  <th className="text-right py-2 pr-3 font-semibold">Value</th>
+                  <th className="text-left py-2 pr-3 font-semibold">Status</th>
+                  <th className="text-left py-2 font-semibold">On-Chain Proof</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(tlActivity?.activity || []).slice(0, 20).map((evt: any) => (
+                  <tr key={evt.id} className="border-b border-slate-200/50 hover:bg-slate-50 transition-colors">
+                    <td className="py-2 pr-3 text-slate-500 whitespace-nowrap">
+                      {new Date(evt.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                    <td className="py-2 pr-3">
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                        evt.layer === 'L3' || evt.layer?.startsWith('L3') ? 'bg-violet-100 text-violet-700' :
+                        evt.layer === 'L2' ? 'bg-teal-100 text-teal-700' :
+                        'bg-amber-100 text-amber-700'
+                      }`}>
+                        {evt.layer}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3 text-ink-900">
+                      <span className="font-medium">{evt.layerLabel}</span>
+                    </td>
+                    <td className="py-2 pr-3 text-right font-mono text-ink-900">
+                      {evt.amount ? fmt(evt.amount) : '—'}
+                    </td>
+                    <td className="py-2 pr-3">
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                        evt.result === 'success' ? 'bg-success-100 text-success-700' : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {evt.result}
+                      </span>
+                    </td>
+                    <td className="py-2">
+                      {(evt.glEntryPda || evt.compliancePda || evt.routingPda || evt.txSignature) ? (
+                        <button
+                          onClick={() => openSolanaExplorer(evt.glEntryPda || evt.compliancePda || evt.routingPda || evt.txSignature)}
+                          className="text-teal-700 hover:text-teal-800 transition-colors"
+                          title="View on Solana Explorer"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                        </button>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {/* Active Pipeline Steps */}
       <Card title="Active Pipeline Steps" subtitle={recentInstruction ? `Latest instruction: ${recentInstruction.instructionId}` : 'No active instructions'}>
@@ -391,7 +555,7 @@ export default function TranslationPipelinePage() {
           </button>
 
           <button
-            onClick={() => selectedInstruction && handleExecuteCompliance(selectedInstruction.instructionId)}
+            onClick={() => selectedInstruction && handleExecuteCompliance(selectedInstruction.instructionId, selectedInstruction.jurisdiction || 'CH')}
             disabled={!selectedInstruction || selectedInstruction.status !== 'pending'}
             className="flex items-center justify-center gap-2 bg-white border border-slate-200 rounded-md p-4 text-left hover:border-teal-300/60 hover:shadow-2 transition-all ease-amina duration-200 disabled:opacity-50 disabled:cursor-not-allowed group"
           >
