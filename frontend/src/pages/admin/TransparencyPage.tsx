@@ -551,7 +551,7 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
                       <th className="text-left py-1.5 pr-3 font-semibold border-b border-slate-200">Action</th>
                       <th className="text-right py-1.5 pr-3 font-semibold border-b border-slate-200">Amount</th>
                       <th className="text-left py-1.5 pr-3 font-semibold border-b border-slate-200">Result</th>
-                      <th className="text-left py-1.5 pr-3 font-semibold border-b border-slate-200">On-Chain PDAs</th>
+                      <th className="text-left py-1.5 pr-3 font-semibold border-b border-slate-200">Compliance Trail</th>
                       <th className="text-right py-1.5 font-semibold border-b border-slate-200">Tx</th>
                     </tr>
                   </thead>
@@ -565,24 +565,24 @@ function VaultCard({ vault, aminaWallet }: { vault: VaultEntry; aminaWallet: str
                         <td className="py-1.5 pr-3">
                           <div className="flex gap-1 flex-wrap">
                             {e.compliancePda && (
-                              <a href={addrLink(e.compliancePda)} target="_blank" rel="noreferrer" className="text-[9px] px-1 py-0.5 bg-teal-50 text-teal-700 rounded font-mono hover:underline border border-teal-200">
-                                <Shield className="w-2 h-2 inline mr-0.5" />Compliance
-                              </a>
+                              <span className="text-[9px] px-1 py-0.5 bg-teal-50 text-teal-700 rounded font-mono border border-teal-200">
+                                <Shield className="w-2 h-2 inline mr-0.5" />Compliance Ref
+                              </span>
                             )}
                             {e.travelRulePda && (
-                              <a href={addrLink(e.travelRulePda)} target="_blank" rel="noreferrer" className="text-[9px] px-1 py-0.5 bg-blue-50 text-blue-700 rounded font-mono hover:underline border border-blue-200">
-                                <Globe className="w-2 h-2 inline mr-0.5" />Travel Rule
-                              </a>
+                              <span className="text-[9px] px-1 py-0.5 bg-blue-50 text-blue-700 rounded font-mono border border-blue-200">
+                                <Globe className="w-2 h-2 inline mr-0.5" />Travel Rule Ref
+                              </span>
                             )}
                             {e.routingPda && (
-                              <a href={addrLink(e.routingPda)} target="_blank" rel="noreferrer" className="text-[9px] px-1 py-0.5 bg-purple-50 text-purple-700 rounded font-mono hover:underline border border-purple-200">
-                                Routing
-                              </a>
+                              <span className="text-[9px] px-1 py-0.5 bg-purple-50 text-purple-700 rounded font-mono border border-purple-200">
+                                Routing Ref
+                              </span>
                             )}
                             {e.glEntryPda && (
-                              <a href={addrLink(e.glEntryPda)} target="_blank" rel="noreferrer" className="text-[9px] px-1 py-0.5 bg-slate-50 text-slate-700 rounded font-mono hover:underline border border-slate-200">
-                                <Building2 className="w-2 h-2 inline mr-0.5" />GL Entry
-                              </a>
+                              <span className="text-[9px] px-1 py-0.5 bg-slate-50 text-slate-700 rounded font-mono border border-slate-200">
+                                <Building2 className="w-2 h-2 inline mr-0.5" />GL Entry Ref
+                              </span>
                             )}
                             {!e.compliancePda && !e.travelRulePda && !e.routingPda && !e.glEntryPda && (
                               <span className="text-[9px] text-slate-400">{'\u2014'}</span>

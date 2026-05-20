@@ -7,7 +7,7 @@ import {
   ScrollText, RefreshCw, ExternalLink, Download, Search,
   ArrowDownToLine, ArrowUpFromLine, TrendingUp, Shield, Building2,
   FileCheck, Wallet, AlertTriangle, UserCheck, ChevronDown, ChevronUp,
-  Filter,
+  Filter, Copy,
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -393,7 +393,7 @@ export default function AuditLogPage() {
                   <th className="text-left py-2 pr-2 font-semibold">Actor</th>
                   <th className="text-right py-2 pr-2 font-semibold">Amount</th>
                   <th className="text-left py-2 pr-2 font-semibold">Result</th>
-                  <th className="text-left py-2 pr-2 font-semibold">On-Chain</th>
+                  <th className="text-left py-2 pr-2 font-semibold">On-Chain / Ref</th>
                   <th className="text-left py-2 font-semibold w-5"></th>
                 </tr>
               </thead>
@@ -447,10 +447,10 @@ export default function AuditLogPage() {
                             Tx <ExternalLink className="w-2.5 h-2.5" />
                           </a>
                         ) : evt.onChainAddress ? (
-                          <a href={`https://solscan.io/account/${evt.onChainAddress}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-0.5 text-[10px] text-review-700 hover:underline whitespace-nowrap">
-                            PDA <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
+                          <span className="flex items-center gap-0.5 text-[10px] text-slate-700 font-mono whitespace-nowrap">
+                            Ref {evt.onChainAddress!.slice(0, 6)}...{evt.onChainAddress!.slice(-4)}
+                            <button onClick={() => navigator.clipboard.writeText(evt.onChainAddress!)} className="text-slate-400 hover:text-teal-700"><Copy className="w-2.5 h-2.5" /></button>
+                          </span>
                         ) : (
                           <span className="text-[10px] text-slate-500">—</span>
                         )}
@@ -514,10 +514,10 @@ export default function AuditLogPage() {
                       </a>
                     )}
                     {evt.onChainAddress && (
-                      <a href={`https://solscan.io/account/${evt.onChainAddress}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-[10px] text-review-700 hover:underline bg-review-700/10 px-2.5 py-1 rounded-md">
-                        <ExternalLink className="w-2.5 h-2.5" /> View Account on Solana
-                      </a>
+                      <span className="flex items-center gap-1 text-[10px] text-slate-700 bg-slate-100 px-2.5 py-1 rounded-md">
+                        Ref: <span className="font-mono">{evt.onChainAddress!.slice(0, 6)}...{evt.onChainAddress!.slice(-4)}</span>
+                        <button onClick={() => navigator.clipboard.writeText(evt.onChainAddress!)} className="text-slate-400 hover:text-teal-700"><Copy className="w-2.5 h-2.5" /></button>
+                      </span>
                     )}
                   </div>
                 </div>

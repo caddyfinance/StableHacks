@@ -13,7 +13,7 @@ export class ReportsService {
         mandate: true,
         allocations: { include: { strategy: { include: { provider: true } } } },
         deposits: { orderBy: { createdAt: 'desc' } },
-        events: { orderBy: { timestamp: 'desc' }, take: 50 },
+        complianceEvents: { orderBy: { timestamp: 'desc' }, take: 50 },
       },
     });
     if (!vault) throw new NotFoundException('Vault not found');
@@ -108,7 +108,7 @@ export class ReportsService {
         overallStatus: tc.overallStatus,
         checkedAt: tc.checkedAt,
       })),
-      auditTimeline: vault.events.map(e => ({
+      auditTimeline: vault.complianceEvents.map(e => ({
         eventId: e.eventId,
         actionType: e.actionType,
         actor: e.actor,

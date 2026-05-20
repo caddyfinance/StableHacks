@@ -48,11 +48,13 @@ model Vault {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   mandate               Mandate?
-  mandateRules          MandateRule[]
-  allocations           Allocation[]
-  events                ComplianceEvent[]
-  consentRequests       ConsentRequest[]
   deposits              Deposit[]
+  allocations           Allocation[]
+  tlInstructions        TranslationLayerInstruction[]
+  glEntries             GLEntry[]
+  mandateRules          MandateRule[]
+  consentRequests       ConsentRequest[]
+  complianceEvents      ComplianceEvent[]
 }
 
 model Mandate {
@@ -282,4 +284,68 @@ model WalletController {
   accountNumber      String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+}
+
+// ─── Translation Layer Instruction (L2 Pipeline) ────────
+model TranslationLayerInstruction {
+  id                String   @id @default(uuid())
+  instructionId     String   @unique
+  instructionType   String   // DEPOSIT, ALLOCATE, REDEEM, UNWIND, PAUSE, MANDATE_UPDATE
+  vaultId           String
+  vault             Vault    @relation(fields: [vaultId], references: [vaultId])
+  amount            Float    @default(0)
+  jurisdiction      String   @default("CH")
+  strategyId        String?
+
+  status            String   @default("received") // received, compliance_checked, complete, failed
+  complianceResult  String?  // passed, failed
+  complianceRef     String?
+  travelRuleRef     String?
+  travelRuleResult  String?
+  routingRef        String?
+  glEntryRef        String?
+  glEntryType       String?  // Deposit, StrategyAllocation, StrategyUnwind, Withdrawal, etc.
+  glDirection       String?  // credit, debit
+
+  initiator         String?
+  rejectionReason   String?
+
+  receivedAt        DateTime @default(now())
+  complianceCheckedAt DateTime?
+  actionExecutedAt  DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model GLEntry {
+  id              String   @id @default(uuid())
+  entryId         String   @unique
+  vaultId         String
+  vault           Vault    @relation(fields: [vaultId], references: [vaultId])
+  instructionId   String?
+
+  entryType       String   // Deposit, StrategyAllocation, StrategyUnwind, Withdrawal, YieldAccrual, FeeDebit
+  direction       String   // credit, debit
+  amount          Float
+  currency        String   @default("USDC")
+
+  debitAccount    String
+  creditAccount   String
+  narrative       String?
+
+  swiftReference  String?
+  jurisdiction    String   @default("CH")
+
+  status          String   @default("pending") // pending, approved, posted, rejected
+  approvedBy      String?
+  approvedAt      DateTime?
+  postedAt        DateTime?
+  rejectionReason String?
+
+  sourceType      String?  // deposit, allocation, transfer_check, manual
+  sourceId        String?  // FK to source record
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }

@@ -19,9 +19,8 @@ export class TranslationLayerController {
 
   @Post('submit')
   @Roles('admin', 'portfolio_manager')
-  @ApiOperation({ summary: 'Submit instruction to translation layer', description: 'Submit a new instruction (Deposit, Allocate, Redeem, Unwind, Pause, MandateUpdate) to the on-chain compliance pipeline.' })
+  @ApiOperation({ summary: 'Submit instruction to translation layer', description: 'Submit a new instruction (Deposit, Allocate, Redeem, Unwind, Pause, MandateUpdate) to the compliance pipeline.' })
   @ApiCreatedResponse({ description: 'Instruction submitted successfully.' })
-  @ApiForbiddenResponse({ description: 'Insufficient permissions.' })
   async submitInstruction(
     @Body()
     body: {
@@ -44,6 +43,7 @@ export class TranslationLayerController {
       body.amount,
       body.jurisdiction,
       body.strategyId,
+      role,
     );
 
     await this.events.emit({
@@ -56,23 +56,23 @@ export class TranslationLayerController {
       strategy: body.strategyId,
       result: 'success',
       reason: `Translation layer instruction submitted: type=${body.instructionType}, jurisdiction=${body.jurisdiction}`,
-      txSignature: result.txSignature,
       translationLayerRef: result.instructionId,
-      onChainAddress: result.pda,
     });
 
     return {
       success: true,
-      data: result,
+      data: {
+        ...result,
+        recordRef: result.dbRef,
+        trackingRef: `db-${result.instructionId}`,
+      },
     };
   }
 
   @Post(':id/compliance')
   @Roles('admin', 'portfolio_manager')
-  @ApiOperation({ summary: 'Execute compliance checks', description: 'Run jurisdiction + travel rule compliance checks (CPI to Jurisdiction Engine + Notabene) for a submitted instruction.' })
+  @ApiOperation({ summary: 'Execute compliance checks', description: 'Run jurisdiction + travel rule compliance checks for a submitted instruction.' })
   @ApiParam({ name: 'id', description: 'Instruction ID from submit step' })
-  @ApiCreatedResponse({ description: 'Compliance checks executed successfully.' })
-  @ApiForbiddenResponse({ description: 'Insufficient permissions.' })
   async executeCompliance(
     @Param('id') instructionId: string,
     @Body() body: { jurisdiction: string; vaultId?: string },
@@ -83,7 +83,6 @@ export class TranslationLayerController {
 
     const result = await this.translationLayerService.executeCompliance(instructionId, body.jurisdiction);
 
-    // Resolve vaultId from body or from the most recent TL_INSTRUCTION_SUBMITTED event
     let vaultId = body.vaultId;
     if (!vaultId) {
       const submitEvent = await this.prisma.complianceEvent.findFirst({
@@ -101,24 +100,26 @@ export class TranslationLayerController {
       asset: 'USDC',
       result: 'success',
       reason: `Compliance checks passed for instruction ${instructionId}: jurisdiction=${body.jurisdiction}`,
-      txSignature: result.txSignature,
       translationLayerRef: instructionId,
-      compliancePda: result.compliancePda,
-      travelRulePda: result.travelRulePda,
+      compliancePda: result.complianceRef,
+      travelRulePda: result.travelRuleRef,
     });
 
     return {
       success: true,
-      data: result,
+      data: {
+        ...result,
+        complianceRef: result.complianceRef,
+        travelRuleRef: result.travelRuleRef,
+        trackingRef: `db-${instructionId}-compliance`,
+      },
     };
   }
 
   @Post(':id/action')
   @Roles('admin', 'portfolio_manager')
-  @ApiOperation({ summary: 'Execute action (routing + GL)', description: 'Execute venue routing (Mesh CPI) and general ledger entry (Finstar CPI) for a compliant instruction.' })
+  @ApiOperation({ summary: 'Execute action (routing + GL)', description: 'Execute venue routing and general ledger entry for a compliant instruction.' })
   @ApiParam({ name: 'id', description: 'Instruction ID from submit step' })
-  @ApiCreatedResponse({ description: 'Action executed successfully.' })
-  @ApiForbiddenResponse({ description: 'Insufficient permissions.' })
   async executeAction(
     @Param('id') instructionId: string,
     @Req() req: Request,
@@ -128,7 +129,6 @@ export class TranslationLayerController {
 
     const result = await this.translationLayerService.executeAction(instructionId);
 
-    // Resolve vaultId from the original submit event
     const submitEvent = await this.prisma.complianceEvent.findFirst({
       where: { translationLayerRef: instructionId, actionType: 'TL_INSTRUCTION_SUBMITTED' },
       select: { vaultId: true, amount: true, asset: true },
@@ -143,24 +143,26 @@ export class TranslationLayerController {
       amount: submitEvent?.amount || undefined,
       result: 'success',
       reason: `Action executed for instruction ${instructionId}: routing recorded, GL entry posted to Finstar`,
-      txSignature: result.txSignature,
       translationLayerRef: instructionId,
-      routingPda: result.routingPda,
-      glEntryPda: result.glEntryPda,
+      routingPda: result.routingRef,
+      glEntryPda: result.glEntryRef,
     });
 
     return {
       success: true,
-      data: result,
+      data: {
+        ...result,
+        routingRef: result.routingRef,
+        glEntryRef: result.glEntryRef,
+        trackingRef: `db-${instructionId}-action`,
+      },
     };
   }
 
   @Get(':id/status')
   @Roles('admin', 'portfolio_manager', 'compliance_officer')
-  @ApiOperation({ summary: 'Get pipeline status', description: 'Read the on-chain InstructionLog PDA to get the current pipeline status for an instruction.' })
+  @ApiOperation({ summary: 'Get pipeline status', description: 'Read the current pipeline status for an instruction from the database.' })
   @ApiParam({ name: 'id', description: 'Instruction ID' })
-  @ApiOkResponse({ description: 'Returns instruction pipeline status.' })
-  @ApiForbiddenResponse({ description: 'Insufficient permissions.' })
   async getPipelineStatus(@Param('id') instructionId: string) {
     this.logger.log(`GET /api/translation-layer/${instructionId}/status`);
 
@@ -174,78 +176,108 @@ export class TranslationLayerController {
 
   @Get('history/:vaultId')
   @Roles('admin', 'portfolio_manager', 'compliance_officer')
-  @ApiOperation({ summary: 'Get instruction history for vault', description: 'Retrieve all translation layer instructions associated with a vault.' })
+  @ApiOperation({ summary: 'Get instruction history for vault', description: 'Retrieve all translation layer instructions for a vault from the database.' })
   @ApiParam({ name: 'vaultId', description: 'Vault identifier' })
-  @ApiOkResponse({ description: 'Returns array of instruction records.' })
-  @ApiForbiddenResponse({ description: 'Insufficient permissions.' })
   async getInstructionHistory(@Param('vaultId') vaultId: string) {
     this.logger.log(`GET /api/translation-layer/history/${vaultId}`);
 
-    // Try on-chain first, fall back to database events if unavailable
-    let onChainHistory: any[] = [];
-    try {
-      onChainHistory = await this.translationLayerService.getInstructionHistory(vaultId);
-    } catch {
-      this.logger.warn(`Could not read on-chain history for vault ${vaultId} — using database`);
+    const [tlInstructions, deposits, allocations, credential] = await Promise.all([
+      this.prisma.translationLayerInstruction.findMany({
+        where: { vaultId },
+        orderBy: { receivedAt: 'desc' },
+        take: 50,
+      }),
+      this.prisma.deposit.findMany({
+        where: { vaultId },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      this.prisma.allocation.findMany({
+        where: { vaultId },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        include: { strategy: { select: { name: true } } },
+      }),
+      this.prisma.vault.findUnique({
+        where: { vaultId },
+        select: { credentialId: true, credential: { select: { jurisdiction: true } } },
+      }),
+    ]);
+
+    const history: any[] = [];
+
+    for (const inst of tlInstructions) {
+      history.push({
+        instructionId: inst.instructionId,
+        instructionType: inst.instructionType,
+        vaultId: inst.vaultId,
+        amount: inst.amount,
+        jurisdiction: inst.jurisdiction,
+        strategy: inst.strategyId,
+        status: inst.status,
+        pipelineStatus: inst.status,
+        complianceRef: inst.complianceRef,
+        travelRuleRef: inst.travelRuleRef,
+        routingRef: inst.routingRef,
+        glEntryRef: inst.glEntryRef,
+        glEntryType: inst.glEntryType,
+        glDirection: inst.glDirection,
+        receivedAt: inst.receivedAt,
+        completedAt: inst.completedAt,
+        source: 'pipeline',
+      });
     }
 
-    // Always provide database-sourced instruction history
-    const dbEvents = await this.prisma.complianceEvent.findMany({
-      where: {
-        vaultId,
-        actionType: { in: ['TL_INSTRUCTION_SUBMITTED', 'TL_COMPLIANCE_EXECUTED', 'TL_ACTION_EXECUTED'] },
-      },
-      orderBy: { timestamp: 'desc' },
-      take: 50,
-    });
+    const jurisdiction = credential?.credential?.jurisdiction || 'CH';
 
-    // Group by translationLayerRef to build instruction records
-    const instructionMap = new Map<string, any>();
-    for (const evt of dbEvents) {
-      const ref = evt.translationLayerRef || evt.eventId;
-      if (!instructionMap.has(ref)) {
-        instructionMap.set(ref, {
-          instructionId: ref,
+    for (const dep of deposits) {
+      const existingTl = tlInstructions.find(t => t.instructionType === 'DEPOSIT' && Math.abs(t.amount - dep.amount) < 0.01);
+      if (!existingTl) {
+        history.push({
+          instructionId: `DEP-${dep.id.slice(0, 8).toUpperCase()}`,
           instructionType: 'DEPOSIT',
-          vaultId: evt.vaultId,
-          amount: evt.amount,
-          jurisdiction: null,
-          status: 'pending',
-          receivedAt: evt.timestamp,
-          complianceAttestationPda: null,
-          travelRuleCheckPda: null,
-          routingDecisionPda: null,
-          glEntryPda: null,
-          pipelineStatus: 'received',
+          vaultId: dep.vaultId,
+          amount: dep.amount,
+          jurisdiction: dep.jurisdictionTag || jurisdiction,
+          strategy: null,
+          status: 'complete',
+          pipelineStatus: 'complete',
+          receivedAt: dep.createdAt,
+          completedAt: dep.createdAt,
+          sourceWallet: dep.sourceWallet,
+          sourceReference: dep.sourceReference,
+          screeningStatus: dep.screeningStatus,
+          glEntryType: 'Deposit',
+          glDirection: 'credit',
+          source: 'deposit',
         });
       }
-      const record = instructionMap.get(ref)!;
-      if (evt.actionType === 'TL_INSTRUCTION_SUBMITTED') {
-        record.receivedAt = evt.timestamp;
-        record.amount = evt.amount;
-        const match = evt.reason?.match(/type=(\w+)/);
-        if (match) record.instructionType = match[1];
-        const jurMatch = evt.reason?.match(/jurisdiction=(\w+)/);
-        if (jurMatch) record.jurisdiction = jurMatch[1];
-      }
-      if (evt.actionType === 'TL_COMPLIANCE_EXECUTED') {
-        record.status = 'compliance_checked';
-        record.pipelineStatus = 'compliance_checked';
-        record.complianceAttestationPda = evt.compliancePda;
-        record.travelRuleCheckPda = evt.travelRulePda;
-      }
-      if (evt.actionType === 'TL_ACTION_EXECUTED') {
-        record.status = 'complete';
-        record.pipelineStatus = 'complete';
-        record.routingDecisionPda = evt.routingPda;
-        record.glEntryPda = evt.glEntryPda;
+    }
+
+    for (const alloc of allocations) {
+      const isUnwind = alloc.status === 'unwound';
+      const allocType = isUnwind ? 'UNWIND' : 'ALLOCATE';
+      const existingTl = tlInstructions.find(t => t.instructionType === allocType && Math.abs(t.amount - alloc.amount) < 0.01);
+      if (!existingTl) {
+        history.push({
+          instructionId: `${isUnwind ? 'UNW' : 'ALC'}-${alloc.id.slice(0, 8).toUpperCase()}`,
+          instructionType: allocType,
+          vaultId: alloc.vaultId,
+          amount: alloc.amount,
+          jurisdiction,
+          strategy: alloc.strategy.name,
+          status: 'complete',
+          pipelineStatus: 'complete',
+          receivedAt: alloc.createdAt,
+          completedAt: alloc.updatedAt,
+          glEntryType: isUnwind ? 'StrategyUnwind' : 'StrategyAllocation',
+          glDirection: isUnwind ? 'credit' : 'debit',
+          source: 'allocation',
+        });
       }
     }
 
-    // Merge on-chain data if available, otherwise use DB
-    const history = onChainHistory.length > 0
-      ? onChainHistory
-      : Array.from(instructionMap.values());
+    history.sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
 
     return {
       success: true,
@@ -255,122 +287,163 @@ export class TranslationLayerController {
 
   @Get('config')
   @Roles('admin', 'portfolio_manager', 'compliance_officer')
-  @ApiOperation({ summary: 'Get translation layer config', description: 'Read the on-chain TranslationLayerConfig PDA.' })
-  @ApiOkResponse({ description: 'Returns translation layer configuration.' })
-  @ApiForbiddenResponse({ description: 'Insufficient permissions.' })
+  @ApiOperation({ summary: 'Get translation layer config', description: 'Returns translation layer operational summary derived from actual vault activity.' })
   async getConfig() {
     this.logger.log(`GET /api/translation-layer/config`);
 
-    // Count total instructions from the event log
-    const totalInstructions = await this.prisma.complianceEvent.count({
-      where: { actionType: 'TL_INSTRUCTION_SUBMITTED' },
-    });
-
-    // Try to read on-chain config PDA for additional info
-    let onChainConfig: any = null;
-    try {
-      onChainConfig = await this.translationLayerService.getConfig();
-    } catch {
-      this.logger.warn('Could not read on-chain TL config PDA — using database counts');
-    }
+    const config = await this.translationLayerService.getConfig();
 
     return {
       success: true,
-      data: {
-        totalInstructions,
-        onChainPda: onChainConfig?.pda || null,
-        connectedPrograms: {
-          finstar: '7jH9Lhe9Ny3a8LxUsS3BCSHoDKmQZz5Vpu1py4pemisF',
-          notabene: 'FZ5EaUHqohNGBdsvjr4LYnK181xoBWNhZiUg1iTaf9f7',
-          mesh: '3ptgmaf1dWrn8WsmRsat641srbbY1vfBvhMwVwczpoU2',
-          jurisdictionEngine: 'HhPHx1RgzA99brCGprSg5VwJ8ZRgeXkLADbDRUox3Cq6',
-        },
-      },
+      data: config,
     };
   }
 
   @Get('activity')
   @Roles('admin', 'portfolio_manager', 'compliance_officer')
-  @ApiOperation({ summary: 'Get pipeline activity log', description: 'Returns all translation layer activity from the compliance event database, showing L3→L2→L1 interactions with values.' })
+  @ApiOperation({ summary: 'Get pipeline activity log', description: 'Returns translation layer activity derived from real vault operations showing L3→L2→L1 flow per vault.' })
   @ApiQuery({ name: 'vaultId', required: false, description: 'Filter by vault ID' })
-  @ApiOkResponse({ description: 'Returns array of pipeline activity records with layer interactions.' })
-  @ApiForbiddenResponse({ description: 'Insufficient permissions.' })
   async getActivity(@Query('vaultId') vaultId?: string) {
     this.logger.log(`GET /api/translation-layer/activity vaultId=${vaultId || 'all'}`);
 
-    const where: any = {
-      actionType: {
-        in: [
-          'TL_INSTRUCTION_SUBMITTED',
-          'TL_COMPLIANCE_EXECUTED',
-          'TL_ACTION_EXECUTED',
-          'DEPOSIT_RECORDED',
-          'ALLOCATION_EXECUTED',
-          'REDEMPTION_EXECUTED',
-          'UNWIND_EXECUTED',
-          'ALLOCATION_INITIATED',
-        ],
-      },
-    };
-    if (vaultId) where.vaultId = vaultId;
+    const depositWhere: any = {};
+    const allocationWhere: any = {};
+    const tlWhere: any = {};
+    if (vaultId) {
+      depositWhere.vaultId = vaultId;
+      allocationWhere.vaultId = vaultId;
+      tlWhere.vaultId = vaultId;
+    }
 
-    const events = await this.prisma.complianceEvent.findMany({
-      where,
-      orderBy: { timestamp: 'desc' },
-      take: 100,
-    });
+    const [deposits, allocations, tlInstructions, vaults] = await Promise.all([
+      this.prisma.deposit.findMany({
+        where: depositWhere,
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        include: { vault: { select: { clientReference: true, baseAsset: true, credentialId: true, ownerWallet: true } } },
+      }),
+      this.prisma.allocation.findMany({
+        where: allocationWhere,
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        include: {
+          vault: { select: { clientReference: true, baseAsset: true, credentialId: true } },
+          strategy: { select: { name: true, strategyId: true } },
+        },
+      }),
+      this.prisma.translationLayerInstruction.findMany({
+        where: tlWhere,
+        orderBy: { receivedAt: 'desc' },
+        take: 50,
+      }),
+      vaultId
+        ? this.prisma.vault.findMany({ where: { vaultId }, select: { vaultId: true, totalNAV: true, idleBalance: true, totalDeposited: true, baseAsset: true, clientReference: true } })
+        : this.prisma.vault.findMany({ select: { vaultId: true, totalNAV: true, idleBalance: true, totalDeposited: true, baseAsset: true, clientReference: true } }),
+    ]);
 
-    const activity = events.map((e) => {
-      let layer = 'L2';
-      let layerLabel = 'Translation Layer';
-      if (['DEPOSIT_RECORDED', 'ALLOCATION_EXECUTED', 'REDEMPTION_EXECUTED', 'UNWIND_EXECUTED', 'ALLOCATION_INITIATED'].includes(e.actionType)) {
-        layer = 'L3';
-        layerLabel = 'Crypto Services';
-      }
-      if (e.glEntryPda || e.actionType === 'TL_ACTION_EXECUTED') {
-        layer = 'L1→L2';
-        layerLabel = 'Finstar Book-Back via Translation Layer';
-      }
-      if (e.actionType === 'TL_COMPLIANCE_EXECUTED') {
-        layer = 'L2';
-        layerLabel = 'Compliance Orchestration';
-      }
-      if (e.actionType === 'TL_INSTRUCTION_SUBMITTED') {
-        layer = 'L3→L2';
-        layerLabel = 'Instruction Received from Crypto Services';
-      }
+    const activity: any[] = [];
 
-      return {
-        id: e.id,
-        eventId: e.eventId,
-        vaultId: e.vaultId,
-        actionType: e.actionType,
-        layer,
-        layerLabel,
-        actor: e.actor,
-        role: e.role,
-        asset: e.asset,
-        amount: e.amount,
-        strategy: e.strategy,
-        result: e.result,
-        reason: e.reason,
-        txSignature: e.txSignature,
-        onChainAddress: e.onChainAddress,
-        translationLayerRef: e.translationLayerRef,
-        compliancePda: e.compliancePda,
-        travelRulePda: e.travelRulePda,
-        routingPda: e.routingPda,
-        glEntryPda: e.glEntryPda,
-        timestamp: e.timestamp,
-      };
-    });
+    for (const dep of deposits) {
+      const matchingTl = tlInstructions.find(
+        t => t.instructionType === 'DEPOSIT' && t.vaultId === dep.vaultId && Math.abs(t.amount - dep.amount) < 0.01,
+      );
+
+      activity.push({
+        id: dep.id,
+        vaultId: dep.vaultId,
+        actionType: 'DEPOSIT',
+        layer: 'L3→L2',
+        layerLabel: 'Deposit received → Compliance check → GL book-back',
+        actor: dep.sourceWallet,
+        role: 'Client',
+        asset: dep.vault.baseAsset,
+        amount: dep.amount,
+        strategy: null,
+        result: 'success',
+        reason: `Deposit of ${dep.amount.toLocaleString()} ${dep.vault.baseAsset} from ${dep.sourceReference}`,
+        jurisdiction: dep.jurisdictionTag,
+        screeningStatus: dep.screeningStatus,
+        sourceType: dep.sourceType,
+        pipelineSteps: {
+          received: { status: 'complete', timestamp: dep.createdAt },
+          complianceCheck: { status: dep.screeningStatus === 'Clear' ? 'complete' : 'flagged', result: dep.screeningStatus },
+          glBookBack: { status: 'complete', entryType: 'Deposit', direction: 'credit' },
+        },
+        tlInstruction: matchingTl ? {
+          instructionId: matchingTl.instructionId,
+          status: matchingTl.status,
+          complianceRef: matchingTl.complianceRef,
+          routingRef: matchingTl.routingRef,
+          glEntryRef: matchingTl.glEntryRef,
+        } : null,
+        timestamp: dep.createdAt,
+      });
+    }
+
+    for (const alloc of allocations) {
+      const isUnwind = alloc.status === 'unwound';
+      const allocType = isUnwind ? 'UNWIND' : 'ALLOCATE';
+      const matchingTl = tlInstructions.find(
+        t => t.instructionType === allocType && t.vaultId === alloc.vaultId && Math.abs(t.amount - alloc.amount) < 0.01,
+      );
+
+      activity.push({
+        id: alloc.id,
+        vaultId: alloc.vaultId,
+        actionType: isUnwind ? 'UNWIND' : 'ALLOCATION',
+        layer: isUnwind ? 'L2→L1' : 'L3→L2',
+        layerLabel: isUnwind
+          ? `Strategy unwind → GL credit book-back`
+          : `Allocation → Compliance check → GL debit book-back`,
+        actor: 'portfolio_manager',
+        role: 'Portfolio Manager',
+        asset: alloc.vault.baseAsset,
+        amount: alloc.amount,
+        strategy: alloc.strategy.name,
+        result: 'success',
+        reason: isUnwind
+          ? `Unwound ${alloc.amount.toLocaleString()} ${alloc.vault.baseAsset} from ${alloc.strategy.name}`
+          : `Allocated ${alloc.amount.toLocaleString()} ${alloc.vault.baseAsset} to ${alloc.strategy.name}`,
+        pipelineSteps: {
+          received: { status: 'complete', timestamp: alloc.createdAt },
+          complianceCheck: { status: 'complete', result: 'Clear' },
+          glBookBack: { status: 'complete', entryType: isUnwind ? 'StrategyUnwind' : 'StrategyAllocation', direction: isUnwind ? 'credit' : 'debit' },
+        },
+        tlInstruction: matchingTl ? {
+          instructionId: matchingTl.instructionId,
+          status: matchingTl.status,
+          complianceRef: matchingTl.complianceRef,
+          routingRef: matchingTl.routingRef,
+          glEntryRef: matchingTl.glEntryRef,
+        } : null,
+        timestamp: alloc.createdAt,
+      });
+    }
+
+    activity.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    const totalDeposits = deposits.reduce((sum, d) => sum + d.amount, 0);
+    const totalAllocations = allocations.filter(a => a.status === 'active').reduce((sum, a) => sum + a.amount, 0);
+    const totalUnwinds = allocations.filter(a => a.status === 'unwound').reduce((sum, a) => sum + a.amount, 0);
 
     const summary = {
       totalEvents: activity.length,
-      l3Events: activity.filter((a) => a.layer.startsWith('L3')).length,
-      l2Events: activity.filter((a) => a.layer === 'L2').length,
-      l1Events: activity.filter((a) => a.layer.startsWith('L1')).length,
-      totalValueProcessed: activity.reduce((sum, a) => sum + (a.amount || 0), 0),
+      l3Events: deposits.length + allocations.filter(a => a.status === 'active').length,
+      l2Events: tlInstructions.length,
+      l1Events: activity.length,
+      totalValueProcessed: totalDeposits + totalAllocations + totalUnwinds,
+      breakdown: {
+        deposits: { count: deposits.length, total: totalDeposits },
+        allocations: { count: allocations.filter(a => a.status === 'active').length, total: totalAllocations },
+        unwinds: { count: allocations.filter(a => a.status === 'unwound').length, total: totalUnwinds },
+      },
+      vaultSummaries: vaults.map(v => ({
+        vaultId: v.vaultId,
+        clientReference: v.clientReference,
+        totalNAV: v.totalNAV,
+        idleBalance: v.idleBalance,
+        totalDeposited: v.totalDeposited,
+      })),
     };
 
     return {

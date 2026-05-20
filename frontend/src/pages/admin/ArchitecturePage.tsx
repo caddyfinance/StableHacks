@@ -653,7 +653,7 @@ export default function ArchitecturePage() {
                             </div>
                             <p className="text-[10px] text-slate-600 leading-relaxed">
                               Every capital movement in Layer 3 triggers an automatic book-back via the Translation Layer (L2) to Finstar (L1).
-                              The General Ledger records double-entry postings with SWIFT references, jurisdiction tags, and on-chain proof hashes.
+                              The General Ledger records double-entry postings with SWIFT references, jurisdiction tags, and audit trail references.
                               Regulatory reports are generated per jurisdiction (CH, AE, HK, SG) and filed automatically.
                             </p>
                             <div className="grid grid-cols-3 gap-2 mt-3">

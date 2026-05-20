@@ -1,358 +1,321 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { createHash } from 'crypto';
-import {
-  Connection,
-  PublicKey,
-  GetProgramAccountsFilter,
-} from '@solana/web3.js';
-import bs58 from 'bs58';
+import { Injectable, Logger, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 
-/**
- * Service to read GLEntry and RegulatoryReport PDAs from the mock-finstar Anchor program.
- * Uses raw @solana/web3.js (NOT @coral-xyz/anchor) for minimal dependencies.
- * Follows the same pattern as VaultProgramService.
- */
 @Injectable()
 export class FinstarService {
   private readonly logger = new Logger(FinstarService.name);
 
-  private getProgramPublicKey(): PublicKey {
-    const id = process.env.MOCK_FINSTAR_PROGRAM_ID || '7jH9Lhe9Ny3a8LxUsS3BCSHoDKmQZz5Vpu1py4pemisF';
-    return new PublicKey(id);
-  }
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
-  private getConnection(): Connection {
-    const rpc = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
-    return new Connection(rpc, { commitment: 'confirmed', wsEndpoint: undefined as any });
-  }
+  async getConfig() {
+    const [totalDeposits, totalAllocations, totalVaults, totalBookBacks] = await Promise.all([
+      this.prisma.deposit.count(),
+      this.prisma.allocation.count(),
+      this.prisma.vault.count(),
+      this.prisma.translationLayerInstruction.count({ where: { status: 'complete' } }),
+    ]);
 
-  /**
-   * Compute the Anchor instruction discriminator.
-   * Anchor uses sha256("global:<instruction_name>")[0..8]
-   */
-  private getDiscriminator(instructionName: string): Buffer {
-    const hash = createHash('sha256')
-      .update(`global:${instructionName}`)
-      .digest();
-    return hash.subarray(0, 8);
-  }
+    const [totalCredits, totalDebits] = await Promise.all([
+      this.prisma.gLEntry.aggregate({ where: { direction: 'credit' }, _sum: { amount: true } }),
+      this.prisma.gLEntry.aggregate({ where: { direction: 'debit' }, _sum: { amount: true } }),
+    ]);
 
-  /**
-   * Borsh-deserialize a string: 4-byte LE length prefix + UTF-8 bytes
-   */
-  private deserializeString(buffer: Buffer, offset: number): { value: string; offset: number } {
-    const len = buffer.readUInt32LE(offset);
-    const value = buffer.subarray(offset + 4, offset + 4 + len).toString('utf8');
-    return { value, offset: offset + 4 + len };
-  }
-
-  /**
-   * Derive the FinstarConfig PDA: seeds = [b"finstar_config"]
-   */
-  private deriveConfigPda(): [PublicKey, number] {
-    return PublicKey.findProgramAddressSync(
-      [Buffer.from('finstar_config')],
-      this.getProgramPublicKey(),
-    );
-  }
-
-  /**
-   * Derive a GLEntry PDA: seeds = [b"gl_entry", entry_id.as_bytes()]
-   */
-  private deriveGLEntryPda(entryId: string): [PublicKey, number] {
-    return PublicKey.findProgramAddressSync(
-      [Buffer.from('gl_entry'), Buffer.from(entryId)],
-      this.getProgramPublicKey(),
-    );
-  }
-
-  /**
-   * Derive a RegulatoryReport PDA: seeds = [b"reg_report", report_id.as_bytes()]
-   */
-  private deriveRegulatoryReportPda(reportId: string): [PublicKey, number] {
-    return PublicKey.findProgramAddressSync(
-      [Buffer.from('reg_report'), Buffer.from(reportId)],
-      this.getProgramPublicKey(),
-    );
-  }
-
-  /**
-   * Deserialize a GLEntry account data (after the 8-byte Anchor discriminator).
-   * Fields (in Borsh order):
-   * - entry_id: String
-   * - entry_type: u8 enum (Deposit=0, Withdrawal=1, YieldAccrual=2, FeeDebit=3, StrategyAllocation=4, StrategyUnwind=5, Transfer=6)
-   * - vault_id: String
-   * - amount: u64 LE
-   * - currency: String
-   * - debit_account: String
-   * - credit_account: String
-   * - narrative: String
-   * - source_tx_signature: String
-   * - regulatory_tag: String
-   * - swift_ref: String
-   * - status: u8 enum (Pending=0, Posted=1, Reversed=2)
-   * - posted_at: i64 LE
-   */
-  private deserializeGLEntry(data: Buffer): any {
-    let offset = 8; // skip 8-byte Anchor discriminator
-
-    const entryIdResult = this.deserializeString(data, offset);
-    const entryId = entryIdResult.value;
-    offset = entryIdResult.offset;
-
-    const entryTypeRaw = data.readUInt8(offset);
-    offset += 1;
-    const entryTypeMap = ['Deposit', 'Withdrawal', 'YieldAccrual', 'FeeDebit', 'StrategyAllocation', 'StrategyUnwind', 'Transfer'];
-    const entryType = entryTypeMap[entryTypeRaw] || 'Unknown';
-
-    const vaultIdResult = this.deserializeString(data, offset);
-    const vaultId = vaultIdResult.value;
-    offset = vaultIdResult.offset;
-
-    const amount = data.readBigUInt64LE(offset);
-    offset += 8;
-
-    const currencyResult = this.deserializeString(data, offset);
-    const currency = currencyResult.value;
-    offset = currencyResult.offset;
-
-    const debitAccountResult = this.deserializeString(data, offset);
-    const debitAccount = debitAccountResult.value;
-    offset = debitAccountResult.offset;
-
-    const creditAccountResult = this.deserializeString(data, offset);
-    const creditAccount = creditAccountResult.value;
-    offset = creditAccountResult.offset;
-
-    const narrativeResult = this.deserializeString(data, offset);
-    const narrative = narrativeResult.value;
-    offset = narrativeResult.offset;
-
-    const sourceTxResult = this.deserializeString(data, offset);
-    const sourceTxSignature = sourceTxResult.value;
-    offset = sourceTxResult.offset;
-
-    const regulatoryTagResult = this.deserializeString(data, offset);
-    const regulatoryTag = regulatoryTagResult.value;
-    offset = regulatoryTagResult.offset;
-
-    const swiftRefResult = this.deserializeString(data, offset);
-    const swiftRef = swiftRefResult.value;
-    offset = swiftRefResult.offset;
-
-    const statusRaw = data.readUInt8(offset);
-    offset += 1;
-    const statusMap = ['Pending', 'Posted', 'Reversed'];
-    const status = statusMap[statusRaw] || 'Unknown';
-
-    const postedAt = data.readBigInt64LE(offset);
-    offset += 8;
+    const [pendingCount, postedCount] = await Promise.all([
+      this.prisma.gLEntry.count({ where: { status: 'pending' } }),
+      this.prisma.gLEntry.count({ where: { status: 'posted' } }),
+    ]);
 
     return {
-      entryId,
-      entryType,
-      vaultId,
-      amount: amount.toString(),
-      currency,
-      debitAccount,
-      creditAccount,
-      narrative,
-      sourceTxSignature,
-      regulatoryTag,
-      swiftRef,
-      status,
-      postedAt: postedAt.toString(),
+      institution: 'AMINA Bank AG',
+      swiftCode: 'AMINCHZZXXX',
+      coreBanking: 'Finstar (via HBL ASP/BSP)',
+      totalDeposits,
+      totalAllocations,
+      totalVaults,
+      totalBookBacks,
+      totalCredits: totalCredits._sum.amount || 0,
+      totalDebits: totalDebits._sum.amount || 0,
+      pendingGLEntries: pendingCount,
+      postedGLEntries: postedCount,
     };
   }
 
-  /**
-   * Get the FinstarConfig PDA account.
-   */
-  async getConfig(): Promise<any> {
-    try {
-      const connection = this.getConnection();
-      const [configPda] = this.deriveConfigPda();
+  async getGLEntries(vaultId: string) {
+    const entries = await this.prisma.gLEntry.findMany({
+      where: { vaultId },
+      orderBy: { createdAt: 'desc' },
+    });
 
-      this.logger.log(`Reading FinstarConfig PDA: ${configPda.toBase58()}`);
-
-      const accountInfo = await connection.getAccountInfo(configPda);
-      if (!accountInfo) {
-        this.logger.warn(`FinstarConfig PDA not found: ${configPda.toBase58()}`);
-        return null;
-      }
-
-      // For config, we'll just return basic info since the structure isn't specified
-      return {
-        pda: configPda.toBase58(),
-        owner: accountInfo.owner.toBase58(),
-        dataLength: accountInfo.data.length,
-      };
-    } catch (error: any) {
-      this.logger.error(`Failed to read FinstarConfig: ${error.message}`);
-      throw error;
-    }
+    return entries.map((entry) => ({
+      entryId: entry.entryId,
+      vaultId: entry.vaultId,
+      instructionId: entry.instructionId,
+      entryType: entry.entryType,
+      direction: entry.direction,
+      amount: entry.amount,
+      currency: entry.currency,
+      debitAccount: entry.debitAccount,
+      creditAccount: entry.creditAccount,
+      narrative: entry.narrative,
+      swiftReference: entry.swiftReference,
+      jurisdiction: entry.jurisdiction,
+      status: entry.status,
+      approvedBy: entry.approvedBy,
+      approvedAt: entry.approvedAt,
+      postedAt: entry.postedAt,
+      rejectionReason: entry.rejectionReason,
+      sourceType: entry.sourceType,
+      sourceId: entry.sourceId,
+      createdAt: entry.createdAt,
+    }));
   }
 
-  /**
-   * Get a single GLEntry by entry ID.
-   */
-  async getEntry(entryId: string): Promise<any> {
-    try {
-      const connection = this.getConnection();
-      const [entryPda] = this.deriveGLEntryPda(entryId);
+  async getVaultLedger(vaultId: string) {
+    const vault = await this.prisma.vault.findUnique({ where: { vaultId } });
+    if (!vault) throw new NotFoundException(`Vault not found: ${vaultId}`);
 
-      this.logger.log(`Reading GLEntry PDA: ${entryPda.toBase58()} for entryId=${entryId}`);
+    const entries = await this.getGLEntries(vaultId);
 
-      const accountInfo = await connection.getAccountInfo(entryPda);
-      if (!accountInfo) {
-        this.logger.warn(`GLEntry not found: ${entryId}`);
-        return null;
-      }
+    const totalCredits = entries
+      .filter((e) => e.direction === 'credit' && e.status === 'posted')
+      .reduce((sum, e) => sum + e.amount, 0);
 
-      const entry = this.deserializeGLEntry(accountInfo.data);
-      return {
-        ...entry,
-        pda: entryPda.toBase58(),
-      };
-    } catch (error: any) {
-      this.logger.error(`Failed to read GLEntry ${entryId}: ${error.message}`);
-      throw error;
-    }
+    const totalDebits = entries
+      .filter((e) => e.direction === 'debit' && e.status === 'posted')
+      .reduce((sum, e) => sum + e.amount, 0);
+
+    const runningBalance = totalCredits - totalDebits;
+
+    return {
+      vaultId,
+      vaultName: vault.clientReference,
+      baseAsset: vault.baseAsset,
+      currentNAV: vault.totalNAV,
+      idleBalance: vault.idleBalance,
+      totalDeposited: vault.totalDeposited,
+      totalCredits,
+      totalDebits,
+      runningBalance,
+      entryCount: entries.length,
+      entries,
+    };
   }
 
-  /**
-   * Get all GLEntry PDAs for a specific vault using getProgramAccounts with memcmp filter.
-   */
-  async getGLEntries(vaultId: string): Promise<any[]> {
-    try {
-      const connection = this.getConnection();
-      const programId = this.getProgramPublicKey();
+  async getEntry(entryId: string) {
+    const entry = await this.prisma.gLEntry.findUnique({
+      where: { entryId },
+    });
+    if (!entry) {
+      throw new NotFoundException(`GL entry not found: ${entryId}`);
+    }
+    return entry;
+  }
 
-      this.logger.log(`Fetching GLEntries for vault: ${vaultId}`);
+  async getRegulatoryReports(vaultId: string) {
+    const transferChecks = await this.prisma.transferCheck.findMany({
+      where: { vaultId },
+      orderBy: { checkedAt: 'desc' },
+      take: 50,
+    });
 
-      // The vault_id field starts at offset 8 (discriminator) + 4 (entry_id length) + entry_id.len + 1 (entry_type)
-      // For a memcmp filter, we need to know the exact offset. This is tricky because entry_id is variable length.
-      // We'll use a more lenient approach: fetch all GLEntry accounts and filter in-memory.
+    return transferChecks.map((tc) => ({
+      reportId: `REG-${tc.transferId.substring(0, 8).toUpperCase()}`,
+      transferId: tc.transferId,
+      transferType: tc.transferType,
+      jurisdiction: 'CH',
+      kytStatus: tc.kytStatus,
+      ofacStatus: tc.ofacStatus,
+      travelRuleStatus: tc.travelRuleStatus,
+      providerApproval: tc.providerApproval,
+      mandateCheck: tc.mandateCheck,
+      overallStatus: tc.overallStatus,
+      submitted: tc.overallStatus === 'PASSED',
+      checkedAt: tc.checkedAt,
+    }));
+  }
 
-      const discriminator = this.getDiscriminator('gl_entry');
+  async getActivity(vaultId?: string) {
+    const depositFilter = vaultId ? { vaultId } : {};
+    const glFilter = vaultId ? { vaultId } : {};
 
-      const filters: GetProgramAccountsFilter[] = [
-        {
-          memcmp: {
-            offset: 0,
-            bytes: bs58.encode(discriminator),
-          },
-        },
-      ];
+    const [deposits, allocations, glEntries] = await Promise.all([
+      this.prisma.deposit.findMany({ where: depositFilter, orderBy: { createdAt: 'desc' }, take: 25 }),
+      this.prisma.allocation.findMany({
+        where: vaultId ? { vaultId } : {},
+        orderBy: { createdAt: 'desc' },
+        take: 25,
+        include: { strategy: { select: { name: true, strategyId: true } } },
+      }),
+      this.prisma.gLEntry.findMany({ where: glFilter, orderBy: { createdAt: 'desc' }, take: 50 }),
+    ]);
 
-      const accounts = await connection.getProgramAccounts(programId, {
-        filters,
-        commitment: 'confirmed',
+    const activity: any[] = [];
+
+    for (const d of deposits) {
+      activity.push({
+        type: 'Deposit',
+        vaultId: d.vaultId,
+        amount: d.amount,
+        asset: 'USDC',
+        status: 'Recorded',
+        reference: d.sourceReference || d.id,
+        layer: 'L1',
+        layerLabel: 'Finstar Core Banking',
+        timestamp: d.createdAt.toISOString(),
       });
-
-      this.logger.log(`Found ${accounts.length} GLEntry accounts, filtering by vaultId=${vaultId}`);
-
-      const entries: any[] = [];
-      for (const account of accounts) {
-        try {
-          const entry = this.deserializeGLEntry(account.account.data);
-          if (entry.vaultId === vaultId) {
-            entries.push({
-              ...entry,
-              pda: account.pubkey.toBase58(),
-            });
-          }
-        } catch (error: any) {
-          this.logger.warn(`Failed to deserialize GLEntry at ${account.pubkey.toBase58()}: ${error.message}`);
-        }
-      }
-
-      this.logger.log(`Filtered to ${entries.length} GLEntries for vaultId=${vaultId}`);
-      return entries;
-    } catch (error: any) {
-      this.logger.error(`Failed to fetch GLEntries for vault ${vaultId}: ${error.message}`);
-      throw error;
     }
-  }
 
-  /**
-   * Get all RegulatoryReport PDAs for a specific vault using getProgramAccounts with memcmp filter.
-   */
-  async getRegulatoryReports(vaultId: string): Promise<any[]> {
-    try {
-      const connection = this.getConnection();
-      const programId = this.getProgramPublicKey();
-
-      this.logger.log(`Fetching RegulatoryReports for vault: ${vaultId}`);
-
-      // Similar approach: fetch all RegulatoryReport accounts and filter in-memory
-      const discriminator = this.getDiscriminator('regulatory_report');
-
-      const filters: GetProgramAccountsFilter[] = [
-        {
-          memcmp: {
-            offset: 0,
-            bytes: bs58.encode(discriminator),
-          },
-        },
-      ];
-
-      const accounts = await connection.getProgramAccounts(programId, {
-        filters,
-        commitment: 'confirmed',
+    for (const a of allocations) {
+      const entryType = a.status === 'unwound' ? 'StrategyUnwind' : 'StrategyAllocation';
+      activity.push({
+        type: entryType,
+        vaultId: a.vaultId,
+        amount: a.amount,
+        asset: 'USDC',
+        status: a.status === 'unwound' ? 'Unwound' : 'Allocated',
+        reference: a.id,
+        strategy: a.strategy?.name,
+        layer: 'L1',
+        layerLabel: 'Finstar Core Banking',
+        timestamp: a.createdAt.toISOString(),
       });
-
-      this.logger.log(`Found ${accounts.length} RegulatoryReport accounts (filtering not yet implemented)`);
-
-      // For now, return basic info since deserialization structure isn't specified
-      const reports = accounts.map(account => ({
-        pda: account.pubkey.toBase58(),
-        owner: account.account.owner.toBase58(),
-        dataLength: account.account.data.length,
-      }));
-
-      return reports;
-    } catch (error: any) {
-      this.logger.error(`Failed to fetch RegulatoryReports for vault ${vaultId}: ${error.message}`);
-      throw error;
     }
+
+    for (const gl of glEntries) {
+      activity.push({
+        type: gl.entryType,
+        vaultId: gl.vaultId,
+        amount: gl.amount,
+        asset: gl.currency,
+        status: gl.status,
+        reference: gl.entryId,
+        direction: gl.direction,
+        debitAccount: gl.debitAccount,
+        creditAccount: gl.creditAccount,
+        narrative: gl.narrative,
+        layer: 'L1',
+        layerLabel: 'Finstar Core Banking',
+        timestamp: gl.createdAt.toISOString(),
+      });
+    }
+
+    activity.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    const summary = {
+      totalDeposits: deposits.reduce((s, d) => s + d.amount, 0),
+      totalAllocations: allocations.filter((a) => a.status !== 'unwound').reduce((s, a) => s + a.amount, 0),
+      totalUnwinds: allocations.filter((a) => a.status === 'unwound').reduce((s, a) => s + a.amount, 0),
+      depositCount: deposits.length,
+      allocationCount: allocations.length,
+      totalGLEntries: glEntries.length,
+      pendingGLEntries: glEntries.filter((e) => e.status === 'pending').length,
+      postedGLEntries: glEntries.filter((e) => e.status === 'posted').length,
+    };
+
+    return { summary, activity };
   }
 
-  /**
-   * Aggregate GL entries for a vault: compute total debits, credits, and running balance.
-   */
-  async getVaultLedger(vaultId: string): Promise<any> {
-    try {
-      const entries = await this.getGLEntries(vaultId);
+  // ─── GL Approval Workflow ──────────────────────────────────────
 
-      let totalDebits = BigInt(0);
-      let totalCredits = BigInt(0);
+  async getPendingEntries(vaultId?: string) {
+    const where: any = { status: 'pending' };
+    if (vaultId) where.vaultId = vaultId;
 
-      for (const entry of entries) {
-        const amount = BigInt(entry.amount);
+    const entries = await this.prisma.gLEntry.findMany({
+      where,
+      orderBy: { createdAt: 'asc' },
+      include: {
+        vault: { select: { clientReference: true, baseAsset: true } },
+      },
+    });
 
-        // Simple heuristic: entry types that typically debit
-        if (['Withdrawal', 'FeeDebit', 'StrategyAllocation'].includes(entry.entryType)) {
-          totalDebits += amount;
-        } else {
-          // Deposit, YieldAccrual, StrategyUnwind, Transfer typically credit
-          totalCredits += amount;
-        }
-      }
+    return entries.map((e) => ({
+      entryId: e.entryId,
+      vaultId: e.vaultId,
+      vaultName: e.vault.clientReference,
+      instructionId: e.instructionId,
+      entryType: e.entryType,
+      direction: e.direction,
+      amount: e.amount,
+      currency: e.currency,
+      debitAccount: e.debitAccount,
+      creditAccount: e.creditAccount,
+      narrative: e.narrative,
+      swiftReference: e.swiftReference,
+      jurisdiction: e.jurisdiction,
+      status: e.status,
+      createdAt: e.createdAt,
+    }));
+  }
 
-      const runningBalance = totalCredits - totalDebits;
+  async approveEntry(entryId: string, approverRole: string, approverEmail?: string): Promise<any> {
+    const entry = await this.prisma.gLEntry.findUnique({ where: { entryId } });
+    if (!entry) throw new NotFoundException(`GL entry not found: ${entryId}`);
 
-      return {
-        vaultId,
-        totalDebits: totalDebits.toString(),
-        totalCredits: totalCredits.toString(),
-        runningBalance: runningBalance.toString(),
-        entryCount: entries.length,
-        entries,
-      };
-    } catch (error: any) {
-      this.logger.error(`Failed to compute vault ledger for ${vaultId}: ${error.message}`);
-      throw error;
+    if (entry.status !== 'pending') {
+      throw new BadRequestException(`GL entry ${entryId} is in status '${entry.status}', expected 'pending'.`);
     }
+
+    const now = new Date();
+    const updated = await this.prisma.gLEntry.update({
+      where: { entryId },
+      data: {
+        status: 'posted',
+        approvedBy: approverEmail || approverRole,
+        approvedAt: now,
+        postedAt: now,
+      },
+    });
+
+    this.logger.log(`GL entry ${entryId} approved by ${approverEmail || approverRole}`);
+
+    return {
+      entryId: updated.entryId,
+      status: updated.status,
+      approvedBy: updated.approvedBy,
+      approvedAt: updated.approvedAt,
+      postedAt: updated.postedAt,
+    };
+  }
+
+  async rejectEntry(entryId: string, approverRole: string, reason: string, approverEmail?: string): Promise<any> {
+    const entry = await this.prisma.gLEntry.findUnique({ where: { entryId } });
+    if (!entry) throw new NotFoundException(`GL entry not found: ${entryId}`);
+
+    if (entry.status !== 'pending') {
+      throw new BadRequestException(`GL entry ${entryId} is in status '${entry.status}', expected 'pending'.`);
+    }
+
+    const updated = await this.prisma.gLEntry.update({
+      where: { entryId },
+      data: {
+        status: 'rejected',
+        approvedBy: approverEmail || approverRole,
+        approvedAt: new Date(),
+        rejectionReason: reason,
+      },
+    });
+
+    this.logger.log(`GL entry ${entryId} rejected by ${approverEmail || approverRole}: ${reason}`);
+
+    return {
+      entryId: updated.entryId,
+      status: updated.status,
+      approvedBy: updated.approvedBy,
+      rejectionReason: updated.rejectionReason,
+    };
+  }
+
+  async bulkApprove(entryIds: string[], approverRole: string, approverEmail?: string): Promise<any> {
+    const results: any[] = [];
+    for (const id of entryIds) {
+      try {
+        const result = await this.approveEntry(id, approverRole, approverEmail);
+        results.push({ entryId: id, ...result });
+      } catch (err: any) {
+        results.push({ entryId: id, error: err.message });
+      }
+    }
+    return { approved: results.filter((r) => !r.error).length, failed: results.filter((r) => r.error).length, results };
   }
 }

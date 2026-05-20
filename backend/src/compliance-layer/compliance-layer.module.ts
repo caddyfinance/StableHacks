@@ -1,13 +1,11 @@
 import { Module, Global } from '@nestjs/common';
 import { ComplianceLayerService } from './compliance-layer.service';
 import { ComplianceLayerController } from './compliance-layer.controller';
+import { PrismaModule } from '../prisma/prisma.module';
 
-/**
- * Global NestJS module for reading on-chain compliance data.
- * Exports ComplianceLayerService for use across the application.
- */
 @Global()
 @Module({
+  imports: [PrismaModule],
   controllers: [ComplianceLayerController],
   providers: [ComplianceLayerService],
   exports: [ComplianceLayerService],

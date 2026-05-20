@@ -5,7 +5,7 @@ import Card from '../../components/Card';
 import StatusBadge from '../../components/StatusBadge';
 import {
   ArrowRight, CheckCircle, Copy, Filter, GitBranch, PlayCircle,
-  ShieldCheck, Send, ExternalLink, AlertCircle, Vault,
+  ShieldCheck, Send, AlertCircle, Vault,
   Activity, Layers, ArrowDownUp, BookOpen, TrendingUp,
 } from 'lucide-react';
 
@@ -14,17 +14,13 @@ const fmt = (v: any) => {
   return Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-const truncatePda = (pda: string) => {
-  if (!pda || pda.length < 16) return pda;
-  return `${pda.slice(0, 8)}...${pda.slice(-8)}`;
+const truncateRef = (ref: string) => {
+  if (!ref || ref.length < 16) return ref;
+  return `${ref.slice(0, 12)}...${ref.slice(-8)}`;
 };
 
 const copyToClipboard = (text: string) => {
   navigator.clipboard.writeText(text).catch(() => {});
-};
-
-const openSolanaExplorer = (address: string) => {
-  window.open(`https://explorer.solana.com/address/${address}?cluster=devnet`, '_blank');
 };
 
 export default function TranslationPipelinePage() {
@@ -164,23 +160,23 @@ export default function TranslationPipelinePage() {
       </div>
 
       {/* Config Summary Card */}
-      <Card title="Config Summary" subtitle="Translation layer infrastructure status">
+      <Card title="Operational Summary" subtitle="Translation layer metrics derived from vault activity">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-teal-50 rounded-md p-3">
             <p className="text-xs text-slate-500">Total Instructions</p>
             <p className="text-2xl font-bold text-ink-900 font-mono mt-1">{config?.totalInstructions || 0}</p>
           </div>
           <div className="bg-slate-100 rounded-md p-3">
-            <p className="text-xs text-slate-500">Finstar Program</p>
-            <p className="text-sm text-ink-900 font-mono mt-1 truncate">{config?.connectedPrograms?.finstar || '—'}</p>
+            <p className="text-xs text-slate-500">Deposits Processed</p>
+            <p className="text-2xl font-bold text-ink-900 font-mono mt-1">{config?.totalDeposits || 0}</p>
           </div>
           <div className="bg-slate-100 rounded-md p-3">
-            <p className="text-xs text-slate-500">Notabene Program</p>
-            <p className="text-sm text-ink-900 font-mono mt-1 truncate">{config?.connectedPrograms?.notabene || '—'}</p>
+            <p className="text-xs text-slate-500">Allocations Routed</p>
+            <p className="text-2xl font-bold text-ink-900 font-mono mt-1">{config?.totalAllocations || 0}</p>
           </div>
           <div className="bg-slate-100 rounded-md p-3">
-            <p className="text-xs text-slate-500">Mesh/Jurisdiction</p>
-            <p className="text-sm text-ink-900 font-mono mt-1 truncate">{config?.connectedPrograms?.mesh || '—'}</p>
+            <p className="text-xs text-slate-500">Active Vaults</p>
+            <p className="text-2xl font-bold text-ink-900 font-mono mt-1">{config?.totalVaults || 0}</p>
           </div>
         </div>
       </Card>
@@ -200,11 +196,15 @@ export default function TranslationPipelinePage() {
           </div>
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <span className="text-xs text-slate-600">Events Originated</span>
-              <span className="text-sm font-mono font-semibold text-ink-900">{tlActivity?.summary?.l3Events || 0}</span>
+              <span className="text-xs text-slate-600">Deposits</span>
+              <span className="text-sm font-mono font-semibold text-ink-900">{tlActivity?.summary?.breakdown?.deposits?.count || 0}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-xs text-slate-600">Value Processed</span>
+              <span className="text-xs text-slate-600">Allocations</span>
+              <span className="text-sm font-mono font-semibold text-ink-900">{tlActivity?.summary?.breakdown?.allocations?.count || 0}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-slate-600">Total Value</span>
               <span className="text-sm font-mono font-semibold text-ink-900">{fmt(tlActivity?.summary?.totalValueProcessed || 0)} USDC</span>
             </div>
             <div className="mt-2 pt-2 border-t border-slate-100">
@@ -226,15 +226,19 @@ export default function TranslationPipelinePage() {
           </div>
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <span className="text-xs text-slate-600">Compliance Checks</span>
+              <span className="text-xs text-slate-600">Instructions Processed</span>
               <span className="text-sm font-mono font-semibold text-ink-900">{tlActivity?.summary?.l2Events || 0}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-xs text-slate-600">Instructions Routed</span>
+              <span className="text-xs text-slate-600">GL Book-backs</span>
               <span className="text-sm font-mono font-semibold text-ink-900">{tlActivity?.summary?.l1Events || 0}</span>
             </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-slate-600">Unwinds</span>
+              <span className="text-sm font-mono font-semibold text-ink-900">{tlActivity?.summary?.breakdown?.unwinds?.count || 0}</span>
+            </div>
             <div className="mt-2 pt-2 border-t border-slate-100">
-              <p className="text-[10px] text-slate-500">Jurisdiction checks, travel rule, routing → GL book-back</p>
+              <p className="text-[10px] text-slate-500">Compliance checks, routing, GL book-back per operation</p>
             </div>
           </div>
         </Card>
@@ -252,7 +256,7 @@ export default function TranslationPipelinePage() {
           </div>
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <span className="text-xs text-slate-600">GL Entries Posted</span>
+              <span className="text-xs text-slate-600">GL Entries</span>
               <span className="text-sm font-mono font-semibold text-ink-900">{finstarActivity?.summary?.glEntriesPosted || 0}</span>
             </div>
             <div className="flex justify-between items-center">
@@ -268,7 +272,7 @@ export default function TranslationPipelinePage() {
               <span className="text-sm font-mono font-bold text-ink-900">{fmt(finstarActivity?.summary?.netPosition || 0)} USDC</span>
             </div>
             <div className="mt-2 pt-2 border-t border-slate-100">
-              <p className="text-[10px] text-slate-500">SWIFT-tagged, regulatory-compliant double-entry bookings</p>
+              <p className="text-[10px] text-slate-500">Double-entry bookings from vault operations</p>
             </div>
           </div>
         </Card>
@@ -276,7 +280,7 @@ export default function TranslationPipelinePage() {
 
       {/* Cross-Layer Activity Feed */}
       {(tlActivity?.activity?.length > 0 || finstarActivity?.activity?.length > 0) && (
-        <Card title="Cross-Layer Activity Feed" subtitle="Real-time L3→L2→L1 instruction flow with value capture">
+        <Card title="Cross-Layer Activity Feed" subtitle="L3→L2→L1 instruction flow from actual vault operations">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
@@ -285,8 +289,8 @@ export default function TranslationPipelinePage() {
                   <th className="text-left py-2 pr-3 font-semibold">Layer</th>
                   <th className="text-left py-2 pr-3 font-semibold">Action</th>
                   <th className="text-right py-2 pr-3 font-semibold">Value</th>
-                  <th className="text-left py-2 pr-3 font-semibold">Status</th>
-                  <th className="text-left py-2 font-semibold">On-Chain Proof</th>
+                  <th className="text-left py-2 pr-3 font-semibold">GL Entry</th>
+                  <th className="text-left py-2 font-semibold">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -297,38 +301,41 @@ export default function TranslationPipelinePage() {
                     </td>
                     <td className="py-2 pr-3">
                       <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
-                        evt.layer === 'L3' || evt.layer?.startsWith('L3') ? 'bg-violet-100 text-violet-700' :
-                        evt.layer === 'L2' ? 'bg-teal-100 text-teal-700' :
+                        evt.layer?.startsWith('L3') ? 'bg-violet-100 text-violet-700' :
+                        evt.layer?.startsWith('L2') ? 'bg-teal-100 text-teal-700' :
                         'bg-amber-100 text-amber-700'
                       }`}>
                         {evt.layer}
                       </span>
                     </td>
                     <td className="py-2 pr-3 text-ink-900">
-                      <span className="font-medium">{evt.layerLabel}</span>
+                      <div>
+                        <span className="font-medium">{evt.actionType}</span>
+                        {evt.strategy && <span className="text-slate-500 ml-1">→ {evt.strategy}</span>}
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-0.5">{evt.layerLabel}</p>
                     </td>
                     <td className="py-2 pr-3 text-right font-mono text-ink-900">
                       {evt.amount ? fmt(evt.amount) : '—'}
+                      {evt.asset && <span className="text-slate-400 ml-1">{evt.asset}</span>}
                     </td>
                     <td className="py-2 pr-3">
+                      {evt.pipelineSteps?.glBookBack ? (
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                          evt.pipelineSteps.glBookBack.direction === 'credit' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          {evt.pipelineSteps.glBookBack.direction === 'credit' ? '+' : '-'} {evt.pipelineSteps.glBookBack.entryType}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="py-2">
                       <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
                         evt.result === 'success' ? 'bg-success-100 text-success-700' : 'bg-yellow-100 text-yellow-700'
                       }`}>
                         {evt.result}
                       </span>
-                    </td>
-                    <td className="py-2">
-                      {(evt.glEntryPda || evt.compliancePda || evt.routingPda || evt.txSignature) ? (
-                        <button
-                          onClick={() => openSolanaExplorer(evt.glEntryPda || evt.compliancePda || evt.routingPda || evt.txSignature)}
-                          className="text-teal-700 hover:text-teal-800 transition-colors"
-                          title="View on Solana Explorer"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                        </button>
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
                     </td>
                   </tr>
                 ))}
@@ -399,13 +406,13 @@ export default function TranslationPipelinePage() {
                       className="border-b border-slate-200/50 hover:bg-teal-50 transition-colors cursor-pointer"
                       onClick={() => setSelectedInstruction(inst)}
                     >
-                      <td className="py-2.5 pr-3 font-mono text-ink-900 text-[11px]">{truncatePda(inst.instructionId)}</td>
+                      <td className="py-2.5 pr-3 font-mono text-ink-900 text-[11px]">{truncateRef(inst.instructionId)}</td>
                       <td className="py-2.5 pr-3">
                         <span className="text-[9px] px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded font-medium">
                           {inst.instructionType?.replace(/_/g, ' ')}
                         </span>
                       </td>
-                      <td className="py-2.5 pr-3 font-mono text-ink-900 text-[11px]">{truncatePda(inst.vaultId)}</td>
+                      <td className="py-2.5 pr-3 font-mono text-ink-900 text-[11px]">{truncateRef(inst.vaultId)}</td>
                       <td className="py-2.5 pr-3 text-right font-mono text-ink-900">{fmt(inst.amount)}</td>
                       <td className="py-2.5 pr-3 text-ink-900">{inst.jurisdiction || '—'}</td>
                       <td className="py-2.5 pr-3">
@@ -429,102 +436,58 @@ export default function TranslationPipelinePage() {
           <div className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="bg-slate-100 rounded-md p-3">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Compliance Attestation PDA</p>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Compliance Ref</p>
                 <div className="flex items-center justify-between">
-                  <code className="text-xs font-mono text-ink-900">{truncatePda(selectedInstruction.complianceAttestationPda || 'Not available')}</code>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => copyToClipboard(selectedInstruction.complianceAttestationPda)}
-                      className="p-1 hover:bg-slate-200 rounded transition-colors"
-                      title="Copy"
-                    >
-                      <Copy className="w-3 h-3 text-slate-500" />
-                    </button>
-                    {selectedInstruction.complianceAttestationPda && (
-                      <button
-                        onClick={() => openSolanaExplorer(selectedInstruction.complianceAttestationPda)}
-                        className="p-1 hover:bg-slate-200 rounded transition-colors"
-                        title="View in Solana Explorer"
-                      >
-                        <ExternalLink className="w-3 h-3 text-slate-500" />
-                      </button>
-                    )}
-                  </div>
+                  <code className="text-xs font-mono text-ink-900">{truncateRef(selectedInstruction.complianceRef || selectedInstruction.complianceAttestationPda || 'Not available')}</code>
+                  <button
+                    onClick={() => copyToClipboard(selectedInstruction.complianceRef || selectedInstruction.complianceAttestationPda || '')}
+                    className="p-1 hover:bg-slate-200 rounded transition-colors"
+                    title="Copy"
+                  >
+                    <Copy className="w-3 h-3 text-slate-500" />
+                  </button>
                 </div>
               </div>
 
               <div className="bg-slate-100 rounded-md p-3">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Travel Rule Check PDA</p>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Travel Rule Ref</p>
                 <div className="flex items-center justify-between">
-                  <code className="text-xs font-mono text-ink-900">{truncatePda(selectedInstruction.travelRuleCheckPda || 'Not available')}</code>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => copyToClipboard(selectedInstruction.travelRuleCheckPda)}
-                      className="p-1 hover:bg-slate-200 rounded transition-colors"
-                      title="Copy"
-                    >
-                      <Copy className="w-3 h-3 text-slate-500" />
-                    </button>
-                    {selectedInstruction.travelRuleCheckPda && (
-                      <button
-                        onClick={() => openSolanaExplorer(selectedInstruction.travelRuleCheckPda)}
-                        className="p-1 hover:bg-slate-200 rounded transition-colors"
-                        title="View in Solana Explorer"
-                      >
-                        <ExternalLink className="w-3 h-3 text-slate-500" />
-                      </button>
-                    )}
-                  </div>
+                  <code className="text-xs font-mono text-ink-900">{truncateRef(selectedInstruction.travelRuleRef || selectedInstruction.travelRuleCheckPda || 'Not available')}</code>
+                  <button
+                    onClick={() => copyToClipboard(selectedInstruction.travelRuleRef || selectedInstruction.travelRuleCheckPda || '')}
+                    className="p-1 hover:bg-slate-200 rounded transition-colors"
+                    title="Copy"
+                  >
+                    <Copy className="w-3 h-3 text-slate-500" />
+                  </button>
                 </div>
               </div>
 
               <div className="bg-slate-100 rounded-md p-3">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Routing Decision PDA</p>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Routing Ref</p>
                 <div className="flex items-center justify-between">
-                  <code className="text-xs font-mono text-ink-900">{truncatePda(selectedInstruction.routingDecisionPda || 'Not available')}</code>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => copyToClipboard(selectedInstruction.routingDecisionPda)}
-                      className="p-1 hover:bg-slate-200 rounded transition-colors"
-                      title="Copy"
-                    >
-                      <Copy className="w-3 h-3 text-slate-500" />
-                    </button>
-                    {selectedInstruction.routingDecisionPda && (
-                      <button
-                        onClick={() => openSolanaExplorer(selectedInstruction.routingDecisionPda)}
-                        className="p-1 hover:bg-slate-200 rounded transition-colors"
-                        title="View in Solana Explorer"
-                      >
-                        <ExternalLink className="w-3 h-3 text-slate-500" />
-                      </button>
-                    )}
-                  </div>
+                  <code className="text-xs font-mono text-ink-900">{truncateRef(selectedInstruction.routingRef || selectedInstruction.routingDecisionPda || 'Not available')}</code>
+                  <button
+                    onClick={() => copyToClipboard(selectedInstruction.routingRef || selectedInstruction.routingDecisionPda || '')}
+                    className="p-1 hover:bg-slate-200 rounded transition-colors"
+                    title="Copy"
+                  >
+                    <Copy className="w-3 h-3 text-slate-500" />
+                  </button>
                 </div>
               </div>
 
               <div className="bg-slate-100 rounded-md p-3">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">GL Entry PDA (Finstar book-back)</p>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">GL Entry Ref (Finstar book-back)</p>
                 <div className="flex items-center justify-between">
-                  <code className="text-xs font-mono text-ink-900">{truncatePda(selectedInstruction.glEntryPda || 'Not available')}</code>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => copyToClipboard(selectedInstruction.glEntryPda)}
-                      className="p-1 hover:bg-slate-200 rounded transition-colors"
-                      title="Copy"
-                    >
-                      <Copy className="w-3 h-3 text-slate-500" />
-                    </button>
-                    {selectedInstruction.glEntryPda && (
-                      <button
-                        onClick={() => openSolanaExplorer(selectedInstruction.glEntryPda)}
-                        className="p-1 hover:bg-slate-200 rounded transition-colors"
-                        title="View in Solana Explorer"
-                      >
-                        <ExternalLink className="w-3 h-3 text-slate-500" />
-                      </button>
-                    )}
-                  </div>
+                  <code className="text-xs font-mono text-ink-900">{truncateRef(selectedInstruction.glEntryRef || selectedInstruction.glEntryPda || 'Not available')}</code>
+                  <button
+                    onClick={() => copyToClipboard(selectedInstruction.glEntryRef || selectedInstruction.glEntryPda || '')}
+                    className="p-1 hover:bg-slate-200 rounded transition-colors"
+                    title="Copy"
+                  >
+                    <Copy className="w-3 h-3 text-slate-500" />
+                  </button>
                 </div>
               </div>
             </div>

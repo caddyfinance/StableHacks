@@ -145,7 +145,7 @@ export class VaultsService {
         deposits: { orderBy: { createdAt: 'desc' } },
         allocations: { include: { strategy: true }, orderBy: { createdAt: 'desc' } },
         consentRequests: { orderBy: { createdAt: 'desc' } },
-        events: { orderBy: { timestamp: 'desc' }, take: 50 },
+        complianceEvents: { orderBy: { timestamp: 'desc' }, take: 50 },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -217,7 +217,7 @@ export class VaultsService {
             onChainVerified: !!d.sourceReference || d.sourceType === 'On-Chain Transfer',
           }));
 
-          const onChainEvents = v.events.slice(0, 20).map((e) => ({
+          const onChainEvents = v.complianceEvents.slice(0, 20).map((e) => ({
             eventId: e.eventId,
             actionType: e.actionType,
             amount: e.amount,
@@ -1156,7 +1156,7 @@ export class VaultsService {
         const action = await this.translationLayer.executeAction(submitted.instructionId);
         translationLayerResult = { instructionId: submitted.instructionId, ...compliance, ...action };
       } catch (err: any) {
-        // Non-blocking: log but don't fail the deposit
+        await this.events.emit({ vaultId, actionType: 'TL_PIPELINE_COMPLETE', actor: 'system', role: 'Translation Layer', result: 'failure', reason: `Translation layer pipeline failed during deposit: ${err.message}` });
       }
     }
 
@@ -1287,7 +1287,7 @@ export class VaultsService {
         transferType: 'ALLOCATION',
         vaultId,
         fromAddress: vault.ownerWallet || vaultId,
-        toAddress: '0xSOLSTICE-PROVIDER-WALLET-0000000000000',
+        toAddress: strategy.name || strategyId,
         asset: vault.baseAsset,
         amount,
         isExternal: true,

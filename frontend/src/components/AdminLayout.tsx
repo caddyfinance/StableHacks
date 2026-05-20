@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Shield,
@@ -132,16 +132,10 @@ export default function AdminLayout() {
     }))
     .filter((section) => section.items.length > 0);
 
-  const location = useLocation();
-
   const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newRole = e.target.value as Role;
     setRole(newRole);
-    const newAccess = roleAccess[newRole] || [];
-    const currentPath = location.pathname;
-    if (currentPath !== '/amina' && !newAccess.includes(currentPath)) {
-      navigate('/amina');
-    }
+    navigate('/amina');
   };
 
   const handleLogout = () => {

@@ -5,6 +5,8 @@ const prisma = new PrismaClient();
 async function main() {
   // Clear existing data
   await prisma.transferCheck.deleteMany();
+  await prisma.gLEntry.deleteMany();
+  await prisma.translationLayerInstruction.deleteMany();
   await prisma.providerMonitoringSnapshot.deleteMany();
   await prisma.walletController.deleteMany();
   await prisma.complianceEvent.deleteMany();
@@ -462,6 +464,143 @@ async function main() {
     ],
   });
   console.log('Seeded Translation Layer demo events');
+
+  // Translation Layer Instructions (DB-backed pipeline records)
+  await prisma.translationLayerInstruction.createMany({
+    data: [
+      {
+        instructionId: 'TL-DEMO-001',
+        instructionType: 'DEPOSIT',
+        vaultId: vault.vaultId,
+        amount: 1000000,
+        jurisdiction: 'CH',
+        strategyId: 'deposit',
+        status: 'complete',
+        complianceResult: 'passed',
+        complianceRef: 'CA-TL-DEMO-001',
+        travelRuleRef: 'TR-TL-DEMO-001',
+        travelRuleResult: 'Clear',
+        routingRef: 'RT-TL-DEMO-001',
+        glEntryRef: 'GL-TL-DEMO-001',
+        glEntryType: 'Deposit',
+        glDirection: 'credit',
+        initiator: 'operations',
+        receivedAt: new Date(now - 120000),
+        complianceCheckedAt: new Date(now - 110000),
+        actionExecutedAt: new Date(now - 100000),
+        completedAt: new Date(now - 100000),
+      },
+      {
+        instructionId: 'TL-DEMO-002',
+        instructionType: 'ALLOCATE',
+        vaultId: vault.vaultId,
+        amount: 500000,
+        jurisdiction: 'CH',
+        strategyId: 'solstice-eusx-yield',
+        status: 'complete',
+        complianceResult: 'passed',
+        complianceRef: 'CA-TL-DEMO-002',
+        travelRuleRef: 'TR-TL-DEMO-002',
+        travelRuleResult: 'Clear',
+        routingRef: 'RT-TL-DEMO-002',
+        glEntryRef: 'GL-TL-DEMO-002',
+        glEntryType: 'StrategyAllocation',
+        glDirection: 'debit',
+        initiator: 'portfolio_manager',
+        receivedAt: new Date(now - 90000),
+        complianceCheckedAt: new Date(now - 85000),
+        actionExecutedAt: new Date(now - 75000),
+        completedAt: new Date(now - 75000),
+      },
+      {
+        instructionId: 'TL-DEMO-003',
+        instructionType: 'DEPOSIT',
+        vaultId: vault2.vaultId,
+        amount: 500000,
+        jurisdiction: 'AE',
+        strategyId: 'deposit',
+        status: 'complete',
+        complianceResult: 'passed',
+        complianceRef: 'CA-TL-DEMO-003',
+        travelRuleRef: 'TR-TL-DEMO-003',
+        travelRuleResult: 'Clear',
+        routingRef: 'RT-TL-DEMO-003',
+        glEntryRef: 'GL-TL-DEMO-003',
+        glEntryType: 'Deposit',
+        glDirection: 'credit',
+        initiator: 'admin@amina.bank',
+        receivedAt: new Date(now - 70000),
+        complianceCheckedAt: new Date(now - 65000),
+        actionExecutedAt: new Date(now - 60000),
+        completedAt: new Date(now - 60000),
+      },
+    ],
+  });
+  console.log('Seeded Translation Layer Instructions');
+
+  // GL Entries (L1 persistent journal)
+  await prisma.gLEntry.createMany({
+    data: [
+      {
+        entryId: 'GL-TL-DEMO-001',
+        vaultId: vault.vaultId,
+        instructionId: 'TL-DEMO-001',
+        entryType: 'Deposit',
+        direction: 'credit',
+        amount: 1000000,
+        currency: 'USDC',
+        debitAccount: 'CLIENT-CUSTODY',
+        creditAccount: 'VAULT',
+        narrative: 'Deposit of 1,000,000 USDC into vault VLT-001',
+        swiftReference: 'AMINCHZZXXX-TL-DEMO-001',
+        jurisdiction: 'CH',
+        status: 'posted',
+        approvedBy: 'compliance@amina.bank',
+        approvedAt: new Date(now - 99000),
+        postedAt: new Date(now - 99000),
+        sourceType: 'translation_layer',
+        sourceId: 'TL-DEMO-001',
+      },
+      {
+        entryId: 'GL-TL-DEMO-002',
+        vaultId: vault.vaultId,
+        instructionId: 'TL-DEMO-002',
+        entryType: 'StrategyAllocation',
+        direction: 'debit',
+        amount: 500000,
+        currency: 'USDC',
+        debitAccount: 'VAULT',
+        creditAccount: 'STRATEGY',
+        narrative: 'Allocation of 500,000 USDC to strategy solstice-eusx-yield',
+        swiftReference: 'AMINCHZZXXX-TL-DEMO-002',
+        jurisdiction: 'CH',
+        status: 'posted',
+        approvedBy: 'compliance@amina.bank',
+        approvedAt: new Date(now - 74000),
+        postedAt: new Date(now - 74000),
+        sourceType: 'translation_layer',
+        sourceId: 'TL-DEMO-002',
+      },
+      {
+        entryId: 'GL-TL-DEMO-003',
+        vaultId: vault2.vaultId,
+        instructionId: 'TL-DEMO-003',
+        entryType: 'Deposit',
+        direction: 'credit',
+        amount: 500000,
+        currency: 'USDC',
+        debitAccount: 'CLIENT-CUSTODY',
+        creditAccount: 'VAULT',
+        narrative: 'Deposit of 500,000 USDC into vault VLT-002 (Abu Dhabi)',
+        swiftReference: 'AMINCHZZXXX-TL-DEMO-003',
+        jurisdiction: 'AE',
+        status: 'pending',
+        sourceType: 'translation_layer',
+        sourceId: 'TL-DEMO-003',
+      },
+    ],
+  });
+  console.log('Seeded GL Entries (2 posted, 1 pending approval)');
 
   console.log('Seed complete!');
 }

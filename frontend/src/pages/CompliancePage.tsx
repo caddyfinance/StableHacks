@@ -3,7 +3,7 @@ import { api } from '../lib/api';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import StatusBadge from '../components/StatusBadge';
-import { ExternalLink, ShieldCheck, AlertTriangle, FileText } from 'lucide-react';
+import { ExternalLink, ShieldCheck, AlertTriangle, FileText, Copy } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -22,9 +22,13 @@ interface AuditEvent {
   onChainAddress?: string;
   translationLayerRef?: string;
   compliancePda?: string;
+  complianceRef?: string;
   travelRulePda?: string;
+  travelRuleRef?: string;
   routingPda?: string;
+  routingRef?: string;
   glEntryPda?: string;
+  glEntryRef?: string;
 }
 
 const CHAINALYSIS_BASE = 'https://app.chainalysis.com';
@@ -790,7 +794,7 @@ export default function CompliancePage() {
                   { label: 'No Leverage', active: true },
                   { label: 'Approved Destinations Only', active: approvedDestCount > 0 },
                   { label: 'Travel Rule on External Edges', active: true },
-                  { label: 'Travel Rule Status: Compliant', active: events.some(e => e.travelRulePda) },
+                  { label: 'Travel Rule Status: Compliant', active: events.some(e => e.travelRulePda || e.travelRuleRef) },
                   { label: 'Provider Whitelist Active', active: providerCount > 0 },
                   { label: 'Inbound Settlement Matching', active: true },
                   { label: 'Treasury Sweep Enabled', active: true },
@@ -812,9 +816,9 @@ export default function CompliancePage() {
           </div>
 
           {/* ROW 2b: Translation Layer Compliance Attestations */}
-          <Card title="Translation Layer Attestations" subtitle="On-chain compliance proof from AMINA Layer 2">
+          <Card title="Translation Layer Attestations" subtitle="Compliance attestations from AMINA Translation Layer">
             {(() => {
-              const tlEvents = events.filter(e => e.compliancePda || e.travelRulePda || e.routingPda || e.glEntryPda);
+              const tlEvents = events.filter(e => e.compliancePda || e.complianceRef || e.travelRulePda || e.travelRuleRef || e.routingPda || e.routingRef || e.glEntryPda || e.glEntryRef);
               if (tlEvents.length === 0) return (
                 <div className="flex items-center gap-2 text-xs text-slate-500 py-4 justify-center">
                   <ShieldCheck className="w-4 h-4" />
@@ -830,42 +834,54 @@ export default function CompliancePage() {
                         <span className="text-[10px] text-slate-500">{fmtTime(evt.timestamp)}</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        {evt.compliancePda && (
-                          <div className="text-[10px]">
-                            <span className="text-slate-500">Compliance PDA</span>
-                            <a href={`https://explorer.solana.com/address/${evt.compliancePda}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                              className="flex items-center gap-0.5 text-teal-700 hover:underline font-mono">
-                              {evt.compliancePda.slice(0, 8)}...{evt.compliancePda.slice(-6)} <ExternalLink className="w-2.5 h-2.5" />
-                            </a>
-                          </div>
-                        )}
-                        {evt.travelRulePda && (
-                          <div className="text-[10px]">
-                            <span className="text-slate-500">Travel Rule PDA</span>
-                            <a href={`https://explorer.solana.com/address/${evt.travelRulePda}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                              className="flex items-center gap-0.5 text-teal-700 hover:underline font-mono">
-                              {evt.travelRulePda.slice(0, 8)}...{evt.travelRulePda.slice(-6)} <ExternalLink className="w-2.5 h-2.5" />
-                            </a>
-                          </div>
-                        )}
-                        {evt.routingPda && (
-                          <div className="text-[10px]">
-                            <span className="text-slate-500">Routing PDA</span>
-                            <a href={`https://explorer.solana.com/address/${evt.routingPda}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                              className="flex items-center gap-0.5 text-teal-700 hover:underline font-mono">
-                              {evt.routingPda.slice(0, 8)}...{evt.routingPda.slice(-6)} <ExternalLink className="w-2.5 h-2.5" />
-                            </a>
-                          </div>
-                        )}
-                        {evt.glEntryPda && (
-                          <div className="text-[10px]">
-                            <span className="text-slate-500">GL Entry PDA</span>
-                            <a href={`https://explorer.solana.com/address/${evt.glEntryPda}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                              className="flex items-center gap-0.5 text-teal-700 hover:underline font-mono">
-                              {evt.glEntryPda.slice(0, 8)}...{evt.glEntryPda.slice(-6)} <ExternalLink className="w-2.5 h-2.5" />
-                            </a>
-                          </div>
-                        )}
+                        {(evt.compliancePda || evt.complianceRef) && (() => {
+                          const val = evt.complianceRef || evt.compliancePda || '';
+                          return (
+                            <div className="text-[10px]">
+                              <span className="text-slate-500">Compliance Ref</span>
+                              <span className="flex items-center gap-0.5 text-ink-900 font-mono">
+                                {val.slice(0, 8)}...{val.slice(-6)}
+                                <button onClick={() => navigator.clipboard.writeText(val)} className="ml-0.5 text-slate-400 hover:text-teal-700"><Copy className="w-2.5 h-2.5" /></button>
+                              </span>
+                            </div>
+                          );
+                        })()}
+                        {(evt.travelRulePda || evt.travelRuleRef) && (() => {
+                          const val = evt.travelRuleRef || evt.travelRulePda || '';
+                          return (
+                            <div className="text-[10px]">
+                              <span className="text-slate-500">Travel Rule Ref</span>
+                              <span className="flex items-center gap-0.5 text-ink-900 font-mono">
+                                {val.slice(0, 8)}...{val.slice(-6)}
+                                <button onClick={() => navigator.clipboard.writeText(val)} className="ml-0.5 text-slate-400 hover:text-teal-700"><Copy className="w-2.5 h-2.5" /></button>
+                              </span>
+                            </div>
+                          );
+                        })()}
+                        {(evt.routingPda || evt.routingRef) && (() => {
+                          const val = evt.routingRef || evt.routingPda || '';
+                          return (
+                            <div className="text-[10px]">
+                              <span className="text-slate-500">Routing Ref</span>
+                              <span className="flex items-center gap-0.5 text-ink-900 font-mono">
+                                {val.slice(0, 8)}...{val.slice(-6)}
+                                <button onClick={() => navigator.clipboard.writeText(val)} className="ml-0.5 text-slate-400 hover:text-teal-700"><Copy className="w-2.5 h-2.5" /></button>
+                              </span>
+                            </div>
+                          );
+                        })()}
+                        {(evt.glEntryPda || evt.glEntryRef) && (() => {
+                          const val = evt.glEntryRef || evt.glEntryPda || '';
+                          return (
+                            <div className="text-[10px]">
+                              <span className="text-slate-500">GL Entry Ref</span>
+                              <span className="flex items-center gap-0.5 text-ink-900 font-mono">
+                                {val.slice(0, 8)}...{val.slice(-6)}
+                                <button onClick={() => navigator.clipboard.writeText(val)} className="ml-0.5 text-slate-400 hover:text-teal-700"><Copy className="w-2.5 h-2.5" /></button>
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   ))}
@@ -901,7 +917,7 @@ export default function CompliancePage() {
                     <th className="text-left py-2 pr-2 font-semibold">Status</th>
                     <th className="text-left py-2 pr-2 font-semibold">Control</th>
                     <th className="text-left py-2 pr-2 font-semibold">Notes</th>
-                    <th className="text-left py-2 pr-2 font-semibold">On-Chain</th>
+                    <th className="text-left py-2 pr-2 font-semibold">On-Chain / Ref</th>
                     <th className="text-left py-2 font-semibold">External</th>
                   </tr>
                 </thead>
@@ -947,10 +963,10 @@ export default function CompliancePage() {
                                 Tx <ExternalLink className="w-2.5 h-2.5" />
                               </a>
                             ) : evt.onChainAddress ? (
-                              <a href={`https://solscan.io/account/${evt.onChainAddress}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                                className="flex items-center gap-0.5 text-[10px] text-review-700 hover:underline">
-                                PDA <ExternalLink className="w-2.5 h-2.5" />
-                              </a>
+                              <span className="flex items-center gap-0.5 text-[10px] text-slate-700 font-mono">
+                                Ref {evt.onChainAddress!.slice(0, 6)}...{evt.onChainAddress!.slice(-4)}
+                                <button onClick={() => navigator.clipboard.writeText(evt.onChainAddress!)} className="text-slate-400 hover:text-teal-700"><Copy className="w-2.5 h-2.5" /></button>
+                              </span>
                             ) : (
                               <span className="text-[10px] text-slate-700">—</span>
                             )}

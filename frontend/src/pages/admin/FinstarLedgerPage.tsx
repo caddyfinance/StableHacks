@@ -179,7 +179,7 @@ export default function FinstarLedgerPage() {
                       </span>
                     </td>
                     <td className="py-2.5 text-slate-500 whitespace-nowrap">
-                      {entry.postedAt ? new Date(Number(entry.postedAt) * 1000).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                      {entry.postedAt ? new Date(entry.postedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
                     </td>
                   </tr>
                 ))}
@@ -224,7 +224,7 @@ export default function FinstarLedgerPage() {
                     <td className="py-2.5 pr-3 text-slate-500">{r.jurisdiction}</td>
                     <td className="py-2.5 pr-3 font-mono text-[10px] text-slate-400">{r.dataHash?.substring(0, 16)}...</td>
                     <td className="py-2.5 pr-3 text-slate-500 whitespace-nowrap">
-                      {r.generatedAt ? new Date(Number(r.generatedAt) * 1000).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                      {r.generatedAt ? new Date(r.generatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
                     </td>
                     <td className="py-2.5">
                       <StatusBadge status={r.submitted ? 'active' : 'pending'} />
